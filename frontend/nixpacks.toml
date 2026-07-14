@@ -1,0 +1,19 @@
+# Nixpacks, bu dosya olmadan Node 18'e düşüyor ve build şu hatayla ölüyor:
+#   "You are using Node.js 18.20.5. For Next.js, Node.js version >=20.9.0 is required."
+# Next.js 16 en az Node 20.9 istiyor. admin/ klasöründeki ayarın aynısı (orada da Next 16 var).
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
