@@ -1,1 +1,56 @@
-/.claude
+# Claude / Cursor
+.claude/
+.cursor/
+
+# Dependencies
+node_modules/
+
+# Environment (keep examples for onboarding)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+!.env.example
+
+# Next.js
+.next/
+out/
+
+# Build / cache
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+.turbo/
+.vercel/
+
+# Backend uploads (user-generated content)
+backend/uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Certificates / keys
+*.pem
