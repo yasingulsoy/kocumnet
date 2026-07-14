@@ -68,8 +68,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Statik dosyalar, API ve Next dahili yollar hariç her istek
+  // Statik dosyalar, API, Next dahili yollar ve kök-seviye bot dosyaları hariç her istek.
+  // (llms.txt dil öneki almamalı — /tr/llms.txt diye bir şey yok.)
   matcher: [
-    "/((?!api|_next/static|_next/image|images|uploads|favicon.ico|icon.svg|sitemap.xml|robots.txt|manifest.webmanifest).*)",
+    "/((?!api|_next/static|_next/image|images|uploads|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|robots.txt|llms.txt|manifest.webmanifest).*)",
   ],
 };
