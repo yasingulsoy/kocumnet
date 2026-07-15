@@ -12,22 +12,39 @@ Bu yüzden repoda `nixpacks.toml` (Node 20'ye sabitler) ve `package.json` içind
 
 ## Build Environment Variables (ZORUNLU)
 
-Aşağıdaki iki değişken **build sırasında** tanımlı olmalı. `NEXT_PUBLIC_*` değişkenleri derleme anında bundle'a gömülür — runtime'da değiştirilemez.
+Bu iki değişken **build sırasında** tanımlı olmalı. `NEXT_PUBLIC_*` değişkenleri derleme
+anında bundle'a gömülür — runtime'da set etmek İŞE YARAMAZ.
 
-| Değişken | Örnek | Ne olur set edilmezse |
-|----------|-------|------------------------|
-| `NEXT_PUBLIC_SITE_URL` | `https://kocum.net` | Tüm canonical, hreflang, Open Graph, `sitemap.xml`, `llms.txt` ve JSON-LD adresleri **`http://localhost:3000`** olarak gömülür. Google yanlış adresi indeksler. |
-| `NEXT_PUBLIC_BACKEND_URL` | `https://api.kocum.net` | Blog yazıları çekilemez (liste boş kalır), blog görselleri yüklenmez, görüntülenme sayacı çalışmaz. |
+Dokploy'da: **Uygulama → Environment → Build Environment Variables**
 
-Dokploy'da: **Uygulama → Environment → Build Environment Variables** bölümüne ekle (runtime env yeterli DEĞİL).
+```bash
+NEXT_PUBLIC_SITE_URL=https://kocum.net
+NEXT_PUBLIC_BACKEND_URL=https://api.kocum.net
+```
+
+| Değişken | Set edilmezse ne olur |
+|----------|------------------------|
+| `NEXT_PUBLIC_SITE_URL` | Tüm canonical, hreflang, Open Graph, `sitemap.xml`, `llms.txt` ve JSON-LD adresleri **`http://localhost:3000`** olarak gömülür. Google localhost'u indeksler. |
+| `NEXT_PUBLIC_BACKEND_URL` | Blog yazıları çekilemez (liste boş kalır), blog görselleri yüklenmez, görüntülenme sayacı çalışmaz. |
 
 ## Port
 
-`next start` `PORT` environment değişkenini okur, yoksa **3000**'e düşer. Dokploy'da reverse-proxy hedefini dinlediği portla eşleştir.
+`next start` `PORT` değişkenini okur, yoksa **3000**'e düşer. Dokploy'da reverse-proxy
+hedefini bu portla eşleştir.
 
-## Backend CORS
+## Backend tarafında yapılması gerekenler
 
-Backend'in `CORS_ORIGINS` listesinde bu sitenin adresi olmalı, yoksa tarayıcıdan yapılan istekler (görüntülenme sayacı gibi) engellenir.
+Frontend tek başına yetmez; backend'de (`api.kocum.net`) şunlar olmalı:
+
+```bash
+CORS_ORIGINS=https://kocum.net,https://admin.kocum.net   # yoksa tarayıcı istekleri engellenir
+FRONTEND_URL=https://kocum.net
+BACKEND_URL=https://api.kocum.net
+NODE_ENV=production                                       # çerezler Secure olur, CSRF aktifleşir
+```
+
+`NODE_ENV=production` olmadan CSRF devre dışı kalabilir ve auth çerezi `Secure`
+işaretlenmez — canlıda ikisi de olmalı.
 
 ## Build sırasında backend erişilemezse
 
