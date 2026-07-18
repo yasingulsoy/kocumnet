@@ -77,9 +77,9 @@
     "team1Role": "Founder · Placement Counsellor · Student Coach",
     "team2Name": "Özlem Tamimi",
     "team2Role": "Founder · Expert Physicist · Student Coach",
-    "team3Name": "Dilek Kılıç",
+    "team3Name": "Our Other Expert",
     "team3Role": "Specialist Clinical Psychologist",
-    "team4Name": "Serap Orak",
+    "team4Name": "Our Other Expert",
     "team4Role": "Specialist Dietitian",
     "imageAlt": "An education coach giving one-to-one guidance to a student"
   },
@@ -120,14 +120,14 @@
     "ogrenciImageAlt": "A high-school student taking notes at a laptop while wearing headphones",
 
     "psikolojikTitle": "Psychological Support During the Exam Period",
-    "psikolojikExpert": "Our Clinical Psychologist Dilek Kılıç",
-    "psikolojikP1": "The exam marathon is not only an academic process; it is also a serious test of mental and emotional resilience. Led by our specialist Clinical Psychologist Dilek Kılıç — well known for her work and videos in the digital world — we professionally support our students through exam anxiety, loss of motivation and stress management.",
+    "psikolojikExpert": "Our Clinical Psychologist",
+    "psikolojikP1": "The exam marathon is not only an academic process; it is also a serious test of mental and emotional resilience. Led by our specialist Clinical Psychologist — well known for their work and videos in the digital world — we professionally support our students through exam anxiety, loss of motivation and stress management.",
     "psikolojikP2": "We provide a space of psychological safety on this difficult journey, for our student and for the family alike.",
     "psikolojikImageAlt": "A young student talking with a specialist psychologist in a comfortable setting",
 
     "beslenmeTitle": "Nutrition Counselling During the Exam Period",
-    "beslenmeExpert": "Our Specialist Dietitian Serap Orak",
-    "beslenmeP1": "The exam marathon demands physical endurance. To build that endurance, we offer our students personalised nutrition programmes together with our specialist dietitian Serap Orak.",
+    "beslenmeExpert": "Our Specialist Dietitian",
+    "beslenmeP1": "The exam marathon demands physical endurance. To build that endurance, we offer our students personalised nutrition programmes together with our specialist dietitian.",
     "beslenmeP2": "By producing professional answers to students' questions about eating habits during the exam period, we keep their energy levels steady.",
     "beslenmeImageAlt": "Healthy breakfast bowls prepared with fruit and oats"
   },

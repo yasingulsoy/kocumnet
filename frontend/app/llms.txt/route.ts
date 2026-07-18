@@ -62,15 +62,15 @@ Koçum.Net'in çözdüğü üç temel sorun şudur:
 - [Sınav Hazırlık Materyalleri — Mega Soru Kütüphanesi](${url(localizedPath("services", "tr"))}#sinav-hazirlik-materyalleri) — Özellikle matematikte, ÖSYM'nin sınav ruhuna ve formatına birebir uygun, müfredat dışı veya gereksiz zorlukta tek bir soru içermeyen niş yayınlar. Çözümler farklı bir formatta sunulur; öğrenci nerede tıkandığını destek almadan görebilir.
 - [Sınav Çalışma Koçluğu](${url(localizedPath("services", "tr"))}#sinav-calisma-koclugu) — Okul/kurs sonrası zamanın yönetimi. Üç çıktısı: kalıcı bilgi, zihinsel huzur, sıkı takip.
 - [Öğrenci Koçluğu](${url(localizedPath("services", "tr"))}#ogrenci-koclugu) — 9, 10, 11, 12. sınıf ve mezun öğrenciler için zaman yönetimi, ders çalışma teknikleri, sınav stresiyle başa çıkma, akademik motivasyon ve hedef belirleme. Yürütenler: Özlem Tamimi, Serhat Butur.
-- [Sınav Sürecinde Psikolojik Destek](${url(localizedPath("services", "tr"))}#psikolojik-destek) — Sınav kaygısı, motivasyon kaybı ve stres yönetimi; hem öğrenciye hem aileye. Yürüten: Uzman Klinik Psikolog Dilek Kılıç.
-- [Sınav Sürecinde Beslenme Danışmanlığı](${url(localizedPath("services", "tr"))}#beslenme-danismanligi) — Sınav dönemine özel, kişiye özel beslenme programlarıyla enerji seviyesinin korunması. Yürüten: Uzman Diyetisyen Serap Orak.
+- [Sınav Sürecinde Psikolojik Destek](${url(localizedPath("services", "tr"))}#psikolojik-destek) — Sınav kaygısı, motivasyon kaybı ve stres yönetimi; hem öğrenciye hem aileye. Yürüten: Uzman Klinik Psikoloğumuz.
+- [Sınav Sürecinde Beslenme Danışmanlığı](${url(localizedPath("services", "tr"))}#beslenme-danismanligi) — Sınav dönemine özel, kişiye özel beslenme programlarıyla enerji seviyesinin korunması. Yürüten: Uzman Diyetisyenimiz.
 
 ## Uzman kadro
 
 - **Serhat Butur** — Kurucu, Tercih Danışmanı, Öğrenci Koçu. Sosyal medya hesapları ve gelen mesajlar bizzat kendisi tarafından yanıtlanır.
 - **Özlem Tamimi** — Öğrenci Koçu.
-- **Dilek Kılıç** — Uzman Klinik Psikolog. Dijital dünyadaki çalışmaları ve videolarıyla tanınır.
-- **Serap Orak** — Uzman Diyetisyen.
+- **Uzman Klinik Psikoloğumuz** — Sınav sürecinde psikolojik destek; dijital dünyadaki çalışmaları ve videolarıyla tanınır.
+- **Uzman Diyetisyenimiz** — Sınav sürecinde beslenme danışmanlığı.
 
 ## Ana sayfalar (Türkçe)
 

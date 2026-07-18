@@ -77,9 +77,9 @@
     "team1Role": "Kurucu · Tercih Danışmanı · Öğrenci Koçu",
     "team2Name": "Özlem Tamimi",
     "team2Role": "Kurucu · Uzman Fizikçi · Öğrenci Koçu",
-    "team3Name": "Dilek Kılıç",
+    "team3Name": "Diğer Uzmanımız",
     "team3Role": "Uzman Klinik Psikolog",
-    "team4Name": "Serap Orak",
+    "team4Name": "Diğer Uzmanımız",
     "team4Role": "Uzman Diyetisyen",
     "imageAlt": "Öğrencisine birebir rehberlik eden eğitim koçu"
   },
@@ -120,14 +120,14 @@
     "ogrenciImageAlt": "Kulaklığıyla bilgisayar başında not alarak çalışan lise öğrencisi",
 
     "psikolojikTitle": "Sınav Sürecinde Psikolojik Destek",
-    "psikolojikExpert": "Klinik Psikoloğumuz Dilek Kılıç",
-    "psikolojikP1": "Sınav maratonu sadece akademik bir süreç değil, aynı zamanda ciddi bir zihinsel ve duygusal dayanıklılık mücadelesidir. Dijital dünyadaki çalışmaları ve videolarıyla tanınan, alanında uzman Klinik Psikoloğumuz Dilek Kılıç liderliğinde öğrencilerimizin sınav kaygısı, motivasyon kaybı ve stres yönetimi gibi süreçlerini profesyonelce destekliyoruz.",
+    "psikolojikExpert": "Klinik Psikoloğumuz",
+    "psikolojikP1": "Sınav maratonu sadece akademik bir süreç değil, aynı zamanda ciddi bir zihinsel ve duygusal dayanıklılık mücadelesidir. Dijital dünyadaki çalışmaları ve videolarıyla tanınan, alanında uzman Klinik Psikoloğumuz liderliğinde öğrencilerimizin sınav kaygısı, motivasyon kaybı ve stres yönetimi gibi süreçlerini profesyonelce destekliyoruz.",
     "psikolojikP2": "Hem öğrencimize hem de aileye bu zorlu yolculukta psikolojik güven alanı sağlıyoruz.",
     "psikolojikImageAlt": "Uzman psikologla rahat bir ortamda görüşen genç öğrenci",
 
     "beslenmeTitle": "Sınav Sürecinde Beslenme Danışmanlığı",
-    "beslenmeExpert": "Uzman Diyetisyenimiz Serap Orak",
-    "beslenmeP1": "Sınav maratonu fiziksel dayanıklılık gerektirir. Bu dayanıklılığı sağlamak için öğrencilerimize uzman diyetisyenimiz Serap Orak eşliğinde kişiye özel beslenme programları sunuyoruz.",
+    "beslenmeExpert": "Uzman Diyetisyenimiz",
+    "beslenmeP1": "Sınav maratonu fiziksel dayanıklılık gerektirir. Bu dayanıklılığı sağlamak için öğrencilerimize uzman diyetisyenimiz eşliğinde kişiye özel beslenme programları sunuyoruz.",
     "beslenmeP2": "Sınav döneminde öğrencilerin beslenme alışkanlıklarıyla ilgili kafalarındaki sorulara profesyonel çözümler üreterek enerji seviyelerini koruyoruz.",
     "beslenmeImageAlt": "Meyve ve yulafla hazırlanmış sağlıklı kahvaltı kaseleri"
   },
