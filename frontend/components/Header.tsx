@@ -68,7 +68,7 @@ function IconMenu(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-const NAV_KEYS: RouteKey[] = ["home", "about", "services", "blog", "contact"];
+const NAV_KEYS: RouteKey[] = ["home", "about", "services", "products", "blog", "contact"];
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 

@@ -11,6 +11,7 @@
     "home": "Home",
     "about": "About Us",
     "services": "Services",
+    "products": "Products",
     "blog": "Blog",
     "contact": "Contact",
     "menu": "Menu",
@@ -19,6 +20,22 @@
     "searchPlaceholder": "Search the site...",
     "language": "Language",
     "country": "Türkiye"
+  },
+  "products": {
+    "title": "Our Products",
+    "metaDescription": "Koçum.Net publications: new-generation TYT/AYT prep materials with all-original, ÖSYM-calibre questions and step-by-step PDF solutions — problems, branch tests and question banks.",
+    "eyebrow": "TYT & AYT preparation publications",
+    "heroSubtitle": "New-generation TYT/AYT study sets built with all-original, ÖSYM-calibre questions and step-by-step PDF solutions.",
+    "feature1": "Step-by-step PDF solutions",
+    "feature2": "Original, ÖSYM-calibre questions",
+    "feature3": "A4 stapled, portable booklets",
+    "catProblem": "Mathematics – Problems",
+    "catMatematik": "TYT & AYT Maths & Geometry",
+    "catTurkce": "TYT Turkish",
+    "questionsLabel": "questions",
+    "ctaTitle": "Want to learn more about the products?",
+    "ctaDesc": "Contact us for set contents, availability and pricing.",
+    "ctaButton": "Get in Touch"
   },
   "home": {
     "heroEyebrow": "Exam preparation coaching",
@@ -77,7 +94,7 @@
     "team1Role": "Founder · Placement Counsellor · Student Coach",
     "team2Name": "Özlem Tamimi",
     "team2Role": "Founder · Expert Physicist · Student Coach",
-    "team3Name": "Our Other Expert",
+    "team3Name": "Dilek Kılıç",
     "team3Role": "Specialist Clinical Psychologist",
     "team4Name": "Our Other Expert",
     "team4Role": "Specialist Dietitian",
@@ -120,8 +137,8 @@
     "ogrenciImageAlt": "A high-school student taking notes at a laptop while wearing headphones",
 
     "psikolojikTitle": "Psychological Support During the Exam Period",
-    "psikolojikExpert": "Our Clinical Psychologist",
-    "psikolojikP1": "The exam marathon is not only an academic process; it is also a serious test of mental and emotional resilience. Led by our specialist Clinical Psychologist — well known for their work and videos in the digital world — we professionally support our students through exam anxiety, loss of motivation and stress management.",
+    "psikolojikExpert": "Our Clinical Psychologist Dilek Kılıç",
+    "psikolojikP1": "The exam marathon is not only an academic process; it is also a serious test of mental and emotional resilience. Led by our specialist Clinical Psychologist Dilek Kılıç — well known for her work and videos in the digital world — we professionally support our students through exam anxiety, loss of motivation and stress management.",
     "psikolojikP2": "We provide a space of psychological safety on this difficult journey, for our student and for the family alike.",
     "psikolojikImageAlt": "A young student talking with a specialist psychologist in a comfortable setting",
 

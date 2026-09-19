@@ -14,7 +14,7 @@ function IconInstagram(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-const QUICK_KEYS: RouteKey[] = ["home", "about", "services", "blog", "contact"];
+const QUICK_KEYS: RouteKey[] = ["home", "about", "services", "products", "blog", "contact"];
 
 /** Hizmetler bölümü: hizmet sayfasındaki çapa id'leri (dilden bağımsız, sabit). */
 const SERVICE_ANCHORS = [

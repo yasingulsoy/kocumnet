@@ -41,13 +41,24 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
   const s = t.services;
 
   /** Çapa id'leri dilden bağımsız sabittir — footer linkleri bunlara bağlı. */
-  const services = [
+  type ServiceItem = {
+    id: string;
+    title: string;
+    expert?: string;
+    lead?: string;
+    paragraphs: string[];
+    bullets?: { title: string; text: string }[];
+    image?: { src: string; alt: string };
+    people?: { src: string; name: string; alt: string }[];
+  };
+
+  const services: ServiceItem[] = [
     {
       id: "tercih-danismanligi",
       title: s.tercihTitle,
       expert: s.tercihExpert,
       paragraphs: [s.tercihP1, s.tercihP2],
-      image: { src: "/images/hizmet-tercih.webp", alt: s.tercihImageAlt },
+      people: [{ src: "/images/team/serhat.webp", name: "Serhat Butur", alt: "Serhat Butur" }],
     },
     {
       id: "sinav-hazirlik-materyalleri",
@@ -72,14 +83,17 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
       title: s.ogrenciTitle,
       expert: s.ogrenciExpert,
       paragraphs: [s.ogrenciP1, s.ogrenciP2],
-      image: { src: "/images/hizmet-ogrenci-koclugu.webp", alt: s.ogrenciImageAlt },
+      people: [
+        { src: "/images/team/ozlem.webp", name: "Özlem Tamimi", alt: "Özlem Tamimi" },
+        { src: "/images/team/serhat.webp", name: "Serhat Butur", alt: "Serhat Butur" },
+      ],
     },
     {
       id: "psikolojik-destek",
       title: s.psikolojikTitle,
       expert: s.psikolojikExpert,
       paragraphs: [s.psikolojikP1, s.psikolojikP2],
-      image: { src: "/images/hizmet-psikolojik.webp", alt: s.psikolojikImageAlt },
+      people: [{ src: "/images/team/dilek.webp", name: "Dilek Kılıç", alt: "Dilek Kılıç" }],
     },
     {
       id: "beslenme-danismanligi",
@@ -181,15 +195,47 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
                   }`}
                   aria-hidden
                 />
-                <div className="relative aspect-[3/2] overflow-hidden rounded-2xl shadow-[0_24px_60px_-28px_rgba(23,48,94,0.55)]">
-                  <Image
-                    src={service.image.src}
-                    alt={service.image.alt}
-                    fill
-                    className="object-cover"
-                    sizes="(min-width: 1024px) 560px, 100vw"
-                  />
-                </div>
+                {service.people ? (
+                  <div
+                    className={`relative grid gap-4 ${
+                      service.people.length > 1 ? "grid-cols-2" : "grid-cols-1"
+                    }`}
+                  >
+                    {service.people.map((person) => (
+                      <figure
+                        key={`${person.src}-${person.name}`}
+                        className="relative overflow-hidden rounded-2xl shadow-[0_24px_60px_-28px_rgba(23,48,94,0.55)]"
+                      >
+                        <div className="relative aspect-[4/5] bg-[#edf0fa]">
+                          <Image
+                            src={person.src}
+                            alt={person.alt}
+                            fill
+                            className="object-cover object-top"
+                            sizes={
+                              service.people!.length > 1
+                                ? "(min-width: 1024px) 270px, 45vw"
+                                : "(min-width: 1024px) 560px, 100vw"
+                            }
+                          />
+                        </div>
+                        <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 pb-3 pt-10 text-sm font-semibold text-white">
+                          {person.name}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : service.image ? (
+                  <div className="relative aspect-[3/2] overflow-hidden rounded-2xl shadow-[0_24px_60px_-28px_rgba(23,48,94,0.55)]">
+                    <Image
+                      src={service.image.src}
+                      alt={service.image.alt}
+                      fill
+                      className="object-cover"
+                      sizes="(min-width: 1024px) 560px, 100vw"
+                    />
+                  </div>
+                ) : null}
               </Reveal>
             </article>
           ))}

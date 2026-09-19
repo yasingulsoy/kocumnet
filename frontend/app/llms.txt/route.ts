@@ -2,6 +2,7 @@ import { getSiteUrl } from "@/lib/site";
 import { SITE_BRAND } from "@/lib/site-brand";
 import { fetchBlogs } from "@/lib/api";
 import { blogPath, localizedPath } from "@/lib/routes";
+import { PRODUCTS } from "@/lib/products";
 
 /**
  * /llms.txt — llmstxt.org standardı.
@@ -36,6 +37,11 @@ export async function GET() {
       })
       .join("\n");
 
+  const urunSatirlari = PRODUCTS.map(
+    (prod) =>
+      `- **${prod.name}** (${prod.questionCount} soru, ${prod.exams.join("/")}) — ${prod.tagline.tr}`
+  ).join("\n");
+
   const guncelleme = new Date().toISOString().slice(0, 10);
 
   const govde = `# Koçum.Net
@@ -62,21 +68,28 @@ Koçum.Net'in çözdüğü üç temel sorun şudur:
 - [Sınav Hazırlık Materyalleri — Mega Soru Kütüphanesi](${url(localizedPath("services", "tr"))}#sinav-hazirlik-materyalleri) — Özellikle matematikte, ÖSYM'nin sınav ruhuna ve formatına birebir uygun, müfredat dışı veya gereksiz zorlukta tek bir soru içermeyen niş yayınlar. Çözümler farklı bir formatta sunulur; öğrenci nerede tıkandığını destek almadan görebilir.
 - [Sınav Çalışma Koçluğu](${url(localizedPath("services", "tr"))}#sinav-calisma-koclugu) — Okul/kurs sonrası zamanın yönetimi. Üç çıktısı: kalıcı bilgi, zihinsel huzur, sıkı takip.
 - [Öğrenci Koçluğu](${url(localizedPath("services", "tr"))}#ogrenci-koclugu) — 9, 10, 11, 12. sınıf ve mezun öğrenciler için zaman yönetimi, ders çalışma teknikleri, sınav stresiyle başa çıkma, akademik motivasyon ve hedef belirleme. Yürütenler: Özlem Tamimi, Serhat Butur.
-- [Sınav Sürecinde Psikolojik Destek](${url(localizedPath("services", "tr"))}#psikolojik-destek) — Sınav kaygısı, motivasyon kaybı ve stres yönetimi; hem öğrenciye hem aileye. Yürüten: Uzman Klinik Psikoloğumuz.
+- [Sınav Sürecinde Psikolojik Destek](${url(localizedPath("services", "tr"))}#psikolojik-destek) — Sınav kaygısı, motivasyon kaybı ve stres yönetimi; hem öğrenciye hem aileye. Yürüten: Uzman Klinik Psikolog Dilek Kılıç.
 - [Sınav Sürecinde Beslenme Danışmanlığı](${url(localizedPath("services", "tr"))}#beslenme-danismanligi) — Sınav dönemine özel, kişiye özel beslenme programlarıyla enerji seviyesinin korunması. Yürüten: Uzman Diyetisyenimiz.
 
 ## Uzman kadro
 
 - **Serhat Butur** — Kurucu, Tercih Danışmanı, Öğrenci Koçu. Sosyal medya hesapları ve gelen mesajlar bizzat kendisi tarafından yanıtlanır.
-- **Özlem Tamimi** — Öğrenci Koçu.
-- **Uzman Klinik Psikoloğumuz** — Sınav sürecinde psikolojik destek; dijital dünyadaki çalışmaları ve videolarıyla tanınır.
+- **Özlem Tamimi** — Kurucu, Uzman Fizikçi, Öğrenci Koçu.
+- **Dilek Kılıç** — Uzman Klinik Psikolog. Sınav sürecinde psikolojik destek; dijital dünyadaki çalışmaları ve videolarıyla tanınır.
 - **Uzman Diyetisyenimiz** — Sınav sürecinde beslenme danışmanlığı.
+
+## Ürünler / Yayınlar
+
+Koçum.Net, TYT/AYT için tamamı özgün, ÖSYM kalibresinde sorular ve adım adım PDF çözümlü yeni nesil çalışma setleri (A4 tel dikişli fasiküller) üretir. Tüm ürünler: ${url(localizedPath("products", "tr"))}
+
+${urunSatirlari}
 
 ## Ana sayfalar (Türkçe)
 
 - [Ana Sayfa](${url(localizedPath("home", "tr"))}) — Koçum.Net'in yaklaşımı: plan, sistemli tekrar ve birebir takip.
 - [Kurumsal](${url(localizedPath("about", "tr"))}) — Biz kimiz, misyon, vizyon ve uzman kadro.
 - [Hizmetlerimiz](${url(localizedPath("services", "tr"))}) — Altı hizmetin tamamı, detaylarıyla.
+- [Ürünlerimiz](${url(localizedPath("products", "tr"))}) — TYT/AYT hazırlık yayınları: problemler, branş denemeleri ve soru bankaları.
 - [Blog](${url(localizedPath("blog", "tr"))}) — Sınav hazırlık, çalışma teknikleri ve öğrenci koçluğu yazıları.
 - [İletişim](${url(localizedPath("contact", "tr"))}) — E-posta ve sosyal medya üzerinden ulaşım.
 
@@ -85,6 +98,7 @@ Koçum.Net'in çözdüğü üç temel sorun şudur:
 - [Home](${url(localizedPath("home", "en"))}) — Exam preparation coaching from Türkiye, delivered online.
 - [About Us](${url(localizedPath("about", "en"))}) — Team, mission and vision.
 - [Services](${url(localizedPath("services", "en"))}) — All six services in detail.
+- [Products](${url(localizedPath("products", "en"))}) — TYT/AYT preparation publications.
 - [Blog](${url(localizedPath("blog", "en"))})
 - [Contact](${url(localizedPath("contact", "en"))})
 
@@ -93,6 +107,7 @@ Koçum.Net'in çözdüğü üç temel sorun şudur:
 - [الرئيسية](${url(localizedPath("home", "ar"))}) — تدريب على الاستعداد للامتحانات من تركيا، عبر الإنترنت.
 - [من نحن](${url(localizedPath("about", "ar"))})
 - [خدماتنا](${url(localizedPath("services", "ar"))})
+- [المنتجات](${url(localizedPath("products", "ar"))}) — إصدارات التحضير لـ TYT/AYT.
 - [المدوّنة](${url(localizedPath("blog", "ar"))})
 - [اتصل بنا](${url(localizedPath("contact", "ar"))})
 ${

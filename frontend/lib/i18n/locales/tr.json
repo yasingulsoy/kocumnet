@@ -11,6 +11,7 @@
     "home": "Ana Sayfa",
     "about": "Kurumsal",
     "services": "Hizmetlerimiz",
+    "products": "Ürünlerimiz",
     "blog": "Blog",
     "contact": "İletişim",
     "menu": "Menü",
@@ -19,6 +20,22 @@
     "searchPlaceholder": "Sitede ara...",
     "language": "Dil",
     "country": "Türkiye"
+  },
+  "products": {
+    "title": "Ürünlerimiz",
+    "metaDescription": "Koçum.Net yayınları: ÖSYM formatına birebir uygun, tamamı özgün soru ve adım adım PDF çözümlü TYT/AYT hazırlık materyalleri — problemler, branş denemeleri ve soru bankaları.",
+    "eyebrow": "TYT & AYT hazırlık yayınları",
+    "heroSubtitle": "Tamamı özgün, ÖSYM kalibresinde sorular ve adım adım PDF çözümlerle hazırlanan yeni nesil TYT/AYT çalışma setleri.",
+    "feature1": "Adım adım PDF çözüm",
+    "feature2": "ÖSYM kalibresinde özgün sorular",
+    "feature3": "A4 tel dikişli, taşınabilir fasikül",
+    "catProblem": "Matematik – Problemler",
+    "catMatematik": "TYT & AYT Matematik-Geometri",
+    "catTurkce": "TYT Türkçe",
+    "questionsLabel": "soru",
+    "ctaTitle": "Ürünler hakkında bilgi almak ister misiniz?",
+    "ctaDesc": "Setlerin içeriği, temini ve fiyatları için bize ulaşın.",
+    "ctaButton": "İletişime Geç"
   },
   "home": {
     "heroEyebrow": "Sınav hazırlık koçluğu",
@@ -77,7 +94,7 @@
     "team1Role": "Kurucu · Tercih Danışmanı · Öğrenci Koçu",
     "team2Name": "Özlem Tamimi",
     "team2Role": "Kurucu · Uzman Fizikçi · Öğrenci Koçu",
-    "team3Name": "Diğer Uzmanımız",
+    "team3Name": "Dilek Kılıç",
     "team3Role": "Uzman Klinik Psikolog",
     "team4Name": "Diğer Uzmanımız",
     "team4Role": "Uzman Diyetisyen",
@@ -120,8 +137,8 @@
     "ogrenciImageAlt": "Kulaklığıyla bilgisayar başında not alarak çalışan lise öğrencisi",
 
     "psikolojikTitle": "Sınav Sürecinde Psikolojik Destek",
-    "psikolojikExpert": "Klinik Psikoloğumuz",
-    "psikolojikP1": "Sınav maratonu sadece akademik bir süreç değil, aynı zamanda ciddi bir zihinsel ve duygusal dayanıklılık mücadelesidir. Dijital dünyadaki çalışmaları ve videolarıyla tanınan, alanında uzman Klinik Psikoloğumuz liderliğinde öğrencilerimizin sınav kaygısı, motivasyon kaybı ve stres yönetimi gibi süreçlerini profesyonelce destekliyoruz.",
+    "psikolojikExpert": "Klinik Psikoloğumuz Dilek Kılıç",
+    "psikolojikP1": "Sınav maratonu sadece akademik bir süreç değil, aynı zamanda ciddi bir zihinsel ve duygusal dayanıklılık mücadelesidir. Dijital dünyadaki çalışmaları ve videolarıyla tanınan, alanında uzman Klinik Psikoloğumuz Dilek Kılıç liderliğinde öğrencilerimizin sınav kaygısı, motivasyon kaybı ve stres yönetimi gibi süreçlerini profesyonelce destekliyoruz.",
     "psikolojikP2": "Hem öğrencimize hem de aileye bu zorlu yolculukta psikolojik güven alanı sağlıyoruz.",
     "psikolojikImageAlt": "Uzman psikologla rahat bir ortamda görüşen genç öğrenci",
 

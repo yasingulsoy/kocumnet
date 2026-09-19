@@ -12,6 +12,7 @@ export const ROUTE_SEGMENTS = {
   home: { tr: "", en: "", ar: "" },
   about: { tr: "kurumsal", en: "about", ar: "about" },
   services: { tr: "hizmetlerimiz", en: "services", ar: "services" },
+  products: { tr: "urunlerimiz", en: "products", ar: "products" },
   blog: { tr: "blog", en: "blog", ar: "blog" },
   contact: { tr: "iletisim", en: "contact", ar: "contact" },
 } as const satisfies Record<string, Record<Locale, string>>;

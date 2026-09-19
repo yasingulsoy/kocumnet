@@ -42,10 +42,10 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
 
   const expertise = [a.expertise1, a.expertise2, a.expertise3, a.expertise4];
 
-  const team = [
-    { name: a.team1Name, role: a.team1Role },
-    { name: a.team2Name, role: a.team2Role },
-    { name: a.team3Name, role: a.team3Role },
+  const team: { name: string; role: string; photo?: string }[] = [
+    { name: a.team1Name, role: a.team1Role, photo: "/images/team/serhat.webp" },
+    { name: a.team2Name, role: a.team2Role, photo: "/images/team/ozlem.webp" },
+    { name: a.team3Name, role: a.team3Role, photo: "/images/team/dilek.webp" },
     { name: a.team4Name, role: a.team4Role },
   ];
 
@@ -169,9 +169,21 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
                 key={member.name}
                 className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#1a5fb4] to-[#0e90d5] text-xl font-bold text-white shadow-md">
-                  {member.name.charAt(0)}
-                </div>
+                {member.photo ? (
+                  <div className="relative mx-auto h-24 w-24 overflow-hidden rounded-full shadow-md ring-2 ring-[#1a5fb4]/15">
+                    <Image
+                      src={member.photo}
+                      alt={member.name}
+                      fill
+                      className="object-cover object-top"
+                      sizes="96px"
+                    />
+                  </div>
+                ) : (
+                  <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#1a5fb4] to-[#0e90d5] text-2xl font-bold text-white shadow-md">
+                    {member.name.charAt(0)}
+                  </div>
+                )}
                 <h3 className="mt-4 text-base font-bold text-[#151a33]">{member.name}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-[#1a5fb4]">{member.role}</p>
               </StaggerItem>
