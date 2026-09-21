@@ -1,0 +1,24 @@
+# Nixpacks, bu dosya olmadan Node 18'e düşüyor ve build şu hatayla ölüyor:
+#   "You are using Node.js 18.20.5. For Next.js, Node.js version >=20.9.0 is required."
+# frontend/ ve admin/ ile aynı desen.
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.setup]
+# vips: sharp'ın görsel işleme bağımlılığı (şekil yükleme onsuz çalışmaz).
+nixPkgs = ["nodejs_20", "vips"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+# build script'i zaten `prisma generate` ile başlıyor — üretilen client
+# gitignore'da olduğu için bu ADIM ATLANAMAZ.
+cmds = ["npm run build"]
+
+[start]
+# Migration'lar uygulama açılmadan ÖNCE çalışmalı: yeni bir sürüm, şemada
+# olmayan bir alanı sorgularsa ilk istekte 500 döner.
+cmd = "npx prisma migrate deploy && npm run start"

@@ -1,0 +1,518 @@
+// Koçum.Net — Matematik Check-up
+// Kararların gerekçeleri PLAN.md'de. Buradaki yorumlar sadece "neden böyle" notları.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ortak enum'lar
+// ─────────────────────────────────────────────────────────────
+
+enum ExamScope {
+  TYT
+  AYT
+  BOTH
+}
+
+/// Yayın durumu. Soru ve paket aynı yaşam döngüsünü izler:
+/// DRAFT (yazılıyor) → REVIEW (kontrolde) → PUBLISHED (öğrenciye çıkar) → ARCHIVED.
+/// ARCHIVED olan soru yeni oturumlara SEÇİLMEZ ama geçmiş oturumlarda durur —
+/// silinirse öğrencinin eski sonucu yeniden hesaplanamaz hale gelir.
+enum PublishStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum Grade {
+  GRADE_9
+  GRADE_10
+  GRADE_11
+  GRADE_12
+  GRADUATE
+}
+
+/// Çeldirici hata tipleri. Öğrenci C'yi seçtiğinde *neden* yanlış yaptığını
+/// ek soru sormadan bilmek için — teşhis bunun üstüne kurulu (PLAN §3).
+enum ErrorType {
+  ISLEM_HATASI
+  ISARET_HATASI
+  TERS_ISLEM
+  KAVRAM_YANILGISI
+  EKSIK_OKUMA
+  BIRIM_HATASI
+  YAKLASIK_DEGER
+  FORMUL_KARISTIRMA
+  DIGER
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+  ABANDONED
+}
+
+enum TopicLevel {
+  STRONG
+  MEDIUM
+  WEAK
+}
+
+// ─────────────────────────────────────────────────────────────
+// Konu ağacı
+// ─────────────────────────────────────────────────────────────
+
+/// Konu ağacı: "TYT Matematik" → "Problemler" → "Hız-Yol-Zaman".
+/// Ölçüm yaprak konularda yapılır, rapor üst konularda toplanır.
+model Topic {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  examScope ExamScope @default(TYT)
+
+  parentId String?
+  parent   Topic?  @relation("TopicTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Topic[] @relation("TopicTree")
+
+  /// Sıralama — rapordaki konu sırası müfredat sırasını izlesin diye.
+  sortOrder Int @default(0)
+
+  /// Bu konuda zayıf çıkan öğrenciye önerilecek ürünler (frontend lib/products.ts id'leri).
+  /// Koda gömülmez: ürün kataloğu değişince migration gerekmesin.
+  recommendedProductIds String[] @default([])
+
+  questions     Question[]
+  packageTopics PackageTopic[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId, sortOrder])
+  @@index([examScope])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Paketler
+// ─────────────────────────────────────────────────────────────
+
+/// Check-up paketi = kapsamı ve soru dağılımı tanımlı bir test.
+/// Yeni paket eklemek satır girmektir, kod değişikliği değil (PLAN §2).
+model Package {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  summary     String?
+  description String?
+
+  examScope       ExamScope     @default(TYT)
+  questionCount   Int
+  durationMinutes Int
+  status          PublishStatus @default(DRAFT)
+  sortOrder       Int           @default(0)
+
+  /// Yanlışın doğruyu götürme oranı. KODA GÖMÜLMEZ:
+  /// YKS 0.25 (4 yanlış 1 doğru), LGS 0.3333, KPSS 0. Bu oran ürünün öğrenciye
+  /// "emin değilsen işaretle" deyip demeyeceğini değiştirir (PLAN §4).
+  penaltyRatio Decimal @default(0.25) @db.Decimal(5, 4)
+
+  /// Ücretsiz mi? Varsayılan TRUE, bilinçli: yeni bir paket eklendiğinde
+  /// kazara kilitli gelmesindense kazara açık gelmesi yeğdir — ilki öğrenciyi
+  /// sessizce kapının dışında bırakır, ikincisi en fazla gelir kaçırır ve
+  /// hemen fark edilir.
+  isFree Boolean @default(true)
+
+  topics       PackageTopic[]
+  sessions     CheckupSession[]
+  entitlements Entitlement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, sortOrder])
+}
+
+/// Pakette hangi konudan kaç soru gelecek.
+model PackageTopic {
+  id        String @id @default(cuid())
+  packageId String
+  topicId   String
+
+  questionCount Int
+  sortOrder     Int @default(0)
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Restrict)
+
+  @@unique([packageId, topicId])
+  @@index([topicId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sorular
+// ─────────────────────────────────────────────────────────────
+
+/// Soru gövdesi JSONB blok dizisi (PLAN §3). Formüller LaTeX kaynağı olarak
+/// saklanır, görsel olarak değil — KaTeX ile istemcide render edilir.
+model Question {
+  id      String @id @default(cuid())
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Restrict)
+
+  /// Blok dizisi: { version, blocks: [...] }. Şema doğrulaması lib/question-schema.ts'te.
+  stem Json
+
+  /// stem içindeki text düğümlerinin düz metin izdüşümü.
+  /// Tam metin arama + admin listelerinde önizleme için.
+  stemText String
+
+  /// stemText'in normalize edilmiş özeti. UNIQUE olması bilinçli:
+  /// aynı soru iki kez girilirse istatistik bölünür ve öğrenci aynı soruyu
+  /// iki kez görür. Sessiz çift kayıt yerine içe aktarmanın patlaması iyidir.
+  fingerprint String @unique
+
+  /// Adım adım çözüm (blok dizisi). Faz 2'de gösterilecek, şimdiden saklanır.
+  solution Json?
+
+  difficulty        Int @default(3) // 1 kolay … 5 zor
+  targetTimeSeconds Int @default(75)
+
+  status  PublishStatus @default(DRAFT)
+  /// Cevap anahtarı düzeltilirse artar. SessionItem.questionVersion ile
+  /// eşleşmezse o oturum yeniden hesaplanabilir (PLAN §4).
+  version Int           @default(1)
+
+  /// Nereden geldi: "2023 TYT / 12" ya da içe aktarma dosyasındaki satır kimliği.
+  sourceRef     String?
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  /// Ampirik zorluk kalibrasyonu için — difficulty elle girilir, bunlar ölçülür.
+  shownCount   Int @default(0)
+  correctCount Int @default(0)
+
+  choices   Choice[]
+  items     SessionItem[]
+  exposures QuestionExposure[]
+
+  createdById String?
+  createdBy   User?   @relation("QuestionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Soru seçiminin ana sorgusu: konu + yayında + zorluk.
+  @@index([topicId, status, difficulty])
+  @@index([status])
+  @@index([importBatchId])
+}
+
+/// Şıklar JSONB içinde değil ayrı tabloda: şık bazında atomik istatistik,
+/// cevap anahtarı şüphesi sorgusu ve hata tipi teşhisi için (PLAN §3).
+model Choice {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  label   String // "A".."E"
+  content Json // blok dizisi (şıkta da formül/görsel olabilir)
+
+  /// ⚠️ ASLA öğrenciye giden JSON'a girmez. Sunucuda kontrol edilir (PLAN §3).
+  isCorrect Boolean @default(false)
+
+  /// Çeldiricinin hangi hatayı yakaladığı. Doğru şıkta null.
+  errorType ErrorType?
+
+  /// Kaç kez seçildi — her cevapta atomik artar.
+  chosenCount Int @default(0)
+
+  sortOrder Int      @default(0)
+  answers   Answer[]
+
+  @@unique([questionId, label])
+  @@index([questionId, sortOrder])
+}
+
+/// Geometri şekilleri ve grafikler. LaTeX ile çizilmeyen her şey.
+model MediaAsset {
+  id         String @id @default(cuid())
+  storageKey String @unique
+  mimeType   String
+  width      Int?
+  height     Int?
+  byteSize   Int?
+
+  /// Görselin BAYTLARI. Dosya sistemi yerine veritabanında, bilinçli:
+  ///
+  /// 1. Konteyner geçici — yeniden dağıtımda disk siliniyor. Volume bağlamayı
+  ///    unutmak tüm şekilleri sessizce yok eder; soru durur, şekli gider.
+  /// 2. Yedekten dönüş atomik olur. Görseller diskte olsaydı, veritabanı
+  ///    yedeği geri yüklendiğinde referanslar boşa düşebilirdi.
+  ///
+  /// Ölçek sorun değil: ~1000 görsel × ~40 KB ≈ 40 MB. 500 MB aşılırsa nesne
+  /// depolamaya taşınır — `storageKey` zaten bu soyutlamayı sağlıyor.
+  data Bytes
+
+  /// Ekran okuyucu için zorunlu — boş bırakılırsa soru erişilemez olur.
+  alt String
+
+  uploadedById String?
+  uploadedBy   User?   @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// Toplu içe aktarma turu. Hata raporu saklanır ki 300 satırlık dosyanın
+/// hangi satırı neden atlandı sorusu cevaplanabilsin.
+model ImportBatch {
+  id       String @id @default(cuid())
+  filename String
+  format   String // "json" | "xlsx" | "csv"
+
+  status       String @default("PENDING") // PENDING | DONE | FAILED
+  totalRows    Int    @default(0)
+  createdCount Int    @default(0)
+  skippedCount Int    @default(0)
+  /// [{ row, reason, detail }]
+  errors       Json?
+
+  questions Question[]
+
+  createdById String?
+  createdBy   User?   @relation("ImportAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+// ─────────────────────────────────────────────────────────────
+// Kullanıcı / oturum
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  role         Role    @default(STUDENT)
+
+  grade      Grade?
+  targetExam ExamScope?
+  phone      String?
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  authSessions     AuthSession[]
+  resetTokens      PasswordResetToken[]
+  checkupSessions  CheckupSession[]
+  exposures        QuestionExposure[]
+  authoredQuestions Question[]    @relation("QuestionAuthor")
+  uploadedMedia     MediaAsset[]  @relation("MediaUploader")
+  entitlements      Entitlement[]
+  grantedEntitlements Entitlement[] @relation("EntitlementGranter")
+  importBatches    ImportBatch[]  @relation("ImportAuthor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+/// Parola sıfırlama jetonu.
+///
+/// Oturum jetonu gibi HASH'i saklanıyor — veritabanı sızarsa kimsenin parolası
+/// sıfırlanamasın diye. Tek kullanımlık (`usedAt`) ve kısa ömürlü: sıfırlama
+/// bağlantısı e-posta kutusunda kalıcı bir arka kapı olmamalı.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Giriş oturumu. Token'ın kendisi DEĞİL hash'i saklanır — veritabanı
+/// sızarsa çerezler taklit edilemesin diye.
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Bir öğrencinin bir pakete (veya tümüne) erişim hakkı.
+///
+/// TEK MODEL, İKİ SATIŞ BİÇİMİ:
+///   tek seferlik alım → packageId dolu, expiresAt null  (o paket, süresiz)
+///   abonelik          → packageId null,  expiresAt dolu (tüm paketler, süreli)
+///
+/// Böylece "tek seferlik mi abonelik mi" kararı beklenirken de şema
+/// yazılabiliyor; karar geldiğinde veri göçü gerekmiyor.
+model Entitlement {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// null = TÜM paketler.
+  packageId String?
+  package   Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  /// null = süresiz.
+  expiresAt DateTime?
+
+  /// Nereden geldi: "manual" (yönetici verdi), "purchase:<ödeme id>", "promo:<kod>".
+  /// Ödeme sağlayıcı bağlandığında buraya işlenecek.
+  source String  @default("manual")
+  note   String?
+
+  /// İptal/iade. Satır SİLİNMEZ — hangi hakkın ne zaman geri alındığı
+  /// uyuşmazlıkta kanıt olur.
+  revokedAt DateTime?
+
+  grantedById String?
+  grantedBy   User?   @relation("EntitlementGranter", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, packageId])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Check-up oturumu
+// ─────────────────────────────────────────────────────────────
+
+/// Bir öğrencinin bir check-up denemesi.
+model CheckupSession {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId String
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  status SessionStatus @default(IN_PROGRESS)
+
+  /// Paket ayarlarının oturum başındaki kopyası. Admin test ortasında paketi
+  /// düzenlerse puanlama değişmesin diye — questionVersion ile aynı mantık.
+  durationMinutes Int
+  penaltyRatio    Decimal @db.Decimal(5, 4)
+
+  startedAt   DateTime  @default(now())
+  expiresAt   DateTime
+  submittedAt DateTime?
+
+  items  SessionItem[]
+  result CheckupResult?
+
+  @@index([userId, startedAt])
+  @@index([status, expiresAt])
+  @@index([packageId])
+}
+
+/// Oturuma seçilen soru + sıra. Cevaptan ayrı tablo: soru listesi oturum
+/// başında sabitlenir, cevap sonra gelir.
+model SessionItem {
+  id        String         @id @default(cuid())
+  sessionId String
+  session   CheckupSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  sortOrder Int
+  /// Sorunun oturum anındaki sürümü (PLAN §4).
+  questionVersion Int
+
+  answer Answer?
+
+  @@unique([sessionId, questionId])
+  @@unique([sessionId, sortOrder])
+  @@index([questionId])
+}
+
+model Answer {
+  id            String      @id @default(cuid())
+  sessionItemId String      @unique
+  sessionItem   SessionItem @relation(fields: [sessionItemId], references: [id], onDelete: Cascade)
+
+  /// null = boş bırakıldı. Boş, yanlıştan farklıdır: net'e etkisi yok.
+  choiceId String?
+  choice   Choice? @relation(fields: [choiceId], references: [id], onDelete: Restrict)
+
+  /// Sunucuda hesaplanır. null sadece boş cevapta.
+  isCorrect Boolean?
+
+  timeSpentMs Int @default(0)
+  /// Kaç kez şık değiştirdi — kararsızlık sinyali.
+  changedCount Int @default(0)
+
+  answeredAt DateTime @default(now())
+
+  @@index([choiceId])
+}
+
+/// Hesaplanmış sonuç. Türetilebilir ama saklanır: sonuç ekranı ve geçmiş
+/// listesi her açılışta 25 satır üzerinden yeniden hesaplanmasın.
+model CheckupResult {
+  id        String         @id @default(cuid())
+  sessionId String         @unique
+  session   CheckupSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  correctCount Int
+  wrongCount   Int
+  blankCount   Int
+  netScore     Decimal @db.Decimal(6, 2)
+  totalTimeMs  Int
+
+  /// { topics: [{ topicId, name, asked, correct, wrong, blank, ratio, level, avgTimeMs }] }
+  topicBreakdown Json
+  /// Zayıf konulardan türeyen ürün önerileri.
+  recommendedProductIds String[] @default([])
+
+  computedAt DateTime @default(now())
+  /// Hangi sürümle hesaplandı — puanlama mantığı değişirse eski sonuçlar ayırt edilsin.
+  scoringVersion Int @default(1)
+}
+
+/// Son gösterim kaydı. Aynı öğrenciye aynı soruyu 30 gün içinde tekrar
+/// göstermemek için (PLAN §5). Oturum başına satır değil, çift başına tek satır —
+/// tablo şişmesin.
+model QuestionExposure {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  lastShownAt DateTime @default(now())
+  showCount   Int      @default(1)
+
+  @@unique([userId, questionId])
+  @@index([userId, lastShownAt])
+}

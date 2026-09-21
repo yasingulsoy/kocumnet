@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/*
+ * Koçum.Net Check-up — tasarım belirteçleri.
+ *
+ * Marka renkleri pazarlama sitesiyle ortak (lacivert · mavi · camgöbeği).
+ * Nötrler hafif mavi tonlu: saf gri yerine markayla aynı aileden, arayüz
+ * bütün olarak "tek parça" görünsün diye.
+ *
+ * Karanlık tema YOK: soru görselleri beyaz zeminli ve KaTeX çıktısı açık
+ * zemine göre ayarlı; yarım yamalak bir karanlık tema formülleri okunmaz
+ * yapar. color-scheme ile tarayıcının kendi kararmasını da kapatıyoruz.
+ */
+
+:root {
+  color-scheme: only light;
+
+  /* Zeminler */
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-sunk: #f7f9fc;
+  --surface-hover: #f1f4fa;
+
+  /* Metin */
+  --ink: #111834;
+  --ink-soft: #4b5471;
+  --ink-faint: #8990a8;
+
+  /* Çizgiler */
+  --line: #e6eaf2;
+  --line-strong: #d3d9e6;
+
+  /* Marka */
+  --brand: #1a5fb4;
+  --brand-hover: #164f97;
+  --brand-deep: #17305e;
+  --brand-bright: #0e90d5;
+  --brand-wash: #eaf1fb;
+  --brand-wash-strong: #d6e4f7;
+
+  /* Anlam renkleri — metin (koyu) ve dolgu (canlı) ayrı: çubuk ve halka
+     grafiklerde koyu ton sönük, metinde canlı ton okunaksız kalıyor. */
+  --ok: #047857;
+  --ok-fill: #10b981;
+  --ok-wash: #ecfdf5;
+  --warn: #b45309;
+  --warn-fill: #f59e0b;
+  --warn-wash: #fffbeb;
+  --bad: #be123c;
+  --bad-fill: #f43f5e;
+  --bad-wash: #fff1f2;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-surface-hover: var(--surface-hover);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-bright: var(--brand-bright);
+  --color-brand-wash: var(--brand-wash);
+  --color-brand-wash-strong: var(--brand-wash-strong);
+  --color-ok: var(--ok);
+  --color-ok-fill: var(--ok-fill);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-warn-wash: var(--warn-wash);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-bad-wash: var(--bad-wash);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-poppins);
+
+  /* Katmanlı gölgeler: tek bir koyu gölge yerine iki yumuşak katman,
+     kart zeminden "kalkmış" görünür ama kirli durmaz. */
+  --shadow-card: 0 1px 2px 0 rgb(17 24 52 / 0.04), 0 1px 3px 0 rgb(17 24 52 / 0.05);
+  --shadow-raised: 0 8px 24px -8px rgb(17 24 52 / 0.12), 0 2px 6px -2px rgb(17 24 52 / 0.06);
+  --shadow-pop: 0 24px 48px -16px rgb(23 48 94 / 0.32);
+  --shadow-brand: 0 10px 30px -10px rgb(26 95 180 / 0.55);
+
+  --animate-rise: rise 0.45s cubic-bezier(0.21, 0.6, 0.35, 1) both;
+  --animate-fade: fade 0.3s ease-out both;
+  --animate-soft-pulse: soft-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Sayılar hizalı dursun: net, süre, istatistik kartları. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Klavyeyle gezinen için görünür odak. Sınav ekranında şıklar arasında ok
+   tuşlarıyla dolaşan öğrenci nerede olduğunu görmeli. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Marka gradyanı — kahraman kartları ve birincil vurgular için. */
+.bg-brand-gradient {
+  background: linear-gradient(135deg, #17305e 0%, #1a5fb4 55%, #0e90d5 100%);
+}
+
+/* Gradyan zeminde ince desen: düz renk "boş" durmasın. */
+.bg-grid-fade {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at top right, black 20%, transparent 70%);
+}
+
+/* Yerel <dialog>: odak kapanı, Escape ve üst katman tarayıcıdan geliyor. */
+dialog::backdrop {
+  background: rgb(17 24 52 / 0.45);
+  backdrop-filter: blur(2px);
+}
+
+dialog[open] {
+  animation: var(--animate-rise);
+}
+
+/* KaTeX: satır içi formüller gövde yazısıyla aynı boyda dursun. */
+.katex {
+  font-size: 1.05em;
+}
+
+/* Blok formüller taşarsa sayfayı genişletmesin — mobilde uzun ifadeler
+   bütün düzeni bozuyordu. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+/* Alt sekme çubuğu iPhone ev çubuğunun altında kalmasın. */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
