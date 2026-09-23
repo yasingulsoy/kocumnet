@@ -13,6 +13,11 @@ CREATE DATABASE kocumnet_checkup ENCODING 'UTF8';
 Şema ve migration'lar uygulama açılırken otomatik uygulanır (`nixpacks.toml` içindeki
 `prisma migrate deploy`). Elle çalıştırmaya gerek yok.
 
+**Şemanın sahibi bu uygulama.** Yönetim paneli (`admin.kocum.net`, kök dizindeki `admin/`)
+aynı veritabanına `CHECKUP_DATABASE_URL` ile bağlanır ama migration çalıştırmaz. Bu yüzden
+şema değiştiren bir sürümde **önce bu servis** dağıtılmalı; panel yeni sütunu ancak
+migration uygulandıktan sonra kullanabilir.
+
 ## 2. Ortam değişkenleri
 
 `.env.example` dosyasındaki tüm değişkenleri Dokploy'un ortam değişkenleri ekranına girin.
@@ -35,9 +40,8 @@ Servis ayağa kalktıktan sonra, konteyner içinde:
 npm run db:seed        # konu ağacı + paketler (idempotent, tekrar çalıştırmak güvenli)
 ```
 
-Yönetici hesabı için `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` tanımlayıp seed'i
-tekrar çalıştırın. Bu ikisi boşsa yönetici açılmaz — bilinen varsayılan parolalı
-hesap bırakmıyoruz.
+Bu uygulamada yönetici hesabı yok. Soru ekleme, öğrenciler ve erişim hakları
+`admin.kocum.net`'te; oraya backend'in personel hesaplarıyla girilir.
 
 ⚠️ `npm run db:seed:demo` **ÜRETİMDE ÇALIŞTIRILMAZ**. Şablondan üretilmiş sahte
 sorular üretir; betik `NODE_ENV=production` altında zaten kendini durdurur.
@@ -65,9 +69,10 @@ uygulamasının temel yolunu çakıştırır — ayrı alt alan adı daha basit.
 
 - [ ] `SMTP_URL` dolu ve bir test e-postası ulaşıyor
 - [ ] `NEXT_PUBLIC_APP_URL` gerçek alan adı
-- [ ] Yönetici hesabı açıldı, `SEED_ADMIN_PASSWORD` ortam değişkenlerinden silindi
+- [ ] Yönetim paneli bu veritabanına bağlı (`admin/` → `CHECKUP_DATABASE_URL`) ve
+      backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` tanımlı (bkz. `admin/DEPLOY.md`)
 - [ ] Gerçek soru havuzu girildi (demo sorular temizlendi)
-- [ ] Paketlerin `isFree` değerleri iş kararına göre ayarlandı
+- [ ] Paketlerin ücretli/ücretsiz ayarı iş kararına göre yapıldı (panel → Check-up → Paketler)
 - [ ] `/gizlilik` metni **hukukçu tarafından okundu** (taslak hâlde yazıldı)
 - [ ] Ücretli satış açılacaksa mesafeli satış sözleşmesi ve cayma hakkı metinleri eklendi
 - [ ] Veritabanı yedeği zamanlandı

@@ -8,6 +8,8 @@ export default defineConfig([
     '.next/**',
     'out/**',
     'build/**',
-    'next-env.d.ts'
+    'next-env.d.ts',
+    // Prisma'nın ürettiği check-up client'ı (gitignore'da, build yeniden üretir)
+    'src/lib/checkup/generated/**',
   ]),
 ])

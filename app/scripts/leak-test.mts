@@ -15,8 +15,10 @@ import {
   getStudentSession,
   saveAnswer,
   submitCheckup,
+  startTopicRetest,
   getCheckupReview,
   CheckupError,
+  GUNLUK_TEKRAR_SINIRI,
 } from "../lib/checkup";
 import { calculateNet } from "../lib/scoring";
 import { grantEntitlement } from "../lib/entitlements";
@@ -248,6 +250,105 @@ async function main() {
   check("ikinci testte aynı sorular gelmiyor", tekrarEden === 0, `${tekrarEden} tekrar`);
 
   // ── ERİŞİM HAKKI ────────────────────────────────────────────
+  // ── konu tekrar testi ───────────────────────────────────
+  console.log("");
+  console.log("Konu tekrar testi:");
+
+  // Hiç ölçülmemiş bir konu: açılmamalı (ücretsiz havuz madenciliği).
+  const yabanciKonu = await prisma.topic.findFirst({
+    where: {
+      questions: { some: { status: "PUBLISHED" } },
+      // Öğrencinin hiç sorusunu görmediği bir konu seçiyoruz.
+      NOT: { questions: { some: { items: { some: { session: { userId: other.id } } } } } },
+    },
+    select: { id: true, name: true },
+  });
+  if (yabanciKonu) {
+    let engellendi = false;
+    try {
+      await startTopicRetest(other.id, yabanciKonu.id, "TYT");
+    } catch (e) {
+      engellendi = e instanceof CheckupError;
+    }
+    check("ölçülmemiş konuda kontrol testi açılmıyor", engellendi, yabanciKonu.name);
+  }
+
+  // Ölçülmüş konuda açılmalı ve aynı konuda ikinci çağrı AYNI oturumu vermeli.
+  const olculenKonu = await prisma.sessionItem.findFirst({
+    where: { session: { userId: user.id, status: "SUBMITTED" } },
+    select: { question: { select: { topic: { select: { id: true, name: true } } } } },
+  });
+
+  if (olculenKonu) {
+    const konuId = olculenKonu.question.topic.id;
+    let ilk: string | null = null;
+    try {
+      ilk = await startTopicRetest(user.id, konuId, "TYT");
+    } catch (e) {
+      // Havuz 5 soruya yetmiyorsa bu bir hata değil; testi atlıyoruz.
+      check(
+        "ölçülen konuda kontrol testi açılıyor",
+        e instanceof CheckupError && e.message.includes("yeterli soru yok"),
+        e instanceof Error ? e.message : ""
+      );
+    }
+
+    if (ilk) {
+      check("ölçülen konuda kontrol testi açılıyor", true, olculenKonu.question.topic.name);
+      const ikinciCagri = await startTopicRetest(user.id, konuId, "TYT");
+      check("açık tekrar testi ikinci kez açılmıyor", ikinciCagri === ilk);
+
+      const oturum = await prisma.checkupSession.findUniqueOrThrow({
+        where: { id: ilk },
+        select: { kind: true, focusTopicId: true, items: { select: { questionId: true } } },
+      });
+      check("tekrar testi TOPIC_RETEST olarak kaydediliyor", oturum.kind === "TOPIC_RETEST");
+      check("odak konu saklanıyor", oturum.focusTopicId === konuId);
+
+      const konular = await prisma.question.findMany({
+        where: { id: { in: oturum.items.map((i) => i.questionId) } },
+        select: { topicId: true },
+      });
+      check(
+        "tekrar testindeki tüm sorular o konudan",
+        konular.every((q) => q.topicId === konuId),
+        `${konular.length} soru`
+      );
+
+      // Günlük sınır: sayacı doldurup engeli görüyoruz.
+      await prisma.checkupSession.updateMany({
+        where: { userId: user.id, kind: "TOPIC_RETEST" },
+        data: { status: "SUBMITTED" },
+      });
+      const tekrarPaketi = await prisma.checkupSession.findUniqueOrThrow({
+        where: { id: ilk },
+        select: { packageId: true },
+      });
+      const eksik = GUNLUK_TEKRAR_SINIRI - 1;
+      for (let i = 0; i < eksik; i++) {
+        await prisma.checkupSession.create({
+          data: {
+            userId: user.id,
+            packageId: tekrarPaketi.packageId,
+            kind: "TOPIC_RETEST",
+            status: "SUBMITTED",
+            durationMinutes: 8,
+            penaltyRatio: 0.25,
+            startedAt: new Date(),
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        });
+      }
+      let sinirCalisti = false;
+      try {
+        await startTopicRetest(user.id, konuId, "TYT");
+      } catch (e) {
+        sinirCalisti = e instanceof CheckupError && e.message.includes("hakkın doldu");
+      }
+      check(`günde ${GUNLUK_TEKRAR_SINIRI} tekrar testinden sonra duruyor`, sinirCalisti);
+    }
+  }
+
   console.log("\nErisim hakki:");
 
   const pkg = await prisma.package.findFirstOrThrow({

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import React from "react";
 import Link from "next/link";
-import { GridIcon, PageIcon, UserCircleIcon } from "@/icons/index";
+import { GridIcon, PageIcon, TaskIcon, UserCircleIcon } from "@/icons/index";
 
 export const metadata: Metadata = {
   title: "Kocumnet Admin Paneli",
@@ -14,6 +14,12 @@ const quickLinks = [
     description: "Blog içeriklerini yönetin",
     href: "/blogs",
     icon: <PageIcon />,
+  },
+  {
+    title: "Matematik Check-up",
+    description: "Soru havuzu, kayıtlı öğrenciler ve test sonuçları",
+    href: "/checkup",
+    icon: <TaskIcon />,
   },
   {
     title: "Kullanıcılar",

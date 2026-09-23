@@ -38,11 +38,14 @@ export default function AdminLayout({
     return null;
   }
 
+  // Kenar çubuğu lg'den itibaren 290/90 px (AppSidebar). Boşluk da lg'den
+  // itibaren aynı olmalı; eskiden lg'de 260/72 idi ve 1024-1279 px arasında
+  // içeriğin ilk 30 px'i kenar çubuğunun altında kalıyordu.
   const mainContentMargin = isMobileOpen
     ? "ml-0"
     : isExpanded || isHovered
-    ? "lg:ml-[260px] xl:ml-[290px]"
-    : "lg:ml-[72px] xl:ml-[90px]";
+    ? "lg:ml-[290px]"
+    : "lg:ml-[90px]";
 
   return (
     <div className="min-h-screen xl:flex">

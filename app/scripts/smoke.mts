@@ -6,6 +6,18 @@ import { hashPassword, verifyPassword } from "../lib/password";
 import { deriveQuestionFields, safeParseQuestionContent } from "../lib/question-content";
 import { calculateNet, scoreCheckup, type ScoredAnswer } from "../lib/scoring";
 import { errorPattern, dominantError, compareProgress } from "../lib/diagnosis";
+import {
+  bosStratejisi,
+  haftaBasi,
+  haftalikPlan,
+  hataTavsiyesi,
+  karar,
+  oncelikSirasi,
+  tekrarTavsiyesi,
+  MAX_TOPICS_PER_WEEK,
+} from "../lib/coaching";
+import { EXAMS, EXAM_SCOPES, SECILEBILIR_SINAVLAR } from "../lib/exams";
+import type { TopicBreakdownEntry } from "../lib/scoring";
 import type { ReviewItem } from "../lib/checkup";
 import type { TopicBreakdown } from "../lib/scoring";
 
@@ -207,6 +219,133 @@ check("gerileyen konu yakalandı", ilerleme.gerileyen.length === 1 && ilerleme.g
 check("küçük oynama ilerleme sayılmıyor (%5)", !ilerleme.gelisen.some((g) => g.topicId === "c"));
 check("ÖLÇÜLEMEMİŞ konu karşılaştırılmıyor", !ilerleme.gelisen.concat(ilerleme.gerileyen).some((g) => g.topicId === "d"));
 check("net farkı taşınıyor", ilerleme.netDelta === 1.5);
+
+// ── sınav tanımları ───────────────────────────────────────
+console.log("");
+console.log("Sınavlar:");
+for (const s of EXAM_SCOPES) {
+  const e = EXAMS[s];
+  check(
+    `${s} tanımı tutarlı`,
+    e.scope === s &&
+      e.mathQuestionCount > 0 &&
+      e.grades.length > 0 &&
+      e.defaultTargetNet >= 0 &&
+      e.defaultTargetNet <= e.mathQuestionCount &&
+      e.penaltyRatio >= 0 &&
+      e.penaltyRatio <= 1,
+    `${e.mathQuestionCount} soru, hedef ${e.defaultTargetNet}, ceza ${e.penaltyRatio}`
+  );
+}
+check("seçilebilir sınavların hepsi tanımlı", SECILEBILIR_SINAVLAR.every((s) => Boolean(EXAMS[s])));
+
+// ── koçluk: öncelik sırası ────────────────────────────────
+console.log("");
+console.log("Koçluk — öncelik:");
+
+const konu = (
+  id: string,
+  ratio: number,
+  level: "STRONG" | "MEDIUM" | "WEAK" | null,
+  asked = 4
+): TopicBreakdownEntry => ({
+  topicId: id,
+  slug: id,
+  name: id,
+  asked,
+  correct: Math.round(asked * ratio),
+  wrong: asked - Math.round(asked * ratio),
+  blank: 0,
+  ratio,
+  avgTimeMs: 0,
+  level,
+  confidence: level ? "HIGH" : null,
+  slow: false,
+});
+
+const sirali = oncelikSirasi(
+  [
+    konu("guclu", 0.9, "STRONG"),
+    konu("orta", 0.5, "MEDIUM"),
+    konu("zayif-az-soru", 0.1, "WEAK", 2),
+    konu("zayif-1", 0.2, "WEAK"),
+    konu("zayif-2", 0.4, "WEAK"),
+    konu("zayif-3", 0.45, "WEAK"),
+  ],
+  new Map()
+);
+check("yalnızca WEAK konular alınıyor", sirali.every((k) => k.name.startsWith("zayif")));
+check("3'ten az soru sorulan konu elenir (kanıt kuralı)",
+  !sirali.some((k) => k.topicId === "zayif-az-soru"));
+check(`haftada en fazla ${MAX_TOPICS_PER_WEEK} konu`, sirali.length === MAX_TOPICS_PER_WEEK);
+check("en düşük oran başa geliyor", sirali[0]?.topicId === "zayif-1");
+
+const esitOran = oncelikSirasi(
+  [konu("az-gelen", 0.3, "WEAK"), konu("cok-gelen", 0.3, "WEAK")],
+  new Map([
+    ["az-gelen", 1],
+    ["cok-gelen", 5],
+  ])
+);
+check("eşit oranda sınav ağırlığı öne geçiriyor", esitOran[0]?.topicId === "cok-gelen");
+check("kayıp soru hesaplanıyor", esitOran[0]?.kayip === 3.5, String(esitOran[0]?.kayip));
+
+// ── koçluk: karar cümlesi ─────────────────────────────────
+console.log("");
+console.log("Koçluk — karar:");
+const sayiVar = (m: string) => /\d/.test(m);
+
+const yuksek = karar(0.8, [], [konu("Köklü Sayılar", 1, "STRONG")], 0, 20);
+const orta = karar(0.55, sirali, [], 2, 20);
+const dusuk = karar(0.2, sirali, [], 9, 20);
+check("yüksek bant sayı içeriyor", sayiVar(yuksek.baslik) && yuksek.ton === "ok");
+check("orta bant sayı içeriyor", sayiVar(orta.baslik) && orta.ton === "warn");
+check("düşük bant sayı içeriyor", sayiVar(dusuk.baslik) && dusuk.ton === "bad");
+check("düşük bantta tek konu söyleniyor", dusuk.metin.includes("zayif-1"));
+check("çok boşta boş uyarısı var", dusuk.metin.includes("9 soruyu boş"));
+check("üç bant da farklı", new Set([yuksek.metin, orta.metin, dusuk.metin]).size === 3);
+
+// ── koçluk: boş stratejisi ────────────────────────────────
+console.log("");
+console.log("Koçluk — boş:");
+check("az boşta tavsiye verilmiyor", bosStratejisi(2, 20, 0.25, "TYT") === null);
+check("cezasız sınavda 'boş bırakma' deniyor",
+  (bosStratejisi(8, 20, 0, "KPSS") ?? "").includes("hiçbir faydası yok"));
+check("cezalı sınavda kaç yanlış bir doğru götürüyor yazıyor",
+  (bosStratejisi(8, 20, 0.25, "TYT") ?? "").includes("4 yanlış"));
+check("hiç boş yoksa tavsiye yok", bosStratejisi(0, 20, 0.25, "TYT") === null);
+
+// ── koçluk: tekrar ve hata deseni ─────────────────────────
+console.log("");
+console.log("Koçluk — tekrar:");
+check("havuz daraldıysa uyarılıyor", tekrarTavsiyesi(3, "Problemler").includes("sınırlı"));
+check("havuz genişse 10 gün deniyor", tekrarTavsiyesi(0, "Problemler").includes("10 gün"));
+check("bilinen hata tipine reçete var",
+  (hataTavsiyesi({ type: "ISLEM_HATASI", label: "İşlem hatası", count: 5 })?.metin ?? "").length > 20);
+check("DIGER için uydurma tavsiye yok",
+  hataTavsiyesi({ type: "DIGER", label: "Diğer", count: 5 }) === null);
+check("hata yoksa kart yok", hataTavsiyesi(null) === null);
+
+// ── koçluk: haftalık plan ─────────────────────────────────
+console.log("");
+console.log("Koçluk — plan:");
+const plan = haftalikPlan(sirali, new Map([["zayif-1", ["urun-a"]]]));
+check("konu başına dört iş", plan.length === sirali.length * 4);
+check("her konuda kontrol testi var",
+  sirali.every((k) => plan.some((i) => i.topicId === k.topicId && i.kind === "RETEST")));
+check("kontrol testi ürün önermiyor",
+  plan.filter((i) => i.kind === "RETEST").every((i) => !i.productId));
+check("ürün eşleşen işe taşınıyor",
+  plan.some((i) => i.topicId === "zayif-1" && i.productId === "urun-a"));
+check("boş öncelikte plan boş", haftalikPlan([], new Map()).length === 0);
+
+// Hafta sınırı: pazar 23:30 (TR) hâlâ o haftaya ait olmalı.
+const pazar = haftaBasi(new Date("2026-03-15T20:30:00.000Z")); // TR 23:30 pazar
+const pazartesi = haftaBasi(new Date("2026-03-16T05:00:00.000Z")); // TR 08:00 pazartesi
+check("pazar gecesi hafta değişmiyor", pazar.toISOString().startsWith("2026-03-09"),
+  pazar.toISOString());
+check("pazartesi yeni hafta", pazartesi.toISOString().startsWith("2026-03-16"),
+  pazartesi.toISOString());
 
 console.log(failed === 0 ? "\nTümü geçti.\n" : `\n${failed} kontrol BAŞARISIZ.\n`);
 process.exitCode = failed === 0 ? 0 : 1;

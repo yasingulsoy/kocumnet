@@ -65,16 +65,26 @@ const getStorage = (blogId) => {
   });
 };
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|webp|gif/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+/**
+ * Uzantı ve MIME denetimi.
+ *
+ * Eskiden desen /jpeg|jpg|png|webp|gif/ ile "içinde geçiyor mu" diye
+ * bakılıyordu: `.gifx`, `.phtmlgif` uzantıları ve
+ * `application/x-httpd-php;gif` MIME'i bu denetimden geçiyordu. Artık tam
+ * eşleşme aranıyor — ve dosyanın gerçekten resim olduğu, kaydedildikten
+ * sonra ilk baytlarından ayrıca doğrulanıyor (utils/imageSignature.js).
+ */
+const IZINLI_UZANTILAR = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const IZINLI_MIMELER = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-  if (mimetype && extname) {
+const fileFilter = (req, file, cb) => {
+  const uzanti = path.extname(String(file.originalname || '')).toLowerCase();
+  const mime = String(file.mimetype || '').split(';')[0].trim().toLowerCase();
+
+  if (IZINLI_UZANTILAR.has(uzanti) && IZINLI_MIMELER.has(mime)) {
     return cb(null, true);
-  } else {
-    cb(new Error('Sadece resim dosyaları yüklenebilir (jpeg, jpg, png, webp, gif)'));
   }
+  cb(new Error('Sadece JPEG, PNG, WebP veya GIF resimleri yüklenebilir.'));
 };
 
 // Blog kapak resmi için middleware (blogsWall/{blogId}/ klasörüne kaydeder)

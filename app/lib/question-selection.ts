@@ -181,6 +181,70 @@ export async function selectQuestionsForPackage(
 }
 
 /**
+ * Tek konudan soru seçer — konu tekrar testi için.
+ *
+ * Paket seçiciyle aynı merdiveni kullanır (bant → bant gevşet → tekrar
+ * engelini gevşet), çünkü kontrol testinin de zorluk dağılımı dengeli
+ * olmalı: beş kolay soruyla "konu oturdu" demek öğrenciyi kandırmak olur.
+ */
+export async function selectQuestionsForTopic(
+  topicId: string,
+  count: number,
+  userId: string | null
+): Promise<SelectionResult> {
+  const exposureCutoff = new Date(Date.now() - EXPOSURE_WINDOW_DAYS * 86_400_000);
+  const secilen: SelectedQuestion[] = [];
+  let relaxedExposureCount = 0;
+
+  for (const band of bandTargets(count)) {
+    const rows = await pick({
+      topicId,
+      limit: band.want,
+      minDifficulty: band.min,
+      maxDifficulty: band.max,
+      excludeIds: secilen.map((q) => q.id),
+      userId,
+      exposureCutoff,
+    });
+    secilen.push(...rows);
+  }
+
+  let eksik = count - secilen.length;
+  if (eksik > 0) {
+    const rows = await pick({
+      topicId,
+      limit: eksik,
+      minDifficulty: 1,
+      maxDifficulty: 5,
+      excludeIds: secilen.map((q) => q.id),
+      userId,
+      exposureCutoff,
+    });
+    secilen.push(...rows);
+  }
+
+  eksik = count - secilen.length;
+  if (eksik > 0 && userId) {
+    const rows = await pick({
+      topicId,
+      limit: eksik,
+      minDifficulty: 1,
+      maxDifficulty: 5,
+      excludeIds: secilen.map((q) => q.id),
+      userId: null,
+      exposureCutoff,
+    });
+    relaxedExposureCount += rows.length;
+    secilen.push(...rows);
+  }
+
+  const shortfalls =
+    secilen.length < count ? [{ topicId, requested: count, got: secilen.length }] : [];
+
+  return { questions: shuffle(secilen), shortfalls, relaxedExposureCount };
+}
+
+/**
  * Fisher-Yates. Sorular konu konu seçildi; karıştırmazsak öğrenci testi
  * konu blokları halinde görür ve bu ölçümü bozar (bir konuya ısınıp
  * devamını daha iyi yapar).

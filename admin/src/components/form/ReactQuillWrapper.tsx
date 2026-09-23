@@ -33,7 +33,7 @@ const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
   style,
   enableImageDeleteOverlay = true,
 }) => {
-  const [isMounted, setIsMounted] = useState(false);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hoveredImgSrc, setHoveredImgSrc] = useState<string | null>(null);
   const [overlayPos, setOverlayPos] = useState<{ top: number; left: number } | null>(null);
@@ -63,12 +63,8 @@ const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
   }, []);
 
   useEffect(() => {
-    // Client-side'da mount olduktan sonra ReactQuill'i render et
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isMounted) return;
+    // Efektler yalnızca istemcide çalışır; ayrı bir "mount oldu mu" bayrağına
+    // gerek yok (editör zaten dynamic + ssr:false ile yükleniyor).
     if (!enableImageDeleteOverlay) return;
 
     const container = containerRef.current;
@@ -142,18 +138,7 @@ const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
       editorEl.removeEventListener("mousemove", onMouseMove);
       editorEl.removeEventListener("mouseleave", onMouseLeave);
     };
-  }, [isMounted, enableImageDeleteOverlay]);
-
-  if (!isMounted) {
-    return (
-      <div 
-        className={`bg-white dark:bg-gray-800 rounded-lg ${className || ""}`}
-        style={{ minHeight: "400px", ...style }}
-      >
-        <div className="h-full bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
-      </div>
-    );
-  }
+  }, [enableImageDeleteOverlay]);
 
   return (
     <div ref={containerRef} className={`relative ${className || ""}`} style={style}>

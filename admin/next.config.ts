@@ -31,6 +31,14 @@ const nextConfig: NextConfig = {
    */
   experimental: {
     proxyClientMaxBodySize: "500mb",
+    /**
+     * Check-up şekil yükleme bir server action. Varsayılan gövde sınırı 1 MB:
+     * telefonla çekilmiş bir şekil fotoğrafı bunu aşar ve yükleme sessizce
+     * reddedilir. Dosya sınırı 8 MB (lib/checkup/actions/media.ts); pay bırakıyoruz.
+     */
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
 
   /* config options here */

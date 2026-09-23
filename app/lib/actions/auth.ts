@@ -105,7 +105,7 @@ export async function registerAction(
 
   // redirect() özel bir hata fırlatarak çalışır — try/catch İÇİNE ALINMAZ,
   // yoksa yönlendirme yutulur ve sayfa olduğu yerde kalır.
-  redirect("/");
+  redirect("/panel");
 }
 
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -142,7 +142,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   const h = await headers();
   await createSession(user.id, h.get("user-agent") ?? undefined);
 
-  redirect("/");
+  redirect("/panel");
 }
 
 export async function logoutAction() {

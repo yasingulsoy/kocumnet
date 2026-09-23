@@ -1,77 +1,105 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Brain,
+  ChevronDown,
+  CircleCheck,
+  RotateCcw,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import type { TopicBreakdown, TopicBreakdownEntry } from "@/lib/scoring";
-import { PRODUCTS, productUrl } from "@/lib/products";
 import { getCheckupReview } from "@/lib/checkup";
 import { errorPattern, dominantError, compareProgress } from "@/lib/diagnosis";
-import { AppHeader } from "@/components/AppHeader";
+import {
+  bosStratejisi,
+  hataTavsiyesi,
+  karar,
+  oncelikSirasi,
+  tekrarTavsiyesi,
+  HAFTALIK_SORU,
+  KONU_HAFTALIK_DAKIKA,
+} from "@/lib/coaching";
+import { examShort, hasPenalty } from "@/lib/exams";
+import type { TopicBreakdown } from "@/lib/scoring";
+import { PRODUCTS, productUrl } from "@/lib/products";
+import { ScoreRing, TopicBar } from "@/components/ui/charts";
+import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
+import { Badge, Card, CardHeader, LinkButton, trNumber } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { AnswerReview } from "./AnswerReview";
-import { Card, LinkButton } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Sonuç" };
 
-const LEVEL_UI = {
-  STRONG: { label: "güçlü", bar: "bg-ok", text: "text-ok", wash: "bg-ok-wash" },
-  MEDIUM: { label: "orta", bar: "bg-warn", text: "text-warn", wash: "bg-warn-wash" },
-  WEAK: { label: "zayıf", bar: "bg-bad", text: "text-bad", wash: "bg-bad-wash" },
-} as const;
-
-function trNumber(n: number, digits = 2) {
-  return n.toFixed(digits).replace(".", ",");
-}
-
 export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionId]">) {
   const { sessionId } = await params;
-
-  const user = await getCurrentUser();
-  if (!user) redirect("/giris");
+  const user = (await getCurrentUser())!;
 
   const [result, review] = await Promise.all([
     prisma.checkupResult.findUnique({
-    where: { sessionId },
-    select: {
-      correctCount: true,
-      wrongCount: true,
-      blankCount: true,
-      netScore: true,
-      totalTimeMs: true,
-      topicBreakdown: true,
-      recommendedProductIds: true,
-      computedAt: true,
-      session: {
-        select: {
-          userId: true,
-          durationMinutes: true,
-          startedAt: true,
-          submittedAt: true,
-          package: { select: { name: true, slug: true, questionCount: true } },
-        },
+      where: { sessionId },
+      select: {
+        correctCount: true,
+        wrongCount: true,
+        blankCount: true,
+        netScore: true,
+        totalTimeMs: true,
+        topicBreakdown: true,
+        recommendedProductIds: true,
+        computedAt: true,
+        examScope: true,
+        session: {
+          select: {
+            userId: true,
+            durationMinutes: true,
+            relaxedExposureCount: true,
+            kind: true,
+            penaltyRatio: true,
+            focusTopic: { select: { name: true } },
+            package: { select: { name: true, slug: true, examScope: true } },
+          },
         },
       },
     }),
-    // getCheckupReview cevap anahtarını içerir ve yalnızca BİTMİŞ oturumlarda
-    // çalışır; hata verirse inceleme bölümünü hiç göstermiyoruz.
+    // Cevap anahtarı içerir; yalnızca BİTMİŞ oturumlarda çalışır.
     getCheckupReview(sessionId, user.id).catch(() => null),
   ]);
 
-  // Başkasının sonucunu "yetkiniz yok" ile değil "yok" ile karşılıyoruz:
-  // ilki sonucun var olduğunu doğrular.
+  // Başkasının sonucuna "yetkin yok" değil "yok" diyoruz: ilki sonucun var
+  // olduğunu doğrular.
   if (!result || result.session.userId !== user.id) notFound();
 
   const breakdown = result.topicBreakdown as unknown as TopicBreakdown;
-  const total = result.correctCount + result.wrongCount + result.blankCount;
+  const toplam = result.correctCount + result.wrongCount + result.blankCount;
+  const oran = toplam === 0 ? 0 : result.correctCount / toplam;
+  const sinav = result.examScope ?? result.session.package.examScope;
+  const cezaVar = hasPenalty(sinav);
+  const retest = result.session.kind === "TOPIC_RETEST";
 
-  // Aynı paketin bir ÖNCEKİ denemesi — varsa ilerleme gösterilir.
-  const onceki = await prisma.checkupResult.findFirst({
-    where: {
-      session: { userId: user.id, package: { slug: result.session.package.slug } },
-      computedAt: { lt: result.computedAt },
-    },
-    orderBy: { computedAt: "desc" },
-    select: { topicBreakdown: true, netScore: true },
-  });
+  const [onceki, konuBilgileri] = await Promise.all([
+    prisma.checkupResult.findFirst({
+      where: {
+        session: { userId: user.id, package: { slug: result.session.package.slug } },
+        computedAt: { lt: result.computedAt },
+      },
+      orderBy: { computedAt: "desc" },
+      select: { topicBreakdown: true, netScore: true },
+    }),
+    prisma.topic.findMany({
+      where: { id: { in: breakdown.topics.map((t) => t.topicId) } },
+      select: { id: true, examWeights: true, recommendedProductIds: true },
+    }),
+  ]);
+
+  const agirliklar = new Map<string, number>();
+  for (const k of konuBilgileri) {
+    const w = (k.examWeights ?? {}) as Record<string, number>;
+    if (typeof w[sinav] === "number") agirliklar.set(k.id, w[sinav]);
+  }
 
   const ilerleme = onceki
     ? compareProgress(
@@ -81,263 +109,328 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       )
     : null;
 
-  const hataDeseni = review ? errorPattern(review) : [];
-  const baskinHata = dominantError(hataDeseni);
+  const hata = review ? hataTavsiyesi(dominantError(errorPattern(review))) : null;
 
-  const elapsedMin = result.session.submittedAt
-    ? Math.round(
-        (result.session.submittedAt.getTime() - result.session.startedAt.getTime()) / 60_000
-      )
-    : result.session.durationMinutes;
+  const oncelikler = oncelikSirasi(breakdown.topics, agirliklar);
+  const guclular = breakdown.topics
+    .filter((t) => t.level === "STRONG")
+    .sort((a, b) => b.ratio - a.ratio);
 
-  // Zayıf ve KANITLI konular: tek soruluk yanlıştan uyarı çıkarmıyoruz.
-  const weak = breakdown.topics.filter((t) => t.level === "WEAK" && t.asked >= 3);
-  const thin = breakdown.topics.filter((t) => t.level === null);
-  const recommended = result.recommendedProductIds
+  const sonuc = karar(oran, oncelikler, guclular, result.blankCount, toplam);
+  const bosNotu = bosStratejisi(
+    result.blankCount,
+    toplam,
+    Number(result.session.penaltyRatio),
+    examShort(sinav)
+  );
+  const tekrarNotu = tekrarTavsiyesi(
+    result.session.relaxedExposureCount,
+    result.session.package.name
+  );
+
+  const olculemeyen = breakdown.topics.filter((t) => t.level === null).length;
+  const urunler = result.recommendedProductIds
     .map((id) => PRODUCTS[id])
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
+  const baslik = retest
+    ? `${result.session.focusTopic?.name ?? "Konu"} kontrol testi`
+    : result.session.package.name;
+
   return (
-    <>
-      <AppHeader />
+    <div className="animate-fade space-y-5 sm:space-y-6">
+      <Link
+        href="/gelisim"
+        className="inline-flex min-h-9 items-center gap-1.5 text-caption font-medium text-ink-soft transition hover:text-ink"
+      >
+        <ArrowLeft className="size-4" /> Gelişim
+      </Link>
 
-      <main className="mx-auto max-w-3xl px-5 py-8">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-          Check-up sonucu
-        </p>
-        <h1 className="font-display mt-1.5 text-2xl font-bold tracking-tight text-ink">
-          {result.session.package.name}
-        </h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          {total} soru · {elapsedMin} dakika ·{" "}
-          {result.computedAt.toLocaleDateString("tr-TR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
-        </p>
+      {/* ── Özet: telefonda yatay, halka küçük ───────────── */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-4 p-4 max-sm:bg-brand-wash/40 sm:grid sm:grid-cols-[auto_1fr] sm:gap-0 sm:p-0">
+          <div className="flex shrink-0 items-center justify-center sm:bg-brand-wash/60 sm:p-8">
+            <ScoreRing
+              value={oran * 100}
+              size={112}
+              stroke={10}
+              label={`Yüzde ${Math.round(oran * 100)} başarı`}
+              className="sm:hidden"
+            >
+              <span className="font-display tabular text-num-sm font-bold leading-none text-ink">
+                %{Math.round(oran * 100)}
+              </span>
+            </ScoreRing>
+            <ScoreRing
+              value={oran * 100}
+              size={168}
+              label={`Yüzde ${Math.round(oran * 100)} başarı`}
+              className="max-sm:hidden"
+            >
+              <span className="font-display tabular text-num-lg font-bold leading-none text-ink">
+                %{Math.round(oran * 100)}
+              </span>
+              <span className="text-micro text-ink-faint">başarı</span>
+            </ScoreRing>
+          </div>
 
-        {/* Net */}
-        <Card className="mt-6 p-6">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Net</p>
-              <p className="font-mono text-5xl font-bold leading-none text-brand">
-                {trNumber(Number(result.netScore))}
-              </p>
+          <div className="min-w-0 sm:p-8">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="brand">{examShort(sinav)}</Badge>
+              {retest ? <Badge tone="ok">Kontrol testi</Badge> : null}
             </div>
-            <dl className="flex gap-6">
-              {[
-                { label: "Doğru", value: result.correctCount, tone: "text-ok" },
-                { label: "Yanlış", value: result.wrongCount, tone: "text-bad" },
-                { label: "Boş", value: result.blankCount, tone: "text-ink-faint" },
-              ].map((s) => (
-                <div key={s.label}>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">
-                    {s.label}
-                  </dt>
-                  <dd className={`font-mono text-2xl font-bold ${s.tone}`}>{s.value}</dd>
+            <h1 className="font-display mt-1.5 text-h2 font-bold tracking-tight text-ink text-balance sm:text-[28px]">
+              {baslik}
+            </h1>
+            <p className="mt-1.5 text-caption leading-relaxed text-ink-soft">
+              <strong className="font-semibold text-ink">{sonuc.baslik}</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Net + D/Y/B tek satır. Cezasız sınavda net = doğru sayısı olduğu
+            için "net" bloğunu hiç göstermiyoruz: yan yana iki aynı sayı
+            ekranda hata gibi duruyor. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line bg-surface-sunk px-4 py-3 sm:px-8">
+          {cezaVar ? (
+            <p className="flex items-baseline gap-1.5">
+              <span className="font-display tabular text-num-sm font-bold text-ink">
+                {trNumber(Number(result.netScore), 2)}
+              </span>
+              <span className="text-micro text-ink-faint">net</span>
+            </p>
+          ) : (
+            <p className="flex items-baseline gap-1.5">
+              <span className="font-display tabular text-num-sm font-bold text-ink">
+                {result.correctCount}/{toplam}
+              </span>
+              <span className="text-micro text-ink-faint">doğru</span>
+            </p>
+          )}
+          <div className="ms-auto flex gap-1.5">
+            <Badge tone="ok">{result.correctCount}D</Badge>
+            <Badge tone="bad">{result.wrongCount}Y</Badge>
+            <Badge tone="neutral">{result.blankCount}B</Badge>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Koçun cümlesi ───────────────────────────────── */}
+      <Card
+        className={cn(
+          "p-4 sm:p-6",
+          sonuc.ton === "ok" && "border-ok/30 bg-ok-wash/40",
+          sonuc.ton === "warn" && "border-warn/30 bg-warn-wash/40",
+          sonuc.ton === "bad" && "border-bad/30 bg-bad-wash/40"
+        )}
+      >
+        <p className="text-body leading-relaxed text-ink">{sonuc.metin}</p>
+        {bosNotu ? (
+          <p className="mt-3 border-t border-line pt-3 text-caption leading-relaxed text-ink-soft">
+            <strong className="font-semibold text-ink">Boş bırakma:</strong> {bosNotu}
+          </p>
+        ) : null}
+      </Card>
+
+      {/* ── Şimdi ne çalışmalısın (öncelik sırası) ──────── */}
+      {oncelikler.length > 0 ? (
+        <Card className="border-brand/25 shadow-raised">
+          <CardHeader
+            className="p-4 sm:p-6"
+            title="Bu hafta sadece bunlar"
+            description={`Sırayla. Her konu yaklaşık ${trNumber(
+              Math.round(KONU_HAFTALIK_DAKIKA / 30) / 2,
+              1
+            )} saat: konu tekrarı, ${HAFTALIK_SORU} soru, yanlış analizi — sonunda 5 soruluk kontrol testi.`}
+          />
+          <ol className="divide-y divide-line">
+            {oncelikler.map((k, i) => (
+              <li key={k.topicId} className="flex items-start gap-3 px-4 py-4 sm:px-6">
+                <span className="font-display flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-caption font-bold text-white">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-body font-semibold text-ink">{k.name}</p>
+                  <p className="tabular mt-0.5 text-caption text-ink-soft">
+                    {k.asked} soruda {k.correct} doğru · %{Math.round(k.ratio * 100)}
+                    {k.kayip !== null ? (
+                      <>
+                        {" · "}
+                        <span className="font-medium text-bad">
+                          sınavda ~{trNumber(k.kayip, k.kayip % 1 === 0 ? 0 : 1)} soru
+                        </span>
+                      </>
+                    ) : null}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <KonuTekrarButonu topicId={k.topicId} topicName={k.name} />
+                    {(() => {
+                      const urunId = konuBilgileri.find((t) => t.id === k.topicId)
+                        ?.recommendedProductIds[0];
+                      const urun = urunId ? PRODUCTS[urunId] : null;
+                      return urun ? (
+                        <a
+                          href={productUrl(urun.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-micro font-medium text-ink-soft hover:text-brand"
+                        >
+                          {urun.name} <ArrowUpRight className="size-3.5" />
+                        </a>
+                      ) : null;
+                    })()}
+                  </div>
                 </div>
-              ))}
-            </dl>
+              </li>
+            ))}
+          </ol>
+          <p className="border-t border-line px-4 py-3 text-caption text-ink-soft sm:px-6">
+            Diğer konulara bu hafta bakma. Bunları bitirdiğinde plan kendini güncelleyecek.
+          </p>
+        </Card>
+      ) : null}
+
+      {/* ── Hata deseni ─────────────────────────────────── */}
+      {hata ? (
+        <Card className="flex gap-3 border-warn/30 bg-warn-wash/40 p-4 sm:p-6">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-warn-wash text-warn">
+            <Brain className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-body font-semibold text-ink">{hata.baslik}</h2>
+            <p className="mt-1 text-caption leading-relaxed text-ink-soft">{hata.metin}</p>
           </div>
         </Card>
+      ) : null}
 
-        {/* İlerleme — yalnızca aynı paketin ikinci ve sonraki denemelerinde */}
-        {ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
-          <Card className="mt-4 p-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <h2 className="font-display text-base font-bold text-ink">
-                Geçen denemene göre
-              </h2>
-              <span
-                className={
-                  "font-mono text-sm font-semibold " +
-                  (ilerleme.netDelta > 0 ? "text-ok" : ilerleme.netDelta < 0 ? "text-bad" : "text-ink-faint")
-                }
-              >
-                net {ilerleme.netDelta > 0 ? "+" : ""}
-                {trNumber(ilerleme.netDelta)}
-              </span>
-            </div>
-
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              {ilerleme.gelisen.length > 0 ? (
-                <div>
-                  <p className="text-xs font-semibold text-ok">Gelişen konular</p>
-                  <ul className="mt-1.5 space-y-1 text-sm">
-                    {ilerleme.gelisen.map((t) => (
-                      <li key={t.topicId} className="flex justify-between gap-3">
-                        <span className="truncate text-ink-soft">{t.name}</span>
-                        <span className="shrink-0 font-mono text-ok">+{t.delta}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {ilerleme.gerileyen.length > 0 ? (
-                <div>
-                  <p className="text-xs font-semibold text-bad">Gerileyen konular</p>
-                  <ul className="mt-1.5 space-y-1 text-sm">
-                    {ilerleme.gerileyen.map((t) => (
-                      <li key={t.topicId} className="flex justify-between gap-3">
-                        <span className="truncate text-ink-soft">{t.name}</span>
-                        <span className="shrink-0 font-mono text-bad">{t.delta}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-
-            <p className="mt-3 text-[11px] text-ink-faint">
-              Yalnızca iki denemede de yeterli soru sorulmuş konular karşılaştırılıyor.
-            </p>
-          </Card>
-        ) : null}
-
-        {/* Hata deseni — tek bir yanlıştan desen çıkarmıyoruz */}
-        {baskinHata ? (
-          <Card className="mt-4 bg-warn-wash p-5">
-            <h2 className="font-display text-base font-bold text-warn">
-              Yanlışlarının çoğu aynı sebepten
-            </h2>
-            <p className="mt-1.5 text-sm text-ink-soft">
-              Yanlış işaretlediğin şıkların çoğu —{" "}
-              <strong className="font-semibold text-ink">{baskinHata.count} soru</strong> —{" "}
-              <strong className="font-semibold text-ink">{baskinHata.label}</strong> desenine
-              uyuyor. Bu bir bilgi eksiği değil, bir dikkat alışkanlığı: soruyu çözdükten
-              sonra işlemini bir kez geri kontrol etmek netini yükseltir.
-            </p>
-          </Card>
-        ) : null}
-
-        {/* Konu haritası */}
-        <section className="mt-8">
-          <h2 className="font-display text-lg font-bold text-ink">Konu haritası</h2>
-          <p className="mt-1 text-sm text-ink-soft">
-            En zayıf konu üstte. Çubuk, o konudaki doğru oranını gösterir.
-          </p>
-
-          <Card className="mt-4 divide-y divide-line">
-            {breakdown.topics.map((t) => (
-              <TopicRow key={t.topicId} entry={t} />
+      {/* ── Önceki denemeye göre ────────────────────────── */}
+      {ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
+        <Card className="p-4 sm:p-6">
+          <h2 className="text-body font-semibold text-ink">Geçen denemene göre</h2>
+          <ul className="mt-3 space-y-2">
+            {ilerleme.gelisen.map((t) => (
+              <li key={t.name} className="flex items-center gap-2 text-caption text-ink-soft">
+                <TrendingUp className="size-4 shrink-0 text-ok" />
+                <span className="min-w-0 flex-1 truncate text-ink">{t.name}</span>
+                <span className="tabular shrink-0 font-semibold text-ok">+{t.delta} puan</span>
+              </li>
             ))}
-          </Card>
+            {ilerleme.gerileyen.map((t) => (
+              <li key={t.name} className="flex items-center gap-2 text-caption text-ink-soft">
+                <TrendingDown className="size-4 shrink-0 text-bad" />
+                <span className="min-w-0 flex-1 truncate text-ink">{t.name}</span>
+                <span className="tabular shrink-0 font-semibold text-bad">{t.delta} puan</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
-          {thin.length > 0 ? (
-            <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-              {thin.length} konuda 2&apos;den az soru sorulduğu için seviye belirlenmedi. Tek
-              soruya bakarak &quot;bu konuda zayıfsın&quot; demek doğru olmaz — bu konuları
-              ölçmek için odaklı bir paket seç.
-            </p>
-          ) : null}
-        </section>
-
-        {/* Öneriler */}
-        {weak.length > 0 ? (
-          <section className="mt-8">
-            <h2 className="font-display text-lg font-bold text-ink">
-              {weak.length} konuda eksiğin var
-            </h2>
-            <p className="mt-1 text-sm text-ink-soft">
-              Şu konulara ağırlık ver:{" "}
-              <strong className="font-semibold text-ink">
-                {weak.map((t) => t.name).join(", ")}
-              </strong>
-              .
-            </p>
-
-            {recommended.length > 0 ? (
-              <div className="mt-4 space-y-2.5">
-                {recommended.map((p) => (
-                  <a
-                    key={p.id}
-                    href={productUrl(p.id)}
-                    target="_blank"
-                    rel="noopener"
-                    className="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface p-4 transition hover:border-brand/40 hover:bg-brand-wash/40"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink">{p.name}</p>
-                      <p className="mt-0.5 text-xs text-ink-soft">
-                        {p.questionCount} soru · {p.note}
-                      </p>
-                    </div>
-                    <span aria-hidden className="shrink-0 text-brand">
-                      →
-                    </span>
-                  </a>
-                ))}
-              </div>
-            ) : null}
-          </section>
-        ) : (
-          <section className="mt-8">
-            <Card className="bg-ok-wash p-5">
-              <p className="text-sm font-semibold text-ok">Kanıtlı zayıf konun yok.</p>
-              <p className="mt-1 text-sm text-ink-soft">
-                Daha derin bir ölçüm için odaklı bir paket dene.
-              </p>
-            </Card>
-          </section>
-        )}
-
-        {review && review.length > 0 ? <AnswerReview items={review} /> : null}
-
-        <div className="mt-10 flex flex-wrap gap-3">
-          <LinkButton href="/">Yeni check-up</LinkButton>
-          <LinkButton href="/gecmis" variant="ghost">
-            Geçmiş testlerim
-          </LinkButton>
+      {/* ── Konu haritası ───────────────────────────────── */}
+      <Card>
+        <CardHeader
+          className="p-4 sm:p-6"
+          title="Konu haritası"
+          description={
+            olculemeyen > 0
+              ? `${olculemeyen} konuda seviye verilmedi: 3'ten az soru soruldu.`
+              : undefined
+          }
+        />
+        <div className="divide-y divide-line px-4 sm:px-6">
+          {breakdown.topics.slice(0, 3).map((t) => (
+            <TopicBar
+              key={t.topicId}
+              name={t.name}
+              ratio={t.ratio}
+              correct={t.correct}
+              asked={t.asked}
+              level={t.level}
+              slow={t.slow}
+            />
+          ))}
         </div>
-      </main>
-    </>
-  );
-}
-
-function TopicRow({ entry }: { entry: TopicBreakdownEntry }) {
-  const ui = entry.level ? LEVEL_UI[entry.level] : null;
-  const pct = Math.round(entry.ratio * 100);
-
-  return (
-    <div className="flex items-center gap-4 px-5 py-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="truncate text-sm font-medium text-ink">{entry.name}</span>
-          <span className="shrink-0 font-mono text-xs text-ink-faint">
-            {entry.correct}/{entry.asked}
-          </span>
-        </div>
-
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
-          <div
-            className={`h-full rounded-full ${ui ? ui.bar : "bg-line-strong"}`}
-            style={{ width: `${Math.max(pct, entry.asked > 0 ? 3 : 0)}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="w-24 shrink-0 text-end">
-        {ui ? (
-          <span className={`text-xs font-semibold ${ui.text}`}>
-            {ui.label}
-            {entry.confidence === "LOW" ? (
-              <span className="ms-1 font-normal text-ink-faint" title="Az soruyla ölçüldü">
-                ?
-              </span>
-            ) : null}
-          </span>
-        ) : (
-          <span className="text-[11px] text-ink-faint">yeterli soru yok</span>
-        )}
-        {entry.slow ? (
-          <span className="ms-1.5 text-[11px] text-warn" title="Hedef sürenin üstünde">
-            yavaş
-          </span>
+        {breakdown.topics.length > 3 ? (
+          <details className="group">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 border-t border-line text-caption font-semibold text-brand [&::-webkit-details-marker]:hidden">
+              Tüm konuları gör ({breakdown.topics.length})
+              <ChevronDown className="size-4 transition group-open:rotate-180" />
+            </summary>
+            <div className="divide-y divide-line border-t border-line px-4 sm:px-6">
+              {breakdown.topics.slice(3).map((t) => (
+                <TopicBar
+                  key={t.topicId}
+                  name={t.name}
+                  ratio={t.ratio}
+                  correct={t.correct}
+                  asked={t.asked}
+                  level={t.level}
+                  slow={t.slow}
+                />
+              ))}
+            </div>
+          </details>
         ) : null}
-      </div>
+      </Card>
+
+      {/* ── Sonraki ölçüm ───────────────────────────────── */}
+      <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft">
+          <RotateCcw className="size-4" />
+        </span>
+        <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">{tekrarNotu}</p>
+        <LinkButton href="/paketler" variant="secondary" className="max-sm:w-full">
+          Testler
+        </LinkButton>
+      </Card>
+
+      {/* ── Kaynak (en sonda, araç olarak) ──────────────── */}
+      {urunler.length > 0 ? (
+        <Card>
+          <CardHeader
+            className="p-4 sm:p-6"
+            title="Bu konuları çalışmak için elindeki kaynak yetmiyorsa"
+            description="Koçum.Net yayınları — zayıf çıkan konulara göre seçildi."
+          />
+          <ul className="divide-y divide-line">
+            {urunler.map((u) => (
+              <li key={u.id}>
+                <a
+                  href={productUrl(u.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-h-14 items-center gap-3 px-4 py-3 transition active:bg-surface-sunk sm:px-6"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-body font-medium text-ink">{u.name}</span>
+                    <span className="block text-micro text-ink-faint">
+                      {u.questionCount} soru · {u.note}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="size-4 shrink-0 text-ink-faint" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {/* ── Cevap incelemesi ────────────────────────────── */}
+      {review ? (
+        <Card>
+          <CardHeader
+            className="p-4 sm:p-6"
+            title="Cevaplarını incele"
+            description="Her sorunun doğrusu, senin işaretin ve varsa adım adım çözümü."
+            action={
+              <span className="flex items-center gap-1 text-caption text-ok">
+                <CircleCheck className="size-4" /> {result.correctCount}
+              </span>
+            }
+          />
+          <AnswerReview items={review} />
+        </Card>
+      ) : null}
     </div>
   );
 }

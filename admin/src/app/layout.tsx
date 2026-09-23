@@ -8,8 +8,25 @@ import { AuthProvider } from '@/context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 
 const outfit = Outfit({
-  subsets: ["latin"],
+  // Turkce karakterler (g, s, I) yedek yazi tipine dusmesin.
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
 });
+
+/*
+ * Tema sinifini ILK BOYAMADAN once kur.
+ *
+ * Eskiden tema yalnizca ThemeProvider bagландiktan sonra uygulaniyordu:
+ * koyu tema kullanan personel her sayfa acilisinda once beyaz bir ekran
+ * goruyordu. Bu betik senkron calisir, React'ten oncedir.
+ */
+const TEMA_BETIGI = `
+try {
+  if (localStorage.getItem("theme") === "dark") {
+    document.documentElement.classList.add("dark");
+  }
+} catch (e) {}
+`;
 
 export const metadata: Metadata = {
   robots: {
@@ -33,14 +50,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr">
+    <html lang="tr" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_BETIGI }} />
+      </head>
       <body className={`${outfit.className} dark:bg-gray-900`}>
-<ThemeProvider>
-            <AuthProvider>
-              <SidebarProvider>{children}</SidebarProvider>
-              <Toaster position="top-right" />
-            </AuthProvider>
-          </ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SidebarProvider>{children}</SidebarProvider>
+            <Toaster position="top-right" />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

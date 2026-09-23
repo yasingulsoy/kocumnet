@@ -383,11 +383,49 @@ async function main() {
     }
   }
 
+  await yayinaAl();
+
   const total = await prisma.question.count({ where: { status: "PUBLISHED" } });
   console.log(
     `\n  ${created} soru üretildi, ${skipped} atlandı (zaten vardı).` +
       `\n  Yayındaki toplam soru: ${total}\n`
   );
+}
+
+
+/**
+ * Havuzu artık yeterli olan paketleri yayına alır.
+ *
+ * `db:seed` bunu YAPMAZ: orada bilerek taslağa çekilmiş bir paketi geri
+ * yayına almak istemiyoruz. Burası yalnızca geliştirme verisi üreten betik,
+ * amacı ürünü uçtan uca denenebilir hale getirmek.
+ */
+async function yayinaAl() {
+  const paketler = await prisma.package.findMany({
+    where: { status: "DRAFT", kind: { not: "RETEST" } },
+    select: { id: true, name: true, topics: { select: { topicId: true, questionCount: true } } },
+  });
+  if (paketler.length === 0) return;
+
+  const sayimlar = await prisma.question.groupBy({
+    by: ["topicId"],
+    where: { status: "PUBLISHED" },
+    _count: { _all: true },
+  });
+  const soruSayisi = new Map(sayimlar.map((s) => [s.topicId, s._count._all]));
+
+  const acilan: string[] = [];
+  for (const p of paketler) {
+    const hazir =
+      p.topics.length > 0 &&
+      p.topics.every((t) => (soruSayisi.get(t.topicId) ?? 0) >= t.questionCount);
+    if (!hazir) continue;
+    await prisma.package.update({ where: { id: p.id }, data: { status: "PUBLISHED" } });
+    acilan.push(p.name);
+  }
+  if (acilan.length) {
+    console.log(`  Yayına alındı (havuz yeterli): ${acilan.join(", ")}`);
+  }
 }
 
 main()

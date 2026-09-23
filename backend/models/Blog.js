@@ -75,6 +75,16 @@ const Blog = sequelize.define(
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
+    /*
+     * Liste sorgusu is_published + locale süzüp created_at'e göre sıralıyor.
+     * Bu indeksler YALNIZCA tablo ilk kez oluşturulurken kurulur (sync);
+     * var olan veritabanına eklemek için: npm run db:indexes
+     */
+    indexes: [
+      { fields: ['is_published', 'created_at'] },
+      { fields: ['locale', 'is_published', 'created_at'] },
+      { fields: ['author_id'] },
+    ],
   }
 );
 

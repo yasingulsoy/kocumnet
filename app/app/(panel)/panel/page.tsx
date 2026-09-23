@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
-  ChartLine,
-  CircleCheck,
-  Clock,
+  CalendarDays,
   ClipboardList,
   Hourglass,
   Play,
+  Repeat,
   Sparkles,
-  Target,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -17,44 +15,66 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { loadCatalog } from "@/lib/catalog";
 import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
+import { aktifPlan } from "@/lib/plan";
+import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
+import { daysUntilExam, examShort } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { PackageCard } from "@/components/PackageCard";
+import { PlanCard } from "@/components/PlanCard";
+import { PlanOlusturKarti } from "@/components/PlanOlusturKarti";
 import { levelMeta } from "@/components/ui/charts";
+import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
 import {
+  Alert,
   Badge,
   Card,
   CardHeader,
   EmptyState,
   LinkButton,
   Progress,
-  Stat,
-  trDate,
   trNumber,
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Ana sayfa" };
 
-export default async function DashboardPage() {
-  // Düzen zaten girişi denetledi; burada kullanıcı kesin var.
+export default async function DashboardPage({ searchParams }: PageProps<"/panel">) {
+  // Düzen zaten girişi ve tanışmayı denetledi; burada kullanıcı kesin var.
   const user = (await getCurrentUser())!;
   const now = new Date();
+  const sp = await searchParams;
+  const hata = typeof sp.hata === "string" ? sp.hata : null;
+  const yeniTanisma = sp.tanisma === "1";
 
-  const [acik, sonuclarHam, katalog] = await Promise.all([
+  const [acik, sonuclarHam, katalog, plan, buHaftakiTest] = await Promise.all([
     prisma.checkupSession.findFirst({
       where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now } },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,
         expiresAt: true,
+        kind: true,
         package: { select: { name: true, questionCount: true } },
+        focusTopic: { select: { name: true } },
         _count: { select: { items: true } },
         items: { where: { answer: { choiceId: { not: null } } }, select: { id: true } },
       },
     }),
+    /*
+     * Sonuçlar ÖĞRENCİNİN SINAVINA göre. LGS, TYT ve KPSS sonuçlarını tek bir
+     * "genel başarı" çizgisinde toplamak anlamsız; eski kayıtlarda kapsam
+     * yazmıyor (null), onları da alıyoruz.
+     */
     prisma.checkupResult.findMany({
-      where: { session: { userId: user.id } },
+      where: {
+        session: { userId: user.id },
+        ...(user.targetExam
+          ? { OR: [{ examScope: user.targetExam }, { examScope: null }] }
+          : {}),
+      },
       orderBy: { computedAt: "desc" },
+      // Panoda son 20 test yeter; sınırsız sorgu her testte biraz daha yavaşlar.
+      take: 20,
       select: {
         sessionId: true,
         correctCount: true,
@@ -67,7 +87,24 @@ export default async function DashboardPage() {
         session: { select: { package: { select: { name: true } } } },
       },
     }),
-    loadCatalog(user.id, now),
+    loadCatalog(user.id, now, { scope: user.targetExam }),
+    aktifPlan(user.id, now),
+    /*
+     * Bu hafta kaç check-up bitirdi?
+     *
+     * Öğrenci tanışmada "haftada kaç test" diyor ve bu bilgi hiçbir yerde
+     * kullanılmıyordu. Toplanan ama karşılığı olmayan her soru, ürünün
+     * dinlemediğini gösterir. Kontrol testleri (5 soru) sayılmaz: onlar
+     * ölçüm değil, doğrulama.
+     */
+    prisma.checkupSession.count({
+      where: {
+        userId: user.id,
+        status: "SUBMITTED",
+        kind: { not: "TOPIC_RETEST" },
+        submittedAt: { gte: haftaBasi(now) },
+      },
+    }),
   ]);
 
   const sonuclar: (ResultLike & { sessionId: string; packageName: string })[] = sonuclarHam.map(
@@ -86,312 +123,277 @@ export default async function DashboardPage() {
 
   const ozet = studentStats(sonuclar);
   const konular = aggregateTopics(sonuclar).filter((t) => t.level !== null);
-  const zayiflar = [...konular].sort((a, b) => a.ratio - b.ratio).slice(0, 4);
-  const guclular = [...konular]
-    .filter((t) => t.level === "STRONG")
-    .sort((a, b) => b.ratio - a.ratio)
+  const zayiflar = [...konular]
+    .filter((t) => t.level === "WEAK")
+    .sort((a, b) => a.ratio - b.ratio)
     .slice(0, 3);
 
-  // Öneri: hiç çözülmemiş açık paketler önce, sonra az çözülenler.
   const oneriler = katalog
     .filter((p) => !p.locked && !p.inProgress)
-    .sort((a, b) => (a.timesTaken ?? 0) - (b.timesTaken ?? 0))
-    .slice(0, 3);
+    .sort((a, b) => (a.timesTaken ?? 0) - (b.timesTaken ?? 0) || Number(b.isIntro) - Number(a.isIntro))
+    .slice(0, 2);
 
   const ilkAd = user.name.split(" ")[0];
   const yeni = sonuclar.length === 0;
+  const kalanGun = daysUntilExam(user.targetExam, now);
+  const haftalikHedef = user.weeklyTestGoal ?? null;
+  const temponunDurumu = haftalikHedef !== null && buHaftakiTest >= haftalikHedef;
+
+  /** Son altı testin başarı oranı — biriken sayı değil, HAREKET. */
+  const oran = (r: ResultLike) => {
+    const t = r.correctCount + r.wrongCount + r.blankCount;
+    return t === 0 ? 0 : r.correctCount / t;
+  };
+  const sonAlti = sonuclar.slice(0, 6).reverse();
 
   return (
-    <div className="animate-rise space-y-8">
-      {/* Selam */}
-      <div>
-        <p className="text-sm font-medium text-ink-faint">{greeting(now)},</p>
-        <h1 className="font-display mt-0.5 text-[28px] font-bold tracking-tight text-ink sm:text-[32px]">
-          {ilkAd} <span aria-hidden>👋</span>
-        </h1>
-        <p className="mt-1.5 text-[15px] text-ink-soft">
-          {yeni
-            ? "İlk check-up'ını çözerek matematikte nerede durduğunu görelim."
-            : "Bugün hangi konunu ölçmek istersin?"}
+    <div className="animate-fade space-y-5 sm:space-y-6">
+      {/* Tek satır selamlama: eski hâlinde 110 piksellik bir başlık bloğuydu
+          ve telefonda ilk ekranın beşte birini kaplıyordu. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="text-caption text-ink-faint">
+          {greeting(now)}, <span className="font-semibold text-ink-soft">{ilkAd}</span>
         </p>
+        {user.targetExam ? (
+          <Badge tone="brand">{examShort(user.targetExam)}</Badge>
+        ) : null}
+        {kalanGun !== null ? (
+          <span className="tabular flex items-center gap-1 text-caption text-ink-faint">
+            <CalendarDays className="size-3.5" /> {kalanGun} gün
+          </span>
+        ) : null}
       </div>
 
-      {/* Yarım kalan test */}
+      {hata ? <Alert>{hata}</Alert> : null}
+      {yeniTanisma ? (
+        <Alert tone="ok">
+          Hazırız. {examShort(user.targetExam)} için testlerin aşağıda —
+          {user.targetNet ? ` hedefin ${trNumber(user.targetNet, 0)} net.` : ""}
+        </Alert>
+      ) : null}
+
+      {/* ── 1. Bu hafta ─────────────────────────────────── */}
+      {plan ? (
+        <PlanCard plan={plan} haftaEtiketi={haftaEtiketi(plan.weekStart)} />
+      ) : !yeni ? (
+        <PlanOlusturKarti />
+      ) : null}
+
+      {/* ── 2. Tek eylem ────────────────────────────────── */}
       {acik ? (
-        <div className="bg-brand-gradient relative overflow-hidden rounded-2xl p-5 text-white shadow-pop sm:p-6">
-          <div aria-hidden className="bg-grid-fade absolute inset-0" />
-          <div className="relative flex flex-wrap items-center justify-between gap-5">
+        <Card className="bg-brand-gradient overflow-hidden border-0 p-4 text-white shadow-brand sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[13px] font-medium text-white/75">
-                <Hourglass className="size-4" /> Yarım kalan testin var
+              <p className="flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.14em] text-white/90">
+                <Hourglass className="size-3.5" /> Yarım kalan test
               </p>
-              <p className="font-display mt-1.5 text-xl font-semibold">{acik.package.name}</p>
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-white/80">
-                <span className="tabular">
-                  {acik.items.length}/{acik._count.items} soru işaretli
-                </span>
-                <span className="tabular">
-                  {Math.max(0, Math.round((acik.expiresAt.getTime() - now.getTime()) / 60_000))} dk
-                  kaldı
-                </span>
-              </div>
+              <h2 className="font-display mt-1.5 text-h2 font-bold text-balance">
+                {acik.kind === "TOPIC_RETEST" && acik.focusTopic
+                  ? `${acik.focusTopic.name} kontrol testi`
+                  : acik.package.name}
+              </h2>
+              <p className="tabular mt-1 text-caption text-white/90">
+                {acik.items.length}/{acik._count.items} işaretli · süre{" "}
+                {acik.expiresAt.toLocaleTimeString("tr-TR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Europe/Istanbul",
+                })}
+                {"'"}e kadar
+              </p>
             </div>
-            <LinkButton href={"/checkup/" + acik.id} variant="white" size="lg">
+            <LinkButton
+              href={`/checkup/${acik.id}`}
+              variant="white"
+              size="lg"
+              className="w-full sm:w-auto"
+            >
               <Play /> Devam et
             </LinkButton>
           </div>
-        </div>
+        </Card>
+      ) : yeni ? (
+        <Card className="border-brand/25 bg-brand-wash/30 p-5 shadow-raised sm:p-8">
+          <p className="flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.14em] text-brand">
+            <Sparkles className="size-3.5" /> İlk adım
+          </p>
+          <h2 className="font-display mt-1.5 text-h1 font-bold tracking-tight text-ink text-balance">
+            Kısa bir testle başlayalım
+          </h2>
+          <p className="mt-2 text-body leading-relaxed text-ink-soft">
+            Sonunda hangi konuda güçlü, hangisinde eksiğin olduğunu ve her yanlışının
+            çözümünü göreceksin.
+          </p>
+          {oneriler[0] ? (
+            <LinkButton href={"/paketler/" + oneriler[0].slug} size="lg" block className="mt-5">
+              {oneriler[0].name} · {oneriler[0].durationMinutes} dk <ArrowRight />
+            </LinkButton>
+          ) : (
+            <LinkButton href="/paketler" size="lg" block className="mt-5">
+              Testleri gör <ArrowRight />
+            </LinkButton>
+          )}
+          <ol className="mt-5 flex items-center gap-2 border-t border-line pt-4 text-micro text-ink-soft">
+            {["Paket seç", "Soruları çöz", "Haritanı gör"].map((t, i) => (
+              <li key={t} className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span className="tabular flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-wash text-[10px] font-bold text-brand">
+                  {i + 1}
+                </span>
+                <span className="truncate">{t}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      ) : oneriler[0] ? (
+        <Card className="border-brand/25 bg-brand-wash/30 p-4 shadow-raised sm:p-6">
+          <p className="text-micro font-semibold uppercase tracking-[0.14em] text-brand">
+            Sıradaki adımın
+          </p>
+          <h2 className="font-display mt-1.5 text-h2 font-bold text-ink text-balance">
+            {oneriler[0].name}
+          </h2>
+          <p className="tabular mt-1 text-caption text-ink-soft">
+            {oneriler[0].questionCount} soru · {oneriler[0].durationMinutes} dk ·{" "}
+            {oneriler[0].topicCount} konu
+          </p>
+          <LinkButton href={"/paketler/" + oneriler[0].slug} size="lg" block className="mt-4">
+            Teste göz at <ArrowRight />
+          </LinkButton>
+        </Card>
       ) : null}
 
-      {yeni ? (
-        /* İlk kez gelen öğrenci */
-        <Card className="overflow-hidden">
-          <div className="grid gap-0 md:grid-cols-[1.2fr_1fr]">
-            <div className="p-6 sm:p-8">
-              <Badge tone="brand">
-                <Sparkles /> Başlarken
-              </Badge>
-              <h2 className="font-display mt-4 text-2xl font-bold tracking-tight text-ink">
-                20 dakikada matematik haritanı çıkar
-              </h2>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-ink-soft">
-                Kısa bir test çöz; sonunda hangi konuda güçlü olduğunu, hangisinde eksiğin
-                olduğunu ve yanlışlarının nedenini gör. Her yanlışın çözümü de orada.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <LinkButton
-                  href={oneriler[0] ? "/paketler/" + oneriler[0].slug : "/paketler"}
-                  size="lg"
-                >
-                  İlk testine başla <ArrowRight />
-                </LinkButton>
-                <LinkButton href="/paketler" variant="secondary" size="lg">
-                  Tüm testler
-                </LinkButton>
-              </div>
-            </div>
-            <ul className="space-y-4 border-t border-line bg-surface-sunk p-6 sm:p-8 md:border-s md:border-t-0">
-              {[
-                { icon: ClipboardList, t: "Paketini seç", d: "TYT çekirdek, problemler, trigonometri…" },
-                { icon: Clock, t: "15-25 soru çöz", d: "Her konudan en az 3 soru gelir." },
-                { icon: Target, t: "Haritanı gör", d: "Güçlü, orta ve zayıf konuların tek bakışta." },
-              ].map(({ icon: Icon, t, d }, i) => (
-                <li key={t} className="flex gap-3.5">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface text-brand shadow-card ring-1 ring-line">
-                    <Icon className="size-[18px]" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">
-                      <span className="tabular me-1.5 text-ink-faint">{i + 1}.</span>
-                      {t}
+      {/* ── 3. İlerleme şeridi ──────────────────────────── */}
+      {!yeni ? (
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p className="font-display tabular text-num-md font-bold text-ink">
+              %{Math.round(ozet.avgRatio * 100)}
+            </p>
+            <p className="text-caption text-ink-soft">genel başarı</p>
+            {ozet.trend !== null && ozet.trend !== 0 ? (
+              <span
+                className={cn(
+                  "tabular ms-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-micro font-semibold",
+                  ozet.trend > 0 ? "bg-ok-wash text-ok" : "bg-bad-wash text-bad"
+                )}
+              >
+                {ozet.trend > 0 ? (
+                  <TrendingUp className="size-3" />
+                ) : (
+                  <TrendingDown className="size-3" />
+                )}
+                {ozet.trend > 0 ? "+" : ""}
+                {ozet.trend} puan
+              </span>
+            ) : null}
+          </div>
+
+          {/* Son altı test — biriken toplam değil, hareket. */}
+          <div className="mt-3 flex gap-1" aria-hidden>
+            {sonAlti.map((r) => (
+              <span
+                key={r.sessionId}
+                title={`${r.packageName}: %${Math.round(oran(r) * 100)}`}
+                className={cn(
+                  "h-2 flex-1 rounded-full",
+                  oran(r) >= 0.75 ? "bg-ok-fill" : oran(r) >= 0.45 ? "bg-warn-fill" : "bg-bad-fill"
+                )}
+              />
+            ))}
+            {Array.from({ length: Math.max(0, 6 - sonAlti.length) }).map((_, i) => (
+              <span key={i} className="h-2 flex-1 rounded-full bg-line" />
+            ))}
+          </div>
+          <p className="tabular mt-2 flex items-center justify-between gap-2 text-micro text-ink-faint">
+            <span>{ozet.testCount} test çözdün · son 6 deneme</span>
+            {user.targetNet ? <span>hedef {trNumber(user.targetNet, 0)} net</span> : null}
+          </p>
+
+          {/* Haftalık tempo — öğrencinin kendi koyduğu hedef. */}
+          {haftalikHedef ? (
+            <p
+              className={cn(
+                "mt-2.5 flex flex-wrap items-center gap-x-1.5 border-t border-line pt-2.5 text-caption",
+                temponunDurumu ? "text-ok" : "text-ink-soft"
+              )}
+            >
+              <Repeat className="size-3.5 shrink-0" />
+              <span className="tabular whitespace-nowrap font-semibold">
+                Bu hafta {buHaftakiTest}/{haftalikHedef} check-up
+              </span>
+              <span className="whitespace-nowrap text-ink-faint">
+                {temponunDurumu ? "· tempona uydun" : "· kendi hedefin"}
+              </span>
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {/* ── 4. Şimdi ne çalışmalısın ────────────────────── */}
+      {zayiflar.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="Şimdi ne çalışmalısın"
+            description="Kanıtlı zayıf konular — her biri en az 3 soruda ölçüldü."
+            action={
+              <Link href="/gelisim" className="text-caption font-semibold text-brand">
+                Tümü
+              </Link>
+            }
+          />
+          <ul className="divide-y divide-line">
+            {zayiflar.map((t) => {
+              const meta = levelMeta(t.level);
+              return (
+                <li key={t.topicId} className="flex items-center gap-3 px-4 py-3 sm:px-6">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body font-medium text-ink">{t.name}</p>
+                    <p className="tabular text-micro text-ink-faint">
+                      {t.correct}/{t.asked} doğru · %{Math.round(t.ratio * 100)}
                     </p>
-                    <p className="mt-0.5 text-[13px] text-ink-soft">{d}</p>
+                    <Progress
+                      value={t.ratio * 100}
+                      label={`${t.name} başarı oranı`}
+                      className="mt-1.5 h-2"
+                    />
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    {meta ? (
+                      <span className={cn("text-micro font-semibold", meta.text)}>{meta.label}</span>
+                    ) : null}
+                    <KonuTekrarButonu topicId={t.topicId} topicName={t.name} />
                   </div>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         </Card>
-      ) : (
-        <>
-          {/* Özet sayılar */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <Stat icon={<ClipboardList />} label="Çözülen test" value={ozet.testCount} />
-            <Stat
-              icon={<Target />}
-              label="Genel başarı"
-              value={"%" + Math.round(ozet.avgRatio * 100)}
-              tone={ozet.avgRatio >= 0.75 ? "ok" : ozet.avgRatio >= 0.45 ? "warn" : "bad"}
-            />
-            <Stat
-              icon={<CircleCheck />}
-              label="Son net"
-              value={ozet.lastNet !== null ? trNumber(ozet.lastNet) : "—"}
-              hint={
-                ozet.trend !== null && ozet.trend !== 0 ? (
-                  <span
-                    className={cn(
-                      "flex items-center gap-1 font-medium",
-                      ozet.trend > 0 ? "text-ok" : "text-bad"
-                    )}
-                  >
-                    {ozet.trend > 0 ? (
-                      <TrendingUp className="size-3.5" />
-                    ) : (
-                      <TrendingDown className="size-3.5" />
-                    )}
-                    önceki teste göre {ozet.trend > 0 ? "+" : ""}
-                    {ozet.trend} puan
-                  </span>
-                ) : undefined
-              }
-            />
-            <Stat icon={<Clock />} label="Toplam süre" value={ozet.totalMinutes + " dk"} />
-          </div>
+      ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr] lg:gap-6">
-            {/* Genel konu haritası */}
-            <Card className="p-5 sm:p-6">
-              <CardHeader
-                icon={<Target />}
-                title="Konu haritan"
-                description="Çözdüğün tüm testlerin toplamı"
-                action={
-                  <Link href="/gelisim" className="text-[13px] font-semibold text-brand hover:underline">
-                    Tümü
-                  </Link>
-                }
-              />
-
-              {konular.length === 0 ? (
-                <p className="mt-5 rounded-xl bg-surface-sunk p-4 text-sm text-ink-soft">
-                  Konu seviyesi için bir konuda en az 3 soru çözmüş olman gerekiyor. Birkaç
-                  test daha çözünce haritan burada belirecek.
-                </p>
-              ) : (
-                <div className="mt-5 space-y-5">
-                  {zayiflar.length > 0 ? (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                        Çalışman gerekenler
-                      </p>
-                      <ul className="mt-2.5 space-y-3">
-                        {zayiflar.map((t) => {
-                          const meta = levelMeta(t.level);
-                          return (
-                            <li key={t.topicId}>
-                              <div className="flex items-baseline justify-between gap-3 text-sm">
-                                <span className="truncate font-medium text-ink">{t.name}</span>
-                                <span className={cn("shrink-0 text-xs font-semibold", meta?.text)}>
-                                  %{Math.round(t.ratio * 100)}
-                                </span>
-                              </div>
-                              <Progress
-                                className="mt-1.5 h-1.5"
-                                value={t.ratio * 100}
-                                tone={
-                                  t.level === "WEAK" ? "bad" : t.level === "MEDIUM" ? "warn" : "ok"
-                                }
-                              />
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {guclular.length > 0 ? (
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                        Güçlü olduğun konular
-                      </p>
-                      <div className="mt-2.5 flex flex-wrap gap-2">
-                        {guclular.map((t) => (
-                          <Badge key={t.topicId} tone="ok" className="py-1 text-xs">
-                            <CircleCheck /> {t.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </Card>
-
-            {/* Son sonuçlar */}
-            <Card className="p-5 sm:p-6">
-              <CardHeader
-                icon={<ChartLine />}
-                title="Son sonuçların"
-                action={
-                  <Link href="/gelisim" className="text-[13px] font-semibold text-brand hover:underline">
-                    Gelişim
-                  </Link>
-                }
-              />
-              <ul className="-mx-2 mt-4">
-                {sonuclar.slice(0, 4).map((r) => {
-                  const toplam = r.correctCount + r.wrongCount + r.blankCount;
-                  const oran = toplam === 0 ? 0 : r.correctCount / toplam;
-                  return (
-                    <li key={r.sessionId}>
-                      <Link
-                        href={"/sonuc/" + r.sessionId}
-                        className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-surface-hover"
-                      >
-                        <span
-                          className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-xl text-[13px] font-bold tabular",
-                            oran >= 0.75
-                              ? "bg-ok-wash text-ok"
-                              : oran >= 0.45
-                                ? "bg-warn-wash text-warn"
-                                : "bg-bad-wash text-bad"
-                          )}
-                        >
-                          %{Math.round(oran * 100)}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-ink">
-                            {r.packageName}
-                          </span>
-                          <span className="block text-xs text-ink-faint">
-                            {trDate(r.computedAt, false)} · {r.correctCount}D {r.wrongCount}Y{" "}
-                            {r.blankCount}B
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-end">
-                          <span className="font-display tabular block text-[15px] font-bold text-ink">
-                            {trNumber(r.netScore)}
-                          </span>
-                          <span className="block text-[11px] text-ink-faint">net</span>
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-          </div>
-        </>
-      )}
-
-      {/* Öneriler */}
-      <section>
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h2 className="font-display text-lg font-semibold text-ink">
-              {yeni ? "Buradan başlayabilirsin" : "Sıradaki testin"}
-            </h2>
-            <p className="mt-0.5 text-sm text-ink-soft">
-              {yeni ? "Kısa ve odaklı paketler." : "Henüz çözmediğin ya da az çözdüğün paketler."}
-            </p>
-          </div>
-          <Link
-            href="/paketler"
-            className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-brand hover:underline"
-          >
-            Tüm testler <ArrowRight className="size-3.5" />
-          </Link>
-        </div>
-
-        {oneriler.length > 0 ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* ── 5. Öneriler ─────────────────────────────────── */}
+      {!yeni && oneriler.length > 0 ? (
+        <section>
+          <h2 className="text-micro font-semibold uppercase tracking-[0.14em] text-ink-faint">
+            Sıradaki testler
+          </h2>
+          <div className="mt-3 grid gap-2.5 sm:grid-cols-2 sm:gap-4">
             {oneriler.map((p) => (
               <PackageCard key={p.slug} p={p} />
             ))}
           </div>
-        ) : (
-          <Card className="mt-4">
-            <EmptyState
-              icon={<ClipboardList />}
-              title="Açık paket yok"
-              description="Şu an erişebildiğin tüm paketleri çözdün ya da hepsi yarım. Tüm testlere göz at."
-              action={<LinkButton href="/paketler">Tüm testler</LinkButton>}
-            />
-          </Card>
-        )}
-      </section>
+        </section>
+      ) : null}
+
+      {yeni && katalog.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<ClipboardList />}
+            title="Bu sınav için test hazırlanıyor"
+            description="Soru havuzu tamamlanınca burada görünecek."
+            action={<LinkButton href="/paketler?tur=TUMU">Diğer sınavların testleri</LinkButton>}
+          />
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { TopicBreakdown } from "@/lib/scoring";
+import type { TopicBreakdown } from "./scoring";
 
 /**
  * Öğrenci panosunun okumaları: tüm sonuçlar üzerinden genel konu haritası

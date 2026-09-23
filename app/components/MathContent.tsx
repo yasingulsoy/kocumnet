@@ -22,7 +22,14 @@ function renderLatex(latex: string, displayMode: boolean): string {
       // eksik gösterildiğini kimseye söylemez.
       errorColor: "#c0392b",
       strict: "ignore",
-      output: "html",
+      /*
+       * "html" DEĞİL: KaTeX o modda MathML çıktısını hiç üretmiyor ve geriye
+       * kalan .katex-html düğümü aria-hidden olduğu için ekran okuyucu
+       * formülleri TAMAMEN atlıyordu — her sayı, kesir ve kök sessizdi.
+       * htmlAndMathml ikisini birden verir: görenler HTML'i, ekran okuyucu
+       * MathML'i okur. Maliyeti yalnızca HTML boyutu (JS'e etkisi yok).
+       */
+      output: "htmlAndMathml",
     });
   } catch {
     return `<span style="color:#c0392b">[formül hatası]</span>`;

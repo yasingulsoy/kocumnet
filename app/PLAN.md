@@ -211,24 +211,31 @@ Yeterli veri birikince (soru başına ≥300 cevap) adaptif seçime geçilebilir
 
 ---
 
-## 6. Sonuç ekranı
+## 6. Sonuç ekranı — RAPOR DEĞİL, KOÇ ÇIKTISI
 
-```
-Check-up · TYT Matematik Genel · 25 soru · 27 dk
+İlk sürüm bir rapordu: halka, net, konu haritası, ürün listesi. Doğruydu ama
+**öğrenciyi hareket ettirmiyordu.** Rapor "durum bu" der; koç "şunu yap" der.
 
-Net 16,25   (18 doğru · 7 yanlış · 0 boş)
+Ekranın sırası bilinçli — telefonda ilk ekranda görünenler ilk üçü:
 
-KONU HARİTASI
-  Temel Kavramlar    ████████░░  güçlü
-  Bölünebilme        ██████░░░░  orta
-  Problemler         ███░░░░░░░  zayıf   ⚠
-  Kümeler-Mantık     ████████░░  güçlü
-  Fonksiyonlar       ██░░░░░░░░  zayıf   ⚠
+1. **Karar cümlesi.** Banda göre değişir, HER ZAMAN bir sayı içerir, TEK bir
+   eylem söyler. ("%38 — bu bir yetenek meselesi değil, sıralama meselesi.")
+2. **Boş bırakma uyarısı** (varsa). Sınava göre: TYT'de "4 yanlış 1 doğru
+   götürüyor, iki şık eleyebiliyorsan işaretle"; KPSS'de "yanlış götürmüyor,
+   boş bırakmanın matematiksel faydası yok".
+3. **Bu hafta sadece bunlar.** En fazla iki konu, sıralı, her birinde
+   "sınavda ~3 soru" karşılığı ve tek dokunuşla 5 soruluk kontrol testi.
+4. Yanlışların ortak yanı (hata deseni → reçete).
+5. Geçen denemeye göre fark.
+6. Konu haritası (telefonda ilk üç konu, gerisi katlanmış).
+7. Sonraki ölçüm ne zaman.
+8. **Kaynak — en sonda.** "Bu konuları çalışmak için elindeki kaynak
+   yetmiyorsa." Ürün, teşhisin sonucu; teşhisin amacı değil.
+9. Cevap incelemesi (varsayılan: yalnızca yanlış ve boşlar).
 
-⚠ 2 konuda eksiğin var. Önerilen çalışma setleri:
-   → "Tam ÖSYM Ayarı" Problemler Soru Paketi
-   → TYT Matematik "İlk 15" Branş Denemeleri
-```
+**Net gösterimi sınava göre:** `penaltyRatio == 0` olan sınavlarda (KPSS, DGS,
+ALES) net = doğru sayısıdır; ayrı bir "net" kutusu göstermek ekranda aynı sayıyı
+iki kez yazmak olur. O sınavlarda "12/20 doğru" yazıyoruz.
 
 Zayıf konu → ürün eşlemesi `topic.recommendedProductIds` ile veritabanından gelir.
 
@@ -257,13 +264,14 @@ derlenmiş JS değil TypeScript kaynağı ve uzantısız import kullanıyor (bun
 | 4 | Check-up akışı: paket seç → çöz → sonuç | **1** | ✅ |
 | 5 | Konu haritası + ürün önerisi | **1** | ✅ |
 | 6 | Geçmiş testler + gelişim karşılaştırması | **1** | ✅ |
-| 7 | Admin: havuz panosu, soru girişi/düzenleme (canlı önizleme) | **1** | ✅ |
+| 7 | Admin: havuz panosu, soru girişi/düzenleme (canlı önizleme) — `admin.kocum.net`'e taşındı | **1** | ✅ |
 | 8 | Toplu içe aktarma (JSON/Excel) + hata raporu | **1** | ⬜ sırada |
 | 9 | Görsel yükleme (geometri şekilleri, `MediaAsset`) | **1** | ✅ |
 | 10 | Cevap incelemesi + adım adım çözüm gösterimi | **1** | ✅ |
 | 11 | Hata tipi teşhisi (çeldirici analizi) | **1** | ✅ |
 | 12 | İlerleme: aynı paketin önceki denemesiyle karşılaştırma | **1** | ✅ |
 | 13 | Erişim hakkı (entitlement) + yönetim ekranı | **1** | ✅ |
+| 13b | Yönetimin `admin.kocum.net`'e taşınması: personel doğrulaması, roller, öğrenci detayı, paket ayarları | **1** | ✅ |
 | 14 | Parola sıfırlama (e-posta) | **1** | ✅ |
 | 15 | KVKK aydınlatma metni + kayıt onayı | **1** | ✅ taslak |
 | 16 | Deploy yapılandırması (nixpacks, .env.example, DEPLOY.md) | **1** | ✅ |
@@ -295,13 +303,13 @@ eklendi; şema değişikliğinden sonra dev sunucusunu yeniden başlatın.
 4. **Paket listesi kesinleşti mi?** Şu anki 6 paket bir öneri; Serhat Hoca'nın kapsam
    görüşü alınmalı. Konu başına ≥3 soru kuralı korunmalı (§2).
 5. ~~Ücretli mi?~~ → **Ücretli** (2026-09-20). Alt karar bekliyor: tek seferlik mi abonelik mi.
-   Bu netleşmeden fatura modeli yazılmayacak. Gereken katman: **hak (entitlement)** —
-   şu an giriş yapan herkes her paketi başlatabiliyor. Ödeme sağlayıcı (iyzico/PayTR)
-   hesap açıldıktan sonra entegre edilir.
+   Bu netleşmeden fatura modeli yazılmayacak. **Hak (entitlement) katmanı hazır** (#13):
+   paket ücretliye çevrilince yalnızca hakkı olan başlatabiliyor; hak şimdilik panelden
+   elle veriliyor. Ödeme sağlayıcı (iyzico/PayTR) hesap açıldıktan sonra entegre edilir.
    ⚠️ Ücretli ürün + 18 yaş altı kullanıcı: mesafeli satış sözleşmesi ve cayma hakkı
    metinleri zorunlu.
    Değerlendirilecek orta yol: ilk check-up ücretsiz (huni), sonrakiler ücretli.
-6. **Gerçek soru havuzu nereden gelecek?** Şu an 430 demo sorusu var (şablondan
+6. **Gerçek soru havuzu nereden gelecek?** Şu an ~2200 demo sorusu var (şablondan
    üretilmiş, GERÇEK SORU DEĞİL). Serhat Hoca'ya sorulacak: mevcut fasiküllerin
    **dizgi kaynağı (Word/InDesign) duruyor mu, yoksa sadece baskı PDF'i mi kaldı?**
    Cevap içe aktarmanın biçimini belirliyor; "sadece PDF" ise içe aktarma yazılmaz,
@@ -333,7 +341,8 @@ kökenden servis edilen bir SVG'yi açmak script çalıştırır.
 
 ⚠️ Next varsayılanı server action gövdesini **1 MB** ile sınırlıyor; telefonla
 çekilmiş bir şekil fotoğrafı bunu rahat aşar ve yükleme sessizce reddedilir.
-`next.config.ts` içinde `serverActions.bodySizeLimit` 10 MB'a çekildi.
+Yükleme yönetim panelinde olduğu için sınır **`admin/next.config.ts`**'te 10 MB'a
+çekildi; öğrenci uygulaması dosya almadığından varsayılanda bırakıldı.
 
 ---
 
@@ -344,9 +353,90 @@ cd app
 npm install
 npm run db:migrate        # şema
 npm run db:seed           # konu ağacı + paketler (idempotent)
-npm run db:seed:demo      # 417 demo sorusu — SADECE geliştirme
+npm run db:seed:demo      # ~2200 demo sorusu — SADECE geliştirme
 npm run dev -- --port 3100
 ```
 
-`.env`: `DATABASE_URL` ve `SESSION_SECRET`. Admin hesabı ancak `SEED_ADMIN_EMAIL` +
-`SEED_ADMIN_PASSWORD` verilirse açılır — bilinen varsayılan parolalı hesap yaratmıyoruz.
+`.env`: `DATABASE_URL` (tam liste `.env.example`'da). Bu uygulamada yönetici hesabı yok;
+yönetim `admin.kocum.net`'te (kök dizindeki `admin/`).
+
+---
+
+## 11. Koçluk katmanı (2026-09-23)
+
+Check-up "ne biliyorsun"u ölçüyordu. Eksik olan "peki şimdi ne yapayım"dı.
+Bu bölüm o boşluğu dolduran kararları kaydediyor.
+
+### 11.1 Çok sınav, PAYLAŞILAN konular
+
+Uygulama artık LGS · TYT · AYT · KPSS (lisans/önlisans) · DGS · ALES kapsıyor.
+
+İki seçenek vardı: (a) her sınav için ayrı konu ağacı, (b) tek ağaç + konuda
+`examScopes[]` etiketi. **(b) seçildi.**
+
+- Soru havuzu bölünmüyor: "Problemler" için yazılmış 200 soru altı sınavın
+  hepsinde kullanılabiliyor. (a) seçilseydi her sınav için ayrı havuz gerekirdi
+  ve hiçbiri yeterli olmazdı.
+- Öğrencinin konu geçmişi sürekli kalıyor: TYT'de ölçülen "Köklü Sayılar",
+  öğrenci DGS'ye geçse bile aynı konu.
+- Sınav bazlı ağırlık `Topic.examWeights` ile ayrı tutuluyor: aynı konu TYT'de
+  5, DGS'de 2 soru getiriyorsa sıralama buna göre değişiyor.
+
+Kök konunun adı "TYT Matematik" değil **"Temel Matematik"**: konu ağacının adı
+tek bir sınava ait olamaz.
+
+### 11.2 Tanışma (`/tanisma`)
+
+Panele girmeden önce üç soru: hangi sınav, hangi aşama, kaç net hedef.
+Bu bilgiler kayıt formunda zaten toplanıyordu ama **hiçbir yerde
+kullanılmıyordu** — DGS'ye hazırlanan birine AYT trigonometri paketi
+öneriliyordu. Artık katalog, puanlama, plan ve koçluk metinleri buna bakıyor.
+
+Sınıf seçenekleri sınava göre kısıtlı (`EXAMS[x].grades`): 26 yaşındaki DGS
+adayına "11. sınıf" yazdırmak ürünün onu tanımadığını gösterir.
+
+### 11.3 Haftalık plan (`StudyPlan` / `PlanItem`)
+
+Test bitince plan **kendiliğinden** oluşuyor. En fazla iki konu, her konuda
+dört iş: konu tekrarı (60 dk) → 40 soru (70 dk) → yanlış analizi (25 dk) →
+**kontrol testi (5 soru)**.
+
+Kritik karar: **RETEST işi öğrenci tarafından işaretlenemez.** Sistem, ancak o
+konuda gerçekten 5 soruluk test çözülünce kapatır (`verifiedBySessionId`).
+"40 soru çözdüm" demek kolaydır; kontrol testini geçmek değildir. Doğrulama
+adımı olmayan plan yapılacaklar listesidir ve yapılacaklar listeleri terk edilir.
+
+Diğer işler silinebilir: koç da "bu hafta vaktim yok" itirazını dinler.
+Dayatılan plan duvar kâğıdı olur.
+
+### 11.4 Konu tekrar testi — erişim kuralı
+
+`startTopicRetest` bir paket satın alımına bakmaz. Denetimsiz bırakılsaydı
+herhangi bir öğrenci istediği konu kimliğiyle çağırıp ücretli havuzdan beşer
+beşer soru çekebilirdi. İki kapı kondu:
+
+1. Konu **daha önce ölçülmüş** olmalı (o konudan soru içeren bitmiş bir oturum).
+   Bu aynı zamanda ürün olarak doğru: "kontrol", ölçülmüş bir şeyi yeniden
+   ölçmektir.
+2. 24 saatte en fazla `GUNLUK_TEKRAR_SINIRI` (8) tekrar. Günde on kontrol testi
+   çözmek çalışmak değil, çalışmaktan kaçmanın rahat yoludur.
+
+`npm run test:leak` ikisini de denetliyor.
+
+### 11.5 Hedef takibi
+
+`/gelisim` artık "tahmini net" gösteriyor: son üç ölçümün net oranı, sınavın
+matematik soru sayısına taşınıyor (TYT için 40). Bu bir TAHMİN ve ekranda da
+öyle yazıyor — sınav koşulları, süre baskısı ve diğer dersler burada yok.
+Yine de öğrencinin kafasındaki soru "yüzde kaç" değil "kaç net" olduğu için
+ölçümü onun diline çeviriyor.
+
+Kaldırılan gösterge panelleri: "en iyi test", "toplam süre". İkisi de gurur
+okşuyor, hiçbir eyleme yol açmıyor.
+
+### 11.6 Sınav sabitleri — DOĞRULANACAK
+
+`lib/exams.ts` soru sayılarını ve yanlış götürme oranlarını tutuyor.
+KPSS/DGS/ALES için `penaltyRatio` şu an **0.25** yazılı ve kodda ⚠️ işaretli:
+yayına çıkmadan Serhat Hoca ile doğrulanmalı. Oran oturum başlarken paketten
+kopyalandığı için sonradan düzeltmek **eski sonuçları düzeltmiyor**.

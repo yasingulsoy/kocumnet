@@ -58,17 +58,29 @@ export async function saveAnswerAction(input: AnswerInput): Promise<{ ok: boolea
   }
 }
 
+/** Soru başına biriken süreler: { questionId: ms }. En fazla 60 soru. */
+const timesSchema = z
+  .record(z.string().min(1), z.number().int().min(0).max(6 * 3600_000))
+  .refine((r) => Object.keys(r).length <= 60, "Çok fazla kayıt.");
+
 /** Testi bitirir ve sonuç ekranına yönlendirir. */
-export async function submitCheckupAction(sessionId: string): Promise<{ error: string } | never> {
+export async function submitCheckupAction(
+  sessionId: string,
+  times?: Record<string, number>
+): Promise<{ error: string } | never> {
   const user = await requireUser();
 
+  // Süre haritası bozuksa testi bitirmeyi engellemez: yoksayıp devam ederiz.
+  const sureler = times ? (timesSchema.safeParse(times).data ?? undefined) : undefined;
+
   try {
-    await submitCheckup(sessionId, user.id);
+    await submitCheckup(sessionId, user.id, sureler);
   } catch (e) {
     if (e instanceof CheckupError) return { error: e.message };
     throw e;
   }
 
-  revalidatePath("/gecmis");
+  revalidatePath("/panel");
+  revalidatePath("/gelisim");
   redirect(`/sonuc/${sessionId}`);
 }

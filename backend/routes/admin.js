@@ -2,14 +2,21 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
-const { User } = require('../models');
+const { User, ContactMessage } = require('../models');
 const { authenticateAdmin, requireRole, getAdminJwt } = require('../middleware/auth');
 const { setAdminAuthCookie, clearAdminAuthCookie } = require('../utils/authCookie');
-const { adminLoginLimiter } = require('../middleware/authRateLimit');
+const { adminLoginLimiter, writeLimiter } = require('../middleware/rateLimits');
 const { normalizeRole } = require('../utils/roles');
 const { JWT_SECRET } = require('../config/env');
+const { parseId, escapeLike, asyncHandler } = require('../utils/http');
 
 const router = express.Router();
+
+/** Personel işlemlerinin izi — "bu hesabı kim açtı/sildi" sorusu sorulabilsin. */
+function denetimKaydi(req, eylem, ayrinti) {
+  const kim = req.user ? `${req.user.email} (#${req.user.id}, ${req.user.role})` : 'bilinmiyor';
+  console.log(`[denetim] ${eylem} — ${kim} — ${ayrinti}`);
+}
 
 router.post('/auth/login', adminLoginLimiter, async (req, res) => {
   try {
@@ -22,7 +29,9 @@ router.post('/auth/login', adminLoginLimiter, async (req, res) => {
       });
     }
 
-    const searchTerm = usernameOrEmail.toLowerCase().trim();
+    // escapeLike olmadan "%" tek başına ilk kullanıcıyı eşliyordu: saldırgan
+    // hangi hesaba denk geldiğini bilmeden parola denemesi yapabiliyordu.
+    const searchTerm = escapeLike(String(usernameOrEmail).toLowerCase().trim().slice(0, 255));
     const user = await User.findOne({
       where: {
         [Op.or]: [
@@ -144,7 +153,10 @@ router.get('/users', requireRole('admin', 'manager'), async (req, res) => {
 
 router.get('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id, {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ success: false, error: 'Kullanıcı bulunamadı' });
+
+    const user = await User.findByPk(id, {
       attributes: { exclude: ['password_hash'] },
     });
 
@@ -159,7 +171,10 @@ router.get('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
   }
 });
 
-router.post('/users', requireRole('admin'), async (req, res) => {
+const EPOSTA_DESENI = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MIN_PAROLA = 8;
+
+router.post('/users', requireRole('admin'), writeLimiter, async (req, res) => {
   try {
     const { username, email, password, first_name, last_name, phone, role, is_active } = req.body;
 
@@ -169,12 +184,21 @@ router.post('/users', requireRole('admin'), async (req, res) => {
         error: 'E-posta, şifre, ad ve soyad gereklidir',
       });
     }
+    if (!EPOSTA_DESENI.test(String(email).trim())) {
+      return res.status(400).json({ success: false, error: 'Geçerli bir e-posta adresi girin' });
+    }
+    if (String(password).length < MIN_PAROLA) {
+      return res.status(400).json({
+        success: false,
+        error: `Parola en az ${MIN_PAROLA} karakter olmalı`,
+      });
+    }
 
     const existingUser = await User.findOne({
       where: {
         [Op.or]: [
-          { email: { [Op.iLike]: email } },
-          ...(username ? [{ username: { [Op.iLike]: username } }] : []),
+          { email: { [Op.iLike]: escapeLike(email) } },
+          ...(username ? [{ username: { [Op.iLike]: escapeLike(username) } }] : []),
         ],
       },
     });
@@ -199,7 +223,9 @@ router.post('/users', requireRole('admin'), async (req, res) => {
       is_active: is_active !== undefined ? is_active : true,
     });
 
-    res.json({
+    denetimKaydi(req, 'kullanıcı oluşturuldu', `${user.email} (#${user.id}) rol=${user.role}`);
+
+    res.status(201).json({
       success: true,
       data: formatUser(user),
       message: 'Kullanıcı başarıyla oluşturuldu',
@@ -210,9 +236,12 @@ router.post('/users', requireRole('admin'), async (req, res) => {
   }
 });
 
-router.put('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
+router.put('/users/:id', requireRole('admin', 'manager'), writeLimiter, async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ success: false, error: 'Kullanıcı bulunamadı' });
+
+    const user = await User.findByPk(id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'Kullanıcı bulunamadı' });
     }
@@ -220,6 +249,19 @@ router.put('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
     const { username, email, password, first_name, last_name, phone, role, is_active } = req.body;
 
     const isSelf = user.id === req.userId;
+
+    /*
+     * RÜTBE DENETİMİ: müdür, yönetici hesabına dokunamaz.
+     * Eskiden yoktu — bir müdür yöneticinin PAROLASINI değiştirip (ya da
+     * e-postasını alıp, ya da hesabı pasifleştirip) yönetici olarak
+     * giriş yapabiliyordu. Yetki yükseltme.
+     */
+    if (!isSelf && user.role === 'admin' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Yönetici hesabını yalnızca başka bir yönetici düzenleyebilir',
+      });
+    }
     if (isSelf && is_active === false) {
       return res.status(400).json({ success: false, error: 'Kendi hesabınızı pasifleştiremezsiniz' });
     }
@@ -227,13 +269,17 @@ router.put('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'Kendi yönetici rolünüzü düşüremezsiniz' });
     }
 
+    if (email !== undefined && !EPOSTA_DESENI.test(String(email).trim())) {
+      return res.status(400).json({ success: false, error: 'Geçerli bir e-posta adresi girin' });
+    }
+
     if (email || username) {
       const existingUser = await User.findOne({
         where: {
           id: { [Op.ne]: user.id },
           [Op.or]: [
-            ...(email ? [{ email: { [Op.iLike]: email } }] : []),
-            ...(username ? [{ username: { [Op.iLike]: username } }] : []),
+            ...(email ? [{ email: { [Op.iLike]: escapeLike(email) } }] : []),
+            ...(username ? [{ username: { [Op.iLike]: escapeLike(username) } }] : []),
           ],
         },
       });
@@ -262,10 +308,22 @@ router.put('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
     }
 
     if (password && password.trim() !== '') {
+      if (String(password).length < MIN_PAROLA) {
+        return res.status(400).json({
+          success: false,
+          error: `Parola en az ${MIN_PAROLA} karakter olmalı`,
+        });
+      }
       updateData.password_hash = await bcrypt.hash(password, 10);
     }
 
     await user.update(updateData);
+
+    const degisenler = Object.keys(updateData)
+      .map((k) => (k === 'password_hash' ? 'parola' : k))
+      .join(', ');
+    denetimKaydi(req, 'kullanıcı güncellendi', `${user.email} (#${user.id}) → ${degisenler}`);
+
     res.json({
       success: true,
       data: formatUser(user),
@@ -277,9 +335,12 @@ router.put('/users/:id', requireRole('admin', 'manager'), async (req, res) => {
   }
 });
 
-router.delete('/users/:id', requireRole('admin'), async (req, res) => {
+router.delete('/users/:id', requireRole('admin'), writeLimiter, async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ success: false, error: 'Kullanıcı bulunamadı' });
+
+    const user = await User.findByPk(id);
     if (!user) {
       return res.status(404).json({ success: false, error: 'Kullanıcı bulunamadı' });
     }
@@ -291,12 +352,113 @@ router.delete('/users/:id', requireRole('admin'), async (req, res) => {
       });
     }
 
+    const kimlik = `${user.email} (#${user.id}, ${user.role})`;
     await user.destroy();
+    denetimKaydi(req, 'kullanıcı silindi', kimlik);
+
     res.json({ success: true, message: 'Kullanıcı başarıyla silindi' });
   } catch (error) {
     console.error('Kullanıcı silme hatası:', error);
+    // Yazıları olan bir kullanıcı silinmek istendiğinde yabancı anahtar
+    // kısıtı hata veriyordu; kullanıcıya ne yapacağını söylüyoruz.
+    if (error && error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(409).json({
+        success: false,
+        error:
+          'Bu kullanıcının blog yazıları var. Önce yazıları başka bir yazara aktarın ya da silin.',
+      });
+    }
     res.status(500).json({ success: false, error: 'Kullanıcı silinirken bir hata oluştu' });
   }
 });
+
+// ─────────────────────────────────────────────────────────────
+// İletişim mesajları (siteden gelen formlar)
+// ─────────────────────────────────────────────────────────────
+
+const MESAJ_DURUMLARI = new Set(['new', 'read', 'archived', 'spam']);
+
+router.get(
+  '/contact-messages',
+  requireRole('admin', 'manager'),
+  asyncHandler(async (req, res) => {
+    const { status, search, page, limit: limitParam } = req.query;
+    const where = {};
+
+    if (status && MESAJ_DURUMLARI.has(String(status))) where.status = String(status);
+    if (search) {
+      const desen = `%${escapeLike(String(search).slice(0, 100))}%`;
+      where[Op.or] = [
+        { name: { [Op.iLike]: desen } },
+        { email: { [Op.iLike]: desen } },
+        { message: { [Op.iLike]: desen } },
+      ];
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(limitParam, 10) || 25));
+
+    const { count, rows } = await ContactMessage.findAndCountAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit,
+      offset: (pageNum - 1) * limit,
+      attributes: { exclude: ['ip_hash', 'user_agent'] },
+    });
+
+    const okunmamis = await ContactMessage.count({ where: { status: 'new' } });
+
+    res.json({
+      success: true,
+      data: rows,
+      unread: okunmamis,
+      pagination: { page: pageNum, limit, total: count, totalPages: Math.ceil(count / limit) },
+    });
+  })
+);
+
+router.patch(
+  '/contact-messages/:id',
+  requireRole('admin', 'manager'),
+  writeLimiter,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ success: false, error: 'Mesaj bulunamadı' });
+
+    const durum = String((req.body || {}).status || '');
+    if (!MESAJ_DURUMLARI.has(durum)) {
+      return res.status(400).json({ success: false, error: 'Geçersiz durum' });
+    }
+
+    const mesaj = await ContactMessage.findByPk(id);
+    if (!mesaj) return res.status(404).json({ success: false, error: 'Mesaj bulunamadı' });
+
+    await mesaj.update({
+      status: durum,
+      handled_by: req.userId,
+      handled_at: new Date(),
+    });
+
+    res.json({ success: true, data: mesaj });
+  })
+);
+
+router.delete(
+  '/contact-messages/:id',
+  requireRole('admin'),
+  writeLimiter,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ success: false, error: 'Mesaj bulunamadı' });
+
+    const mesaj = await ContactMessage.findByPk(id);
+    if (!mesaj) return res.status(404).json({ success: false, error: 'Mesaj bulunamadı' });
+
+    denetimKaydi(req, 'iletişim mesajı silindi', `#${mesaj.id} — ${mesaj.email}`);
+    await mesaj.destroy();
+
+    res.json({ success: true, message: 'Mesaj silindi' });
+  })
+);
 
 module.exports = router;

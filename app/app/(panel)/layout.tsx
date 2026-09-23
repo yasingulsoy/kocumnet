@@ -12,5 +12,13 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   const user = await getCurrentUser();
   if (!user) redirect("/giris");
 
+  /*
+   * Tanışmadan panele girilmiyor: hangi sınava hazırlandığını bilmeden
+   * gösterilecek doğru bir katalog, doğru bir puanlama ya da anlamlı bir
+   * tavsiye yok. Tanışma ekranı panelin DIŞINDA (/tanisma), yoksa bu
+   * yönlendirme kendini tekrar ederdi.
+   */
+  if (!user.onboardedAt) redirect("/tanisma");
+
   return <StudentShell user={user}>{children}</StudentShell>;
 }

@@ -108,7 +108,7 @@ export function CardHeader({
           </span>
         ) : null}
         <div className="min-w-0">
-          <h2 className="font-display text-[15px] font-semibold text-ink">{title}</h2>
+          <h2 className="font-display text-[15px] font-semibold text-ink text-balance">{title}</h2>
           {description ? <p className="mt-0.5 text-[13px] text-ink-soft">{description}</p> : null}
         </div>
       </div>
@@ -315,11 +315,15 @@ export function PageHeader({
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="font-display text-[26px] font-bold leading-tight tracking-tight text-ink sm:text-[30px]">
+        {/* Telefonda başlık ekranın dörtte birini yemesin: sayfa başlığı
+            yön tabelasıdır, içerik değil. */}
+        <h1 className="font-display text-h1 font-bold leading-tight tracking-tight text-ink text-balance sm:text-[30px]">
           {title}
         </h1>
         {description ? (
-          <p className="mt-1.5 max-w-2xl text-[15px] text-ink-soft">{description}</p>
+          <p className="mt-1 max-w-2xl text-caption text-ink-soft sm:mt-1.5 sm:text-[15px]">
+            {description}
+          </p>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

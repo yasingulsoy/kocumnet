@@ -20,6 +20,14 @@ import { BottomNav, SidebarNav } from "./nav";
 export function StudentShell({ user, children }: { user: SessionUser; children: ReactNode }) {
   return (
     <div className="min-h-screen lg:ps-[264px]">
+      {/* Klavyeyle gezen öğrenci her sayfada menüyü baştan geçmek zorunda
+          kalmasın. Odaklanmadan görünmez. */}
+      <a
+        href="#icerik"
+        className="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-xl focus:bg-brand-deep focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        İçeriğe geç
+      </a>
       {/* Masaüstü kenar çubuğu */}
       <aside className="fixed inset-y-0 start-0 z-40 hidden w-[264px] flex-col border-e border-line bg-surface lg:flex">
         <div className="flex h-16 items-center px-5">
@@ -65,15 +73,26 @@ export function StudentShell({ user, children }: { user: SessionUser; children: 
 
       {/* Mobil üst çubuk */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
-        <Link href="/panel" aria-label="Ana sayfa">
+        <Link
+          href="/panel"
+          aria-label="Ana sayfa"
+          className="-ms-1 flex min-h-11 items-center rounded-xl px-1"
+        >
           <Wordmark compact />
         </Link>
-        <Link href="/profil" aria-label="Profil">
+        <Link
+          href="/profil"
+          aria-label="Profil"
+          className="-me-2 flex size-11 items-center justify-center rounded-xl transition active:bg-surface-sunk"
+        >
           <Avatar name={user.name} className="size-8 text-xs" />
         </Link>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+      <main
+        id="icerik"
+        className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pb-12 lg:pt-10"
+      >
         {children}
       </main>
 

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import type { Role } from "@/lib/generated/prisma/enums";
+import type { ExamScope, Grade, Role } from "@/lib/generated/prisma/enums";
 
 export const SESSION_COOKIE = "kocum_sess";
 
@@ -24,6 +24,16 @@ export interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  /*
+   * Tanışma bilgileri oturumla birlikte geliyor: katalog, pano ve koçluk
+   * metinleri hepsi bunlara bakıyor. Ayrı sorgu açmak yerine zaten okunan
+   * satırdan getiriyoruz.
+   */
+  grade: Grade | null;
+  targetExam: ExamScope | null;
+  targetNet: number | null;
+  weeklyTestGoal: number;
+  onboardedAt: Date | null;
 }
 
 /**
@@ -75,7 +85,19 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     where: { tokenHash: hashToken(token) },
     select: {
       expiresAt: true,
-      user: { select: { id: true, email: true, name: true, role: true } },
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          grade: true,
+          targetExam: true,
+          targetNet: true,
+          weeklyTestGoal: true,
+          onboardedAt: true,
+        },
+      },
     },
   });
 
@@ -85,18 +107,17 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   // periyodik olarak silinir.
   if (session.expiresAt < new Date()) return null;
 
-  return session.user;
+  // Decimal -> number: arayüzün tamamı sayı bekliyor, Decimal'i istemciye
+  // taşımak serileştirme sorunlarına yol açıyor.
+  return {
+    ...session.user,
+    targetNet: session.user.targetNet === null ? null : Number(session.user.targetNet),
+  };
 });
 
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) throw new AuthError("Giriş yapmanız gerekiyor.");
-  return user;
-}
-
-export async function requireAdmin(): Promise<SessionUser> {
-  const user = await requireUser();
-  if (user.role !== "ADMIN") throw new AuthError("Bu işlem için yetkiniz yok.");
   return user;
 }
 

@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
  * dönüşüyor — "check-up" ile "gelişim" aynı çizgide. Küçük boyutta
  * (sekme ikonu, mobil üst çubuk) da okunsun diye tek hat, kalın çizgi.
  */
-export function Logo({ className }: { className?: string }) {
+export function Logo({ className, light }: { className?: string; light?: boolean }) {
   const id = useId();
   return (
     <svg viewBox="0 0 32 32" aria-hidden className={cn("size-8 shrink-0", className)}>
@@ -17,7 +17,19 @@ export function Logo({ className }: { className?: string }) {
           <stop offset="1" stopColor="#0e90d5" />
         </linearGradient>
       </defs>
-      <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
+      {light ? (
+        <rect
+          x="0.5"
+          y="0.5"
+          width="31"
+          height="31"
+          rx="8.5"
+          fill="rgb(255 255 255 / 0.14)"
+          stroke="rgb(255 255 255 / 0.28)"
+        />
+      ) : (
+        <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
+      )}
       <polyline
         points="7.5,17.5 12.5,22 19,14 24.5,8.5"
         fill="none"
@@ -44,7 +56,7 @@ export function Wordmark({
   const light = tone === "light";
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <Logo />
+      <Logo light={light} />
       <span className="flex flex-col leading-none">
         {compact ? null : (
           <span

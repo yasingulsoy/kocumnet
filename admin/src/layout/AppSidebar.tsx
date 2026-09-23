@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
@@ -8,6 +8,7 @@ import {
   GridIcon,
   HorizontaLDots,
   PageIcon,
+  TaskIcon,
   UserCircleIcon,
 } from "../icons/index";
 
@@ -15,7 +16,8 @@ type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  subItems?: { name: string; path: string }[];
+  /** exact: yalnızca birebir adreste vurgulanır (alt sayfaları olan özet sayfası için). */
+  subItems?: { name: string; path: string; exact?: boolean }[];
 };
 
 const navItems: NavItem[] = [
@@ -32,6 +34,17 @@ const navItems: NavItem[] = [
       { name: "Yeni Blog Yazısı", path: "/blogs/new" },
     ],
   },
+  {
+    icon: <TaskIcon />,
+    name: "Check-up",
+    subItems: [
+      { name: "Genel bakış", path: "/checkup", exact: true },
+      { name: "Sorular", path: "/checkup/sorular" },
+      { name: "Havuz durumu", path: "/checkup/havuz" },
+      { name: "Öğrenciler", path: "/checkup/ogrenciler" },
+      { name: "Paketler", path: "/checkup/paketler" },
+    ],
+  },
 ];
 
 const othersItems: NavItem[] = [
@@ -41,6 +54,28 @@ const othersItems: NavItem[] = [
     path: "/users",
   },
 ];
+
+/** Menü öğesi bulunulan adrese denk geliyor mu? */
+function yolAktif(pathname: string | null, path: string, exact = false) {
+  if (path === pathname) return true;
+  if (!exact && pathname?.startsWith(path + "/")) return true;
+  return false;
+}
+
+/** Bulunulan adrese göre hangi açılır menü açık olmalı. */
+function adreseGoreAcikMenu(pathname: string | null) {
+  const gruplar = [
+    { type: "main" as const, items: navItems },
+    { type: "others" as const, items: othersItems },
+  ];
+  for (const grup of gruplar) {
+    const index = grup.items.findIndex((nav) =>
+      nav.subItems?.some((s) => yolAktif(pathname, s.path, s.exact))
+    );
+    if (index !== -1) return { type: grup.type, index };
+  }
+  return null;
+}
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
@@ -53,6 +88,7 @@ const AppSidebar: React.FC = () => {
           {nav.subItems ? (
             <button
               onClick={() => handleSubmenuToggle(index, menuType)}
+              aria-expanded={openSubmenu?.type === menuType && openSubmenu?.index === index}
               className={`menu-item group ${
                 openSubmenu?.type === menuType && openSubmenu?.index === index
                   ? "menu-item-active"
@@ -107,25 +143,30 @@ const AppSidebar: React.FC = () => {
             )
           )}
           {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
+            /*
+             * Açılır menü yüksekliği CSS ile: grid satırı 0fr → 1fr.
+             * Eskiden scrollHeight ölçülüp efektte state'e yazılıyordu; ölçüm
+             * her açılışta bir fazladan çizim demekti ve React 19'un
+             * "efekt içinde setState" kuralına takılıyordu.
+             *
+             * inert: kapalıyken içerideki bağlantılar sekmeyle gezilemez —
+             * görünmeyen bağlantıya odaklanmak klavye kullanıcısını kaybeder.
+             */
             <div
-              ref={(el) => {
-                subMenuRefs.current[`${menuType}-${index}`] = el;
-              }}
-              className="overflow-hidden transition-all duration-300"
-              style={{
-                height:
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
-                    ? `${subMenuHeight[`${menuType}-${index}`]}px`
-                    : "0px",
-              }}
+              inert={!(openSubmenu?.type === menuType && openSubmenu?.index === index)}
+              className={`grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out ${
+                openSubmenu?.type === menuType && openSubmenu?.index === index
+                  ? "grid-rows-[1fr]"
+                  : "grid-rows-[0fr]"
+              }`}
             >
-              <ul className="mt-2 space-y-1 ml-9">
+              <ul className="mt-2 ml-9 min-h-0 space-y-1 overflow-hidden">
                 {nav.subItems.map((subItem) => (
                   <li key={subItem.name}>
                     <Link
                       href={subItem.path}
                       className={`menu-dropdown-item ${
-                        isActive(subItem.path)
+                        isActive(subItem.path, subItem.exact)
                           ? "menu-dropdown-item-active"
                           : "menu-dropdown-item-inactive"
                       }`}
@@ -142,57 +183,27 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
+  const isActive = (path: string, exact = false) => yolAktif(pathname, path, exact);
+
+  const pathSubmenu = adreseGoreAcikMenu(pathname);
+
+  /*
+   * Menü durumu iki kaynaktan geliyor: adres (yukarıdaki türetme) ve
+   * kullanıcının elle açıp kapaması. Adres değiştiğinde elle yapılan seçim
+   * bırakılıp adrese dönülüyor — bu ayar ÇİZİM SIRASINDA yapılıyor (React'in
+   * önerdiği desen). Efekte koymak fazladan bir çizim turu demek ve
+   * "efekt içinde setState" kuralına takılıyor.
+   */
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";
     index: number;
-  } | null>(null);
-  const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
-  const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  } | null>(pathSubmenu);
+  const [sonAdres, setSonAdres] = useState(pathname);
 
-  const isActive = useCallback(
-    (path: string) => {
-      if (path === pathname) return true;
-      if (pathname?.startsWith(path + "/")) return true;
-      return false;
-    },
-    [pathname]
-  );
-
-  useEffect(() => {
-    let submenuMatched = false;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: menuType as "main" | "others",
-                index,
-              });
-              submenuMatched = true;
-            }
-          });
-        }
-      });
-    });
-
-    if (!submenuMatched) {
-      setOpenSubmenu(null);
-    }
-  }, [pathname, isActive]);
-
-  useEffect(() => {
-    if (openSubmenu !== null) {
-      const key = `${openSubmenu.type}-${openSubmenu.index}`;
-      if (subMenuRefs.current[key]) {
-        setSubMenuHeight((prevHeights) => ({
-          ...prevHeights,
-          [key]: subMenuRefs.current[key]?.scrollHeight || 0,
-        }));
-      }
-    }
-  }, [openSubmenu]);
+  if (sonAdres !== pathname) {
+    setSonAdres(pathname);
+    setOpenSubmenu(pathSubmenu);
+  }
 
   const handleSubmenuToggle = (index: number, menuType: "main" | "others") => {
     setOpenSubmenu((prevOpenSubmenu) => {

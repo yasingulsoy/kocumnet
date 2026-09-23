@@ -14,9 +14,24 @@ datasource db {
 // Ortak enum'lar
 // ─────────────────────────────────────────────────────────────
 
+/// Matematik bölümü olan sınavlar.
+///
+/// ⚠️ KONU AĞACI SINAV BAŞINA ÇOĞALTILMAZ. KPSS, DGS ve ALES matematiği
+/// TYT ile büyük ölçüde aynı konulardan oluşuyor; konuyu her sınav için
+/// ayrı kaydetmek (a) öğrencinin konu geçmişini sınav değiştirince sıfırlar,
+/// (b) soru havuzunu beşe böler. Bunun yerine bir konu birden çok sınava
+/// işaretlenir (Topic.examScopes) ve soru gerekirse sınavla kısıtlanır
+/// (Question.examScopes).
 enum ExamScope {
+  LGS
   TYT
   AYT
+  KPSS_LISANS
+  KPSS_ONLISANS
+  DGS
+  ALES
+  /// @deprecated Eski "TYT+AYT" değeri. Yeni kayıtlarda kullanılmaz;
+  /// eski satırlar okunabilsin diye duruyor.
   BOTH
 }
 
@@ -37,10 +52,14 @@ enum Role {
 }
 
 enum Grade {
+  GRADE_8
   GRADE_9
   GRADE_10
   GRADE_11
   GRADE_12
+  /// Üniversite öğrencisi (DGS/ALES adayı) — "11. sınıfta mısın?" diye
+  /// sorulan 26 yaşındaki aday, ürünün onu tanımadığını hemen anlıyor.
+  UNIVERSITY
   GRADUATE
 }
 
@@ -81,7 +100,19 @@ model Topic {
   id        String    @id @default(cuid())
   slug      String    @unique
   name      String
+  /// Konunun "ana" sınavı — listelerde rozet olarak gösterilir.
   examScope ExamScope @default(TYT)
+
+  /// Bu konunun geçtiği TÜM sınavlar. KPSS/DGS/ALES matematiği TYT ile
+  /// büyük ölçüde ortak olduğu için aynı konu birden fazla sınava işaretlenir;
+  /// böylece öğrencinin konu geçmişi sınav değiştirince sıfırlanmıyor ve
+  /// soru havuzu bölünmüyor.
+  examScopes ExamScope[] @default([])
+
+  /// Gerçek sınavda bu konudan ortalama kaç soru çıkıyor: { "TYT": 4 }.
+  /// Çalışma sırası bununla belirleniyor — iki konu da %20 ise sınavda
+  /// 5 soru getiren önce çalışılır.
+  examWeights Json?
 
   parentId String?
   parent   Topic?  @relation("TopicTree", fields: [parentId], references: [id], onDelete: Restrict)
@@ -94,8 +125,10 @@ model Topic {
   /// Koda gömülmez: ürün kataloğu değişince migration gerekmesin.
   recommendedProductIds String[] @default([])
 
-  questions     Question[]
-  packageTopics PackageTopic[]
+  questions      Question[]
+  packageTopics  PackageTopic[]
+  retestSessions CheckupSession[] @relation("RetestTopic")
+  planItems      PlanItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -108,6 +141,16 @@ model Topic {
 // Paketler
 // ─────────────────────────────────────────────────────────────
 
+/// Paket türü.
+/// INTRO: yeni öğrencinin ilk 12 dakikalık "tanışma" testi — boş panoda tek çağrı.
+/// RETEST: plandaki kanıt adımı için tek konuluk kısa test; KATALOGDA GÖRÜNMEZ,
+///         konu üzerinden başlatılır.
+enum PackageKind {
+  STANDARD
+  INTRO
+  RETEST
+}
+
 /// Check-up paketi = kapsamı ve soru dağılımı tanımlı bir test.
 /// Yeni paket eklemek satır girmektir, kod değişikliği değil (PLAN §2).
 model Package {
@@ -116,6 +159,8 @@ model Package {
   name        String
   summary     String?
   description String?
+
+  kind PackageKind @default(STANDARD)
 
   examScope       ExamScope     @default(TYT)
   questionCount   Int
@@ -199,6 +244,12 @@ model Question {
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
+  /// Soru yalnızca bu sınavlarda sorulabilir. BOŞ = konusunun geçtiği her
+  /// sınavda sorulabilir. Ortak konularda seviye farkı olduğunda kullanılır:
+  /// "Problemler" hem LGS'de hem TYT'de var ama AYT ağırlığındaki bir soru
+  /// LGS testine düşmemeli.
+  examScopes ExamScope[] @default([])
+
   /// Ampirik zorluk kalibrasyonu için — difficulty elle girilir, bunlar ölçülür.
   shownCount   Int @default(0)
   correctCount Int @default(0)
@@ -207,8 +258,16 @@ model Question {
   items     SessionItem[]
   exposures QuestionExposure[]
 
+  /// Eski: yönetim bu uygulamanın içindeyken kullanılıyordu. Yeni kayıtlar
+  /// aşağıdaki personel damgalarını kullanır.
   createdById String?
   createdBy   User?   @relation("QuestionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Soruyu yazan / en son düzenleyen yönetim paneli personeli (admin.kocum.net).
+  /// Personel bu veritabanında DEĞİL, backend'in `users` tablosunda — bu yüzden
+  /// yabancı anahtar değil, "e-posta (#id)" biçiminde bir damga.
+  createdByStaff String?
+  updatedByStaff String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -270,6 +329,8 @@ model MediaAsset {
 
   uploadedById String?
   uploadedBy   User?   @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  /// Yükleyen personel damgası — bkz. Question.createdByStaff.
+  uploadedByStaff String?
 
   createdAt DateTime @default(now())
 
@@ -294,6 +355,8 @@ model ImportBatch {
 
   createdById String?
   createdBy   User?   @relation("ImportAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  /// İçe aktaran personel damgası — bkz. Question.createdByStaff.
+  createdByStaff String?
 
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -314,6 +377,15 @@ model User {
   targetExam ExamScope?
   phone      String?
 
+  /// Hedef net (o sınavın matematik soru sayısına göre). Koçun ilk sorduğu
+  /// üç şeyden biri: hangi sınav, ne zaman, kaç net.
+  targetNet      Decimal? @db.Decimal(5, 2)
+  targetExamYear Int?
+  /// Haftada kaç check-up hedefliyor — plan bunun üstüne kuruluyor.
+  weeklyTestGoal Int      @default(1)
+  /// Tanışma adımları tamamlandı mı. null = hiç sormadık (sorup geçmekten farklı).
+  onboardedAt    DateTime?
+
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
 
@@ -326,6 +398,7 @@ model User {
   entitlements      Entitlement[]
   grantedEntitlements Entitlement[] @relation("EntitlementGranter")
   importBatches    ImportBatch[]  @relation("ImportAuthor")
+  studyPlans       StudyPlan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -398,6 +471,11 @@ model Entitlement {
   grantedById String?
   grantedBy   User?   @relation("EntitlementGranter", fields: [grantedById], references: [id], onDelete: SetNull)
 
+  /// Hakkı veren / geri alan personel damgası (bkz. Question.createdByStaff).
+  /// Uyuşmazlıkta "bu hakkı kim, ne zaman verdi/aldı" sorusunun cevabı.
+  grantedByStaff String?
+  revokedByStaff String?
+
   createdAt DateTime @default(now())
 
   @@index([userId, packageId])
@@ -408,6 +486,13 @@ model Entitlement {
 // Check-up oturumu
 // ─────────────────────────────────────────────────────────────
 
+/// Test türü. Paket = kataloğdan seçilen tam check-up.
+/// Konu tekrar testi = planın "kanıt" adımı: tek konudan 5 soru.
+enum SessionKind {
+  PACKAGE
+  TOPIC_RETEST
+}
+
 /// Bir öğrencinin bir check-up denemesi.
 model CheckupSession {
   id        String  @id @default(cuid())
@@ -415,6 +500,17 @@ model CheckupSession {
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   packageId String
   package   Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  kind SessionKind @default(PACKAGE)
+
+  /// TOPIC_RETEST ise hangi konu ölçülüyor.
+  focusTopicId String?
+  focusTopic   Topic?  @relation("RetestTopic", fields: [focusTopicId], references: [id], onDelete: Restrict)
+
+  /// Havuz dar olduğu için tekrar gösterilmek zorunda kalınan soru sayısı.
+  /// Hesaplanıyordu ama atılıyordu; "bu paketi tekrar çözmeni öneririm"
+  /// tavsiyesinin dürüst olabilmesi için saklanıyor.
+  relaxedExposureCount Int @default(0)
 
   status SessionStatus @default(IN_PROGRESS)
 
@@ -432,7 +528,11 @@ model CheckupSession {
 
   @@index([userId, startedAt])
   @@index([status, expiresAt])
+  /// "Bu öğrencinin açık testi var mı?" — panoda, katalogda ve test
+  /// başlatmada çalışan en sık sorgu.
+  @@index([userId, status, expiresAt])
   @@index([packageId])
+  @@index([focusTopicId])
 }
 
 /// Oturuma seçilen soru + sıra. Cevaptan ayrı tablo: soru listesi oturum
@@ -495,9 +595,93 @@ model CheckupResult {
   /// Zayıf konulardan türeyen ürün önerileri.
   recommendedProductIds String[] @default([])
 
+  /// Oturum anındaki sınav kapsamı. Panodaki toplamlar sınava göre
+  /// ayrılabilsin diye burada: LGS, TYT ve KPSS sonuçlarını tek bir
+  /// "genel başarı" çizgisinde toplamak anlamsız.
+  examScope ExamScope?
+
   computedAt DateTime @default(now())
   /// Hangi sürümle hesaplandı — puanlama mantığı değişirse eski sonuçlar ayırt edilsin.
   scoringVersion Int @default(1)
+
+  @@index([computedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Haftalık çalışma planı
+// ─────────────────────────────────────────────────────────────
+
+enum PlanStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+/// Plandaki iş türü. RETEST'i öğrenci elle işaretleyemez: kapanması için
+/// gerçekten testi çözmesi gerekir. 40 soru çözdüğünü söylemek kolay,
+/// 5 soruluk kontrol testini geçmek değil.
+enum PlanItemKind {
+  STUDY
+  SOLVE
+  REVIEW
+  RETEST
+}
+
+/// Bir haftalık çalışma planı. Koçun asıl işi bu: ölç → ata → doğrula → ayarla.
+model StudyPlan {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examScope ExamScope
+  /// Pazartesi 00:00 (Europe/Istanbul). Hafta sınırı sunucunun UTC'sine göre
+  /// hesaplanırsa öğrenci pazar gecesi planını kaybeder.
+  weekStart DateTime   @db.Date
+  status    PlanStatus @default(ACTIVE)
+
+  /// Plan hangi sonuçtan türedi — "neden bu plan?" sorusunun cevabı.
+  sourceSessionId String?
+
+  /// Koçun o haftaki tek cümlesi.
+  coachNote String?
+
+  items PlanItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+  @@index([userId, weekStart])
+}
+
+model PlanItem {
+  id      String    @id @default(cuid())
+  planId  String
+  plan    StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  topicId String?
+  topic   Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  kind  PlanItemKind
+  title String
+
+  targetQuestionCount Int?
+  estimatedMinutes    Int
+  sortOrder           Int @default(0)
+
+  /// Önerilen yayın (lib/products.ts kimliği).
+  productId String?
+
+  /// Öğrenci işaretledi.
+  doneAt DateTime?
+
+  /// RETEST için: bunu öğrenci değil SİSTEM doldurur.
+  verifiedBySessionId String?
+
+  /// Geçen haftadan devredildiyse hangi işten geldi — "bunu ikinci kez
+  /// erteliyorsun" diyebilmek için.
+  carriedFrom String?
+
+  @@index([planId, sortOrder])
+  @@index([topicId])
 }
 
 /// Son gösterim kaydı. Aynı öğrenciye aynı soruyu 30 gün içinde tekrar
