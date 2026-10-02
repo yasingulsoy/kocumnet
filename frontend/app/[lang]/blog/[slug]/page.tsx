@@ -4,26 +4,13 @@ import Link from "next/link";
 import { fetchBlogBySlug, fetchBlogs, getImageUrl, BACKEND_URL } from "@/lib/api";
 import { getSiteUrl } from "@/lib/site";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_HREFLANG, LOCALE_INTL, LOCALE_OG, type Locale } from "@/lib/i18n/config";
+import { isLocale, LOCALE_HREFLANG, LOCALE_OG } from "@/lib/i18n/config";
 import { blogPath, localizedPath } from "@/lib/routes";
 import { BlogViewCounter } from "@/components/BlogViewCounter";
+import { authorName as yazarAdi, formatDate, postDate, readingMinutes } from "@/lib/blog";
 
 interface Props {
   params: Promise<{ lang: string; slug: string }>;
-}
-
-function estimateReadingTime(html: string): number {
-  const text = html.replace(/<[^>]*>/g, "");
-  const words = text.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 200));
-}
-
-function formatDate(dateString: string, locale: Locale) {
-  return new Date(dateString).toLocaleDateString(LOCALE_INTL[locale], {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
 }
 
 /** İçerikteki relatif /uploads/... yollarını backend'e çözer. */
@@ -58,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       locale: LOCALE_OG[lang],
       siteName: "Koçum.Net",
       publishedTime: blog.published_at || blog.created_at,
-      modifiedTime: blog.updated_at,
+      modifiedTime: blog.updated_at ?? undefined,
       ...(imageUrl ? { images: [{ url: imageUrl, width: 1200, height: 630 }] } : {}),
     },
     twitter: {
@@ -81,18 +68,17 @@ export default async function BlogDetailPage({ params }: Props) {
   const t = await getDictionary(lang);
   const siteUrl = getSiteUrl();
   const imageUrl = getImageUrl(blog.image);
-  const readingTime = estimateReadingTime(blog.content);
-  const processedContent = processContent(blog.content, BACKEND_URL);
-  const authorName =
-    blog.author?.first_name && blog.author?.last_name
-      ? `${blog.author.first_name} ${blog.author.last_name}`
-      : "Koçum.Net";
+  const readingTime = readingMinutes(blog);
+  // İçeriği boş bir yazı da gelebilir (taslaktan yayına alınmış, gövdesi
+  // silinmiş). Eskiden burada .replace() çağrılıyordu ve sayfa 500 veriyordu.
+  const processedContent = blog.content ? processContent(blog.content, BACKEND_URL) : "";
+  const authorName = yazarAdi(blog) ?? "Koçum.Net";
 
   const pageUrl = `${siteUrl}${blogPath(slug, lang)}`;
 
   const relatedResult = await fetchBlogs({ limit: 4, locale: lang });
   const relatedBlogs = (relatedResult?.data || [])
-    .filter((b: any) => b.id !== blog.id)
+    .filter((b) => b.id !== blog.id)
     .slice(0, 3);
 
   const blogPostingSchema = {
@@ -110,7 +96,7 @@ export default async function BlogDetailPage({ params }: Props) {
       url: siteUrl,
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
-    wordCount: blog.content.replace(/<[^>]*>/g, "").split(/\s+/).filter(Boolean).length,
+    wordCount: (blog.content ?? "").replace(/<[^>]*>/g, "").split(/\s+/).filter(Boolean).length,
     inLanguage: LOCALE_HREFLANG[lang],
   };
 
@@ -178,14 +164,14 @@ export default async function BlogDetailPage({ params }: Props) {
             </div>
             <span className="h-1 w-1 rounded-full bg-white/30" />
             <time dateTime={blog.published_at || blog.created_at}>
-              {formatDate(blog.published_at || blog.created_at, lang)}
+              {formatDate(postDate(blog), lang)}
             </time>
             <span className="h-1 w-1 rounded-full bg-white/30" />
             <span>
               {readingTime} {t.blog.readingTime}
             </span>
             <span className="h-1 w-1 rounded-full bg-white/30" />
-            <BlogViewCounter slug={slug} initialCount={blog.view_count} label={t.blog.views} />
+            <BlogViewCounter slug={slug} initialCount={blog.view_count ?? 0} label={t.blog.views} />
           </div>
         </div>
       </section>
@@ -271,7 +257,7 @@ export default async function BlogDetailPage({ params }: Props) {
               {t.blog.relatedPosts}
             </h2>
             <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {relatedBlogs.map((related: any) => (
+              {relatedBlogs.map((related) => (
                 <article
                   key={related.id}
                   className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
@@ -297,7 +283,7 @@ export default async function BlogDetailPage({ params }: Props) {
                   </Link>
                   <div className="p-6">
                     <time className="text-xs text-[#888]" dateTime={related.published_at || related.created_at}>
-                      {formatDate(related.published_at || related.created_at, lang)}
+                      {formatDate(postDate(related), lang)}
                     </time>
                     <h3 className="mt-2 font-bold text-[#151a33] transition-colors group-hover:text-[#1a5fb4]">
                       <Link href={blogPath(related.slug, lang)}>{related.title}</Link>

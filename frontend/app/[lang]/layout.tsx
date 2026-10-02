@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { Caladea, Poppins } from "next/font/google";
+import { Fraunces, Poppins } from "next/font/google";
 import { JsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
@@ -17,17 +17,31 @@ import { languageAlternates, localizedPath } from "@/lib/routes";
 import { getSiteUrl } from "@/lib/site";
 import "../globals.css";
 
+/*
+ * ⚠️ subsets'te "latin-ext" ŞART.
+ *
+ * Türkçe ğ, ş, İ, ı, ç harfleri "latin" alt kümesinde YOK. next/font
+ * istenmeyen alt kümeyi dosyadan attığı için tarayıcı bu harfleri yedek
+ * fontla çiziyor: "Gelişim", "Başarı", "Çözüm" gibi kelimelerin ortasında
+ * harf harf font değişiyor. Türkçe bir sitede en görünür kusur bu.
+ */
 const poppins = Poppins({
   variable: "--font-poppins",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-const caladea = Caladea({
-  variable: "--font-caladea",
-  subsets: ["latin"],
-  weight: ["400", "700"],
+/*
+ * Başlık yazı tipi. Değişken font — ağırlık aralığını kendisi taşıyor,
+ * weight dizisi verilmiyor. Caladea'nın yerine geçti: aynı editoryal tonu
+ * daha çağdaş bir harf çizimiyle veriyor. Geri dönmek istersen bu bloğu
+ * Caladea ile değiştirmek yeterli, geri kalan kod --font-display üzerinden
+ * çalışıyor.
+ */
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin", "latin-ext"],
   display: "swap",
 });
 
@@ -124,7 +138,7 @@ export default async function RootLayout({
        * hesaplarını bozabiliyor. Sticky footer, body'deki min-h-screen +
        * flex-col ve footer'daki mt-auto ile sağlanıyor.
        */
-      className={`${poppins.variable} ${caladea.variable} antialiased`}
+      className={`${poppins.variable} ${fraunces.variable} antialiased`}
     >
       <body className="min-h-screen flex flex-col bg-background font-sans text-foreground">
         {/*

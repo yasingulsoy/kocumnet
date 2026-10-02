@@ -4,8 +4,9 @@ import Link from "next/link";
 import { fetchBlogs, getImageUrl } from "@/lib/api";
 import { StaggerGroup, StaggerItem } from "@/components/Reveal";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_INTL, LOCALE_OG, type Locale } from "@/lib/i18n/config";
+import { isLocale, LOCALE_OG } from "@/lib/i18n/config";
 import { blogPath, languageAlternates, localizedPath } from "@/lib/routes";
+import { formatDate, postDate, readingMinutes } from "@/lib/blog";
 
 export async function generateMetadata({
   params,
@@ -32,20 +33,6 @@ export async function generateMetadata({
       siteName: "Koçum.Net",
     },
   };
-}
-
-function formatDate(dateString: string, locale: Locale) {
-  return new Date(dateString).toLocaleDateString(LOCALE_INTL[locale], {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function estimateReadingTime(html: string): number {
-  const text = html.replace(/<[^>]*>/g, "");
-  const words = text.split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 200));
 }
 
 export default async function BlogPage({ params }: { params: Promise<{ lang: string }> }) {
@@ -90,7 +77,7 @@ export default async function BlogPage({ params }: { params: Promise<{ lang: str
           </div>
         ) : (
           <StaggerGroup className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {blogs.map((blog: any) => (
+            {blogs.map((blog) => (
               <StaggerItem
                 key={blog.id}
                 className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
@@ -122,11 +109,11 @@ export default async function BlogPage({ params }: { params: Promise<{ lang: str
                 <div className="flex flex-1 flex-col p-6">
                   <div className="flex items-center gap-3 text-xs text-[#888]">
                     <time dateTime={blog.published_at || blog.created_at}>
-                      {formatDate(blog.published_at || blog.created_at, lang)}
+                      {formatDate(postDate(blog), lang)}
                     </time>
                     <span className="h-1 w-1 rounded-full bg-[#ccc]" />
                     <span>
-                      {estimateReadingTime(blog.content)} {t.blog.readingTime}
+                      {readingMinutes(blog)} {t.blog.readingTime}
                     </span>
                   </div>
                   <h2 className="mt-3 text-lg font-bold leading-snug text-[#151a33] transition-colors group-hover:text-[#1a5fb4]">

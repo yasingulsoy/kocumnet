@@ -2,15 +2,12 @@ import type { MetadataRoute } from "next";
 import { getSiteUrl } from "@/lib/site";
 import { LOCALES, type Locale } from "@/lib/i18n/config";
 import { blogPath, languageAlternates, localizedPath, ROUTE_KEYS } from "@/lib/routes";
+// BACKEND_URL tek yerde: lib/api.ts. Burada yeniden tanımlıydı ve env yedek
+// zinciri farklıydı — biri çalışırken öteki localhost'a düşebiliyordu.
+import { BACKEND_URL } from "@/lib/api";
+import type { BlogPost } from "@/lib/blog";
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.API_URL ||
-  "http://127.0.0.1:5000";
-
-async function getPublishedBlogs(locale: Locale) {
+async function getPublishedBlogs(locale: Locale): Promise<BlogPost[]> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/blogs?limit=100&locale=${locale}`, {
       next: { revalidate: 3600 },
@@ -49,7 +46,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     await Promise.all(
       LOCALES.map(async (locale) => {
         const blogs = await getPublishedBlogs(locale);
-        return blogs.map((blog: any) => ({
+        return blogs.map((blog) => ({
           url: `${base}${blogPath(blog.slug, locale)}`,
           lastModified: new Date(blog.updated_at || blog.created_at),
           changeFrequency: "weekly" as const,

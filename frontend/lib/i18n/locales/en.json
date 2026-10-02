@@ -17,7 +17,6 @@
     "menu": "Menu",
     "close": "Close",
     "search": "Search",
-    "searchPlaceholder": "Search the site...",
     "language": "Language",
     "country": "Türkiye"
   },
@@ -67,7 +66,23 @@
     "aboutBadgeText": "We are with you after school and cram school too",
     "ctaTitle": "Let's Plan Your Future Together",
     "ctaDesc": "Get in touch to learn more about our services or about how to enrol.",
-    "ctaImageAlt": "Young people working together at a table"
+    "ctaImageAlt": "Young people working together at a table",
+    "checkupEyebrow": "MATHEMATICS CHECK-UP",
+    "checkupTitle": "See exactly where your gaps are, in 20 minutes",
+    "checkupDesc": "A short test measures your level topic by topic. What you get at the end is not a report but a plan: which two topics to study this week.",
+    "checkupPoint1": "A level map, topic by topic",
+    "checkupPoint2": "The pattern behind your mistakes",
+    "checkupPoint3": "This week's study plan",
+    "checkupCta": "Start the check-up",
+    "checkupNote": "LGS · TYT · AYT · KPSS · DGS · ALES",
+    "servicesEyebrow": "WHAT WE DO",
+    "servicesTitle": "With you at every stage of the exam journey",
+    "servicesDesc": "Six areas of one-to-one support, from university choice counselling to nutrition.",
+    "servicesCta": "All services",
+    "productsEyebrow": "OUR PUBLICATIONS",
+    "productsTitle": "Original question sets at ÖSYM calibre",
+    "productsDesc": "Entirely original, with step-by-step PDF solutions, in portable booklet format.",
+    "productsCta": "All publications"
   },
   "about": {
     "title": "About Us",
@@ -107,19 +122,15 @@
     "ctaTitle": "Let's find the right service for you, together",
     "ctaDesc": "Contact us for detailed information about our services and the enrolment process.",
     "ctaButton": "Get in Touch",
-
     "tercihTitle": "Placement Counselling",
     "tercihExpert": "Our Placement Counsellor Serhat Butur",
     "tercihP1": "Choosing a university and a department is not a listing exercise based on scores alone; it is the process of building a future. Led by our Placement Counsellor Serhat Butur — one of the most experienced names in the country — we present the most suitable alternatives, taking the socio-economic circumstances of students and families into account.",
     "tercihP2": "We analyse universities' hidden academic opportunities, the depth of their faculty and the critical details that usually go unnoticed, and we guide our student towards the future where they will gain the most.",
-    "tercihImageAlt": "Students walking across a modern university campus",
-
     "materyalTitle": "Exam Preparation Material",
     "materyalLead": "Mega Question Library",
     "materyalP1": "In mathematics above all, we offer our “Mega Question Library”. Our resources do not contain a single question that “steals the student's time, is needlessly difficult, or has drifted away from the curriculum”. We prepare highly selective, student-friendly niche publications that match the spirit and the format of the ÖSYM exam exactly — the kind of question that makes you say, “this could come up in the exam”.",
     "materyalP2": "We bring students a level of selectivity and usefulness that even the most popular resources on the market could not deliver together, all under one roof. We present our solutions in a format different from most publishers. With this solution format, our students can quickly see exactly where they got stuck, without needing extra help.",
     "materyalImageAlt": "A student's hand marking an optical answer sheet with a pencil",
-
     "koclukTitle": "Exam Study Coaching",
     "koclukP1": "Exam preparation is won or lost after school or cram school — in that unsupervised stretch of time the student spends at home. With our Exam Study Coaching system, we never leave the student alone in this marathon:",
     "koclukBullet1Title": "Lasting Knowledge",
@@ -129,19 +140,14 @@
     "koclukBullet3Title": "Close Follow-up",
     "koclukBullet3Text": "We remove the need for students to discipline themselves, coordinating the process professionally through the triangle of planning, review and follow-up.",
     "koclukImageAlt": "A planner with the monthly study schedule and a marker pen",
-
     "ogrenciTitle": "Student Coaching",
     "ogrenciExpert": "Our Student Coaches Özlem Tamimi and Serhat Butur",
     "ogrenciP1": "In this dedicated service — aimed above all at students in years 9, 10, 11 and 12 as well as graduates retaking the exam — we work under the guidance of our student coaches Özlem Tamimi and Serhat Butur. We support our students with time management, study techniques, coping with exam stress, academic motivation and goal setting.",
     "ogrenciP2": "We produce answers to the questions on our student's mind: “How do I study more efficiently for exams?”, “How do I improve my school results?”, “What kind of programme should I follow to reach my goal?”",
-    "ogrenciImageAlt": "A high-school student taking notes at a laptop while wearing headphones",
-
     "psikolojikTitle": "Psychological Support During the Exam Period",
     "psikolojikExpert": "Our Clinical Psychologist Dilek Kılıç",
     "psikolojikP1": "The exam marathon is not only an academic process; it is also a serious test of mental and emotional resilience. Led by our specialist Clinical Psychologist Dilek Kılıç — well known for her work and videos in the digital world — we professionally support our students through exam anxiety, loss of motivation and stress management.",
     "psikolojikP2": "We provide a space of psychological safety on this difficult journey, for our student and for the family alike.",
-    "psikolojikImageAlt": "A young student talking with a specialist psychologist in a comfortable setting",
-
     "beslenmeTitle": "Nutrition Counselling During the Exam Period",
     "beslenmeExpert": "Our Specialist Dietitian",
     "beslenmeP1": "The exam marathon demands physical endurance. To build that endurance, we offer our students personalised nutrition programmes together with our specialist dietitian.",
@@ -174,7 +180,10 @@
     "quickTitle": "Quick contact",
     "quickSubtitle": "Write your questions",
     "quickMessagePlaceholder": "Your short message",
-    "quickThanks": "Thank you. We have received your message and will get back to you as soon as possible."
+    "quickThanks": "Thank you. We have received your message and will get back to you as soon as possible.",
+    "formSending": "Sending…",
+    "formError": "The message could not be sent. Please check your connection and try again.",
+    "formTooMany": "Too many attempts. Please try again a little later."
   },
   "blog": {
     "title": "Blog",

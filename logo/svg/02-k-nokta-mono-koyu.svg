@@ -1,0 +1,11 @@
+<!--
+  Tek renk, kare YOK — açık zemin üzerine. Marka lacivertı.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Koçum.Net">
+  <g stroke="#17305e" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M11 8.8 V 23.2" />
+    <path d="M12.8 16 L 21.4 23.2" />
+    <path d="M12.8 16 L 19.8 10.2" />
+  </g>
+  <circle cx="22.4" cy="8.6" r="2.4" fill="#17305e" />
+</svg>

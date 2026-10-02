@@ -17,7 +17,6 @@
     "menu": "Menü",
     "close": "Kapat",
     "search": "Ara",
-    "searchPlaceholder": "Sitede ara...",
     "language": "Dil",
     "country": "Türkiye"
   },
@@ -67,7 +66,23 @@
     "aboutBadgeText": "Okuldan ve kurstan sonra da yanınızdayız",
     "ctaTitle": "Geleceğinizi Birlikte Planlayalım",
     "ctaDesc": "Hizmetlerimiz hakkında bilgi almak veya kayıt sürecini öğrenmek için bize ulaşın.",
-    "ctaImageAlt": "Masa başında birlikte çalışan gençler"
+    "ctaImageAlt": "Masa başında birlikte çalışan gençler",
+    "checkupEyebrow": "MATEMATİK CHECK-UP",
+    "checkupTitle": "Nerede eksiğin var, 20 dakikada gör",
+    "checkupDesc": "Kısa bir testle matematik seviyeni konu konu ölçüyoruz. Sonunda elinde rapor değil, bu hafta hangi iki konuyu çalışacağını söyleyen bir plan oluyor.",
+    "checkupPoint1": "Konu konu seviye haritası",
+    "checkupPoint2": "Yanlışlarının ortak sebebi",
+    "checkupPoint3": "Bu haftanın çalışma planı",
+    "checkupCta": "Check-up'a başla",
+    "checkupNote": "LGS · TYT · AYT · KPSS · DGS · ALES",
+    "servicesEyebrow": "NE YAPIYORUZ",
+    "servicesTitle": "Sınav sürecinin her aşamasında yanınızdayız",
+    "servicesDesc": "Tercih danışmanlığından beslenme desteğine kadar altı başlıkta birebir hizmet.",
+    "servicesCta": "Tüm hizmetler",
+    "productsEyebrow": "YAYINLARIMIZ",
+    "productsTitle": "ÖSYM kalibresinde özgün soru setleri",
+    "productsDesc": "Tamamı özgün, adım adım PDF çözümlü, taşınabilir fasikül düzeninde hazırlandı.",
+    "productsCta": "Tüm yayınlar"
   },
   "about": {
     "title": "Kurumsal",
@@ -107,19 +122,15 @@
     "ctaTitle": "Size uygun hizmeti birlikte belirleyelim",
     "ctaDesc": "Hizmetlerimiz ve kayıt süreci hakkında detaylı bilgi almak için bizimle iletişime geçin.",
     "ctaButton": "İletişime Geç",
-
     "tercihTitle": "Tercih Danışmanlığı",
     "tercihExpert": "Tercih Danışmanımız Serhat Butur",
     "tercihP1": "Üniversite ve bölüm tercihi, sadece puanlara bakarak yapılacak bir listeleme değil, geleceği inşa etme sürecidir. Ülkenin en deneyimli isimlerinden biri olan Tercih Danışmanımız Serhat Butur liderliğinde, öğrencilerin ve ailelerin sosyo-ekonomik şartlarını gözeterek en doğru alternatifleri sunuyoruz.",
     "tercihP2": "Üniversitelerin gizli kalmış akademik imkânlarını, kadro derinliklerini ve gözden kaçan kritik detayları analiz ediyor, öğrencimizi en yüksek faydayı sağlayacağı geleceğe yönlendiriyoruz.",
-    "tercihImageAlt": "Modern üniversite kampüsünde yürüyen öğrenciler",
-
     "materyalTitle": "Sınav Hazırlık Materyalleri",
     "materyalLead": "Mega Soru Kütüphanesi",
     "materyalP1": "Özellikle matematik dersinde, “Mega Soru Kütüphanesi” sunuyoruz. Kaynaklarımızda öğrencilerin “zamanını çalan, gereksiz zorlukta veya müfredattan uzaklaşmış” tek bir soruya bile yer vermiyoruz. ÖSYM’nin sınav ruhuna ve formatına bire bir uygun, “bu soru sınavda çıkabilir” diyeceğiniz nitelikte, tamamı öğrenci dostu çok özel niş yayınlar hazırlıyoruz.",
     "materyalP2": "Piyasadaki en popüler kaynakların bile bir araya gelerek sunamadığı seçicilik ve faydayı, tek bir çatı altında öğrencilerimize ulaştırıyoruz. Soru çözümlerini birçok yayından farklı formatta sunuyoruz. Bu çözüm formatıyla öğrencilerimiz desteğe ihtiyaç duymadan nerede tıkandığını çok çabuk fark edebiliyor.",
     "materyalImageAlt": "Optik cevap formunu kurşun kalemle işaretleyen öğrenci eli",
-
     "koclukTitle": "Sınav Çalışma Koçluğu",
     "koclukP1": "Sınav hazırlığı okul veya kurs çıkışında, yani öğrencinin evdeki o kontrolsüz zaman diliminde kazanılır ya da kaybedilir. Sınav Çalışma Koçluğu sistemimizle öğrenciyi bu maratonda asla yalnız bırakmıyoruz:",
     "koclukBullet1Title": "Kalıcı Bilgi",
@@ -129,19 +140,14 @@
     "koclukBullet3Title": "Sıkı Takip",
     "koclukBullet3Text": "Öğrencinin kendi kendini disipline etme zorunluluğunu ortadan kaldırarak, plan, tekrar ve takip üçgeniyle süreci profesyonelce koordine ediyoruz.",
     "koclukImageAlt": "Aylık çalışma planının işlendiği ajanda ve işaretleyici kalem",
-
     "ogrenciTitle": "Öğrenci Koçluğu",
     "ogrenciExpert": "Öğrenci Koçlarımız Özlem Tamimi ve Serhat Butur",
     "ogrenciP1": "Özellikle 9-10-11-12. sınıflarında okuyan ve mezuna kalan öğrencilerimize yönelik sunduğumuz bu özel hizmette, öğrenci koçlarımız Özlem Tamimi ve Serhat Butur rehberliğinde hareket ediyoruz. Öğrencilerimize zaman yönetimi, ders çalışma teknikleri, sınav stresiyle başa çıkma, akademik motivasyon ve hedef belirleme gibi konularda destek veriyoruz.",
     "ogrenciP2": "Öğrencimizin kafasındaki “Sınavlara nasıl daha verimli çalışırım?”, “Okul başarımı nasıl artırırım?”, “Hedefime ulaşmak için nasıl bir program izlemeliyim?” gibi sorulara çözüm üretiyoruz.",
-    "ogrenciImageAlt": "Kulaklığıyla bilgisayar başında not alarak çalışan lise öğrencisi",
-
     "psikolojikTitle": "Sınav Sürecinde Psikolojik Destek",
     "psikolojikExpert": "Klinik Psikoloğumuz Dilek Kılıç",
     "psikolojikP1": "Sınav maratonu sadece akademik bir süreç değil, aynı zamanda ciddi bir zihinsel ve duygusal dayanıklılık mücadelesidir. Dijital dünyadaki çalışmaları ve videolarıyla tanınan, alanında uzman Klinik Psikoloğumuz Dilek Kılıç liderliğinde öğrencilerimizin sınav kaygısı, motivasyon kaybı ve stres yönetimi gibi süreçlerini profesyonelce destekliyoruz.",
     "psikolojikP2": "Hem öğrencimize hem de aileye bu zorlu yolculukta psikolojik güven alanı sağlıyoruz.",
-    "psikolojikImageAlt": "Uzman psikologla rahat bir ortamda görüşen genç öğrenci",
-
     "beslenmeTitle": "Sınav Sürecinde Beslenme Danışmanlığı",
     "beslenmeExpert": "Uzman Diyetisyenimiz",
     "beslenmeP1": "Sınav maratonu fiziksel dayanıklılık gerektirir. Bu dayanıklılığı sağlamak için öğrencilerimize uzman diyetisyenimiz eşliğinde kişiye özel beslenme programları sunuyoruz.",
@@ -174,7 +180,10 @@
     "quickTitle": "Hızlı iletişim",
     "quickSubtitle": "Sorularınızı yazın",
     "quickMessagePlaceholder": "Kısa mesajınız",
-    "quickThanks": "Teşekkürler. Mesajınızı aldık; en kısa sürede size dönüş yapacağız."
+    "quickThanks": "Teşekkürler. Mesajınızı aldık; en kısa sürede size dönüş yapacağız.",
+    "formSending": "Gönderiliyor…",
+    "formError": "Mesaj gönderilemedi. Bağlantını kontrol edip tekrar dener misin?",
+    "formTooMany": "Çok fazla deneme oldu. Bir süre sonra tekrar dener misin?"
   },
   "blog": {
     "title": "Blog",

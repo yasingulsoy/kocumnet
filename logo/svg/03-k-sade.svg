@@ -1,0 +1,26 @@
+<!--
+  YÖN 3 — En sade. Sadece K.
+
+  Hiç süs yok: kare + K. "Net" işarette değil, wordmark'ta yaşıyor
+  ("Koçum.Net"). En güvenli seçenek — 16px favicon'da, gömlek nakışında,
+  tek renk kaşede sorunsuz çalışır.
+
+  Yön 2'deki noktayı istemezsen bu kalır.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Koçum.Net">
+  <defs>
+    <linearGradient id="kn3-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17305e" />
+      <stop offset="0.55" stop-color="#1a5fb4" />
+      <stop offset="1" stop-color="#0e90d5" />
+    </linearGradient>
+  </defs>
+
+  <rect width="32" height="32" rx="9" fill="url(#kn3-bg)" />
+
+  <g stroke="#ffffff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M11.2 8.6 V 23.4" />
+    <path d="M13.2 16 L 21.6 8.8" />
+    <path d="M13.2 16 L 21.8 23.4" />
+  </g>
+</svg>

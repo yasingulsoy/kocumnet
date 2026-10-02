@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Koçum.Net — Logo çalışması</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --deep: #17305e;
+    --brand: #1a5fb4;
+    --bright: #0e90d5;
+    --ink: #111834;
+    --ink-soft: #4b5471;
+    --ink-faint: #6b7392;
+    --line: #e6eaf2;
+    --sunk: #f6f8fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Poppins, ui-sans-serif, system-ui, sans-serif;
+    color: var(--ink-soft);
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; color: var(--ink); margin: 0 0 6px; letter-spacing: -0.02em; }
+  .lead { margin: 0 0 40px; font-size: 15px; max-width: 58ch; line-height: 1.6; }
+  h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .18em;
+    color: var(--brand); margin: 56px 0 4px;
+  }
+  h2:first-of-type { margin-top: 32px; }
+  .note { font-size: 13px; color: var(--ink-faint); margin: 0 0 20px; max-width: 62ch; line-height: 1.6; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card {
+    border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+    background: #fff;
+  }
+  .card.dark { background: var(--deep); border-color: transparent; }
+  .card h3 { margin: 0 0 2px; font-size: 14px; color: var(--ink); font-weight: 600; }
+  .card.dark h3 { color: #fff; }
+  .card p { margin: 0 0 18px; font-size: 12.5px; color: var(--ink-faint); line-height: 1.55; }
+  .card.dark p { color: rgba(255,255,255,.6); }
+
+  /* Gerçek boyut testi: aynı işaret beş boyutta */
+  .sizes { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+  .sizes figure { margin: 0; text-align: center; }
+  .sizes figcaption { margin-top: 8px; font-size: 10.5px; color: var(--ink-faint); }
+  .card.dark .sizes figcaption { color: rgba(255,255,255,.5); }
+
+  .s96 { width: 96px; height: 96px; }
+  .s48 { width: 48px; height: 48px; }
+  .s32 { width: 32px; height: 32px; }
+  .s24 { width: 24px; height: 24px; }
+  .s16 { width: 16px; height: 16px; }
+
+  /* Wordmark kilitlenmeleri */
+  .lock { display: inline-flex; align-items: center; gap: 12px; }
+  .lock .name { display: flex; flex-direction: column; line-height: 1; }
+  .lock .name b { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; color: var(--deep); }
+  .lock .name b i { font-style: normal; color: var(--bright); }
+  .lock .name span {
+    margin-top: 5px; font-size: 9.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .16em; color: var(--ink-faint);
+  }
+  .dark .lock .name b { color: #fff; }
+  .dark .lock .name b i { color: #8ecdf5; }
+  .dark .lock .name span { color: rgba(255,255,255,.55); }
+
+  .stack { display: inline-flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+
+  .ctx { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border: 1px solid var(--line); border-radius: 12px;
+    background: #fff;
+  }
+  .bar nav { display: flex; gap: 18px; font-size: 12.5px; color: var(--ink-soft); }
+  .tab {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--sunk); color: var(--ink-soft); max-width: 230px;
+  }
+  .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .bad { border-left: 3px solid #f43f5e; padding-left: 14px; }
+  .good { border-left: 3px solid #10b981; padding-left: 14px; }
+  ul { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.75; }
+  li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17305e" />
+      <stop offset="0.55" stop-color="#1a5fb4" />
+      <stop offset="1" stop-color="#0e90d5" />
+    </linearGradient>
+
+    <symbol id="m-kn" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g-brand)" />
+      <g stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M10.4 8.6 V 23.4" />
+        <path d="M12.1 16 L 18.6 9.6" />
+        <path d="M12.1 16 L 18.9 23.4" />
+      </g>
+      <path d="M22.4 23.4 V 17.6 a 2.6 2.6 0 0 1 5.2 0 V 23.4" fill="none"
+            stroke="#8ecdf5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+
+    <symbol id="m-knokta" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g-brand)" />
+      <g stroke="#ffffff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11 8.8 V 23.2" />
+        <path d="M12.8 16 L 21.4 23.2" />
+        <path d="M12.8 16 L 19.8 10.2" />
+      </g>
+      <circle cx="22.4" cy="8.6" r="2.4" fill="#ffffff" />
+    </symbol>
+
+    <symbol id="m-knokta-mono" viewBox="0 0 32 32">
+      <g stroke="#ffffff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11 8.8 V 23.2" />
+        <path d="M12.8 16 L 21.4 23.2" />
+        <path d="M12.8 16 L 19.8 10.2" />
+      </g>
+      <circle cx="22.4" cy="8.6" r="2.4" fill="#ffffff" />
+    </symbol>
+
+    <symbol id="m-ksade" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g-brand)" />
+      <g stroke="#ffffff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11.2 8.6 V 23.4" />
+        <path d="M13.2 16 L 21.6 8.8" />
+        <path d="M13.2 16 L 21.8 23.4" />
+      </g>
+    </symbol>
+
+    <symbol id="m-favicon" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#1a5fb4" />
+      <g stroke="#ffffff" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11.4 9.4 V 22.6" />
+        <path d="M13.2 16 L 21 22.6" />
+        <path d="M13.2 16 L 19.4 10.8" />
+      </g>
+      <circle cx="21.6" cy="9.4" r="2.5" fill="#ffffff" />
+    </symbol>
+
+    <symbol id="m-checkup" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g-brand)" />
+      <polyline points="7.5,17.5 12.5,22 19,14 24.5,8.5" fill="none" stroke="white"
+                stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="24.5" cy="8.5" r="2.2" fill="white" />
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <h1>Koçum.Net — logo çalışması</h1>
+  <p class="lead">
+    Üç yön. Hepsi aynı ızgarada çizildi, hepsi SVG (her boyutta net), hepsi
+    marka paletinde. Her kartta işaret beş boyutta birden duruyor — asıl
+    sınav 16 piksellik hâli, çünkü sekme ikonunda insanlar logoyu o boyutta
+    görüyor.
+  </p>
+
+  <h2>Yön 1 — senin fikrinin düzeltilmiş hâli</h2>
+  <p class="note">
+    "Kn" konsepti duruyor. Sarı ve yeşil çıktı (markanın hiçbir yerinde yoklar),
+    "n" kareden taşmayıp içeri alındı, K ızgaraya oturtuldu.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Kn</h3>
+      <p>İki harf, iki mavi ton.</p>
+      <div class="sizes">
+        <figure><svg class="s96" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>96</figcaption></figure>
+        <figure><svg class="s48" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+    <div class="card dark">
+      <h3>Koyu zeminde</h3>
+      <p>Aynı dosya, lacivert üstünde.</p>
+      <div class="sizes">
+        <figure><svg class="s96" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>96</figcaption></figure>
+        <figure><svg class="s48" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s16" aria-hidden="true"><use href="#m-kn" /></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+  </div>
+
+  <h2>Yön 2 — önerim</h2>
+  <p class="note">
+    K'nın üst kolu yükselen bir çizgiye dönüşüp ucunda noktayla bitiyor.
+    O nokta check-up uygulamasının işaretindeki noktanın aynısı: orada da
+    onay işaretinin sağ kolu yükselip aynı noktayla bitiyor. İki ürün
+    böylece akraba görünüyor — ana marka <b>K</b>, ürün <b>✓</b>, ikisinde de
+    aynı yükselen hareket.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>K + nokta</h3>
+      <p>Tek şekil, tek renk çalışabiliyor.</p>
+      <div class="sizes">
+        <figure><svg class="s96" aria-hidden="true"><use href="#m-knokta" /></svg><figcaption>96</figcaption></figure>
+        <figure><svg class="s48" aria-hidden="true"><use href="#m-knokta" /></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" aria-hidden="true"><use href="#m-knokta" /></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" aria-hidden="true"><use href="#m-knokta" /></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" aria-hidden="true"><use href="#m-favicon" /></svg><figcaption>16 · favicon</figcaption></figure>
+      </div>
+    </div>
+    <div class="card dark">
+      <h3>Tek renk</h3>
+      <p>Kare yok — damga, nakış, tek renk baskı.</p>
+      <div class="sizes">
+        <figure><svg class="s96" aria-hidden="true"><use href="#m-knokta-mono" /></svg><figcaption>96</figcaption></figure>
+        <figure><svg class="s48" aria-hidden="true"><use href="#m-knokta-mono" /></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" aria-hidden="true"><use href="#m-knokta-mono" /></svg><figcaption>32</figcaption></figure>
+      </div>
+    </div>
+  </div>
+
+  <h2>Yön 3 — en sade</h2>
+  <p class="note">
+    Sadece K. "Net" işarette değil, wordmark'ta yaşıyor. En güvenli seçenek:
+    hiçbir boyutta bozulmaz, hiçbir baskı tekniğinde sorun çıkarmaz.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>K</h3>
+      <p>Süssüz.</p>
+      <div class="sizes">
+        <figure><svg class="s96" aria-hidden="true"><use href="#m-ksade" /></svg><figcaption>96</figcaption></figure>
+        <figure><svg class="s48" aria-hidden="true"><use href="#m-ksade" /></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="s32" aria-hidden="true"><use href="#m-ksade" /></svg><figcaption>32</figcaption></figure>
+        <figure><svg class="s24" aria-hidden="true"><use href="#m-ksade" /></svg><figcaption>24</figcaption></figure>
+        <figure><svg class="s16" aria-hidden="true"><use href="#m-ksade" /></svg><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--ink-faint)">Şu anki hâli (karşılaştırma)</h3>
+      <p>Canlı sitedeki soyut "çift yaprak" işareti.</p>
+      <div class="sizes">
+        <svg class="s96" viewBox="0 0 52 52" fill="none"><path d="M26 6c-6 8-14 20-12 32 10 2 18-8 22-18 2-8-4-16-10-14z" fill="#5aadf0"/><path d="M26 6c8 10 14 22 10 34-12 4-22-6-26-16 8-12 14-18 16-18z" fill="#1a5fb4"/></svg>
+        <svg class="s32" viewBox="0 0 52 52" fill="none"><path d="M26 6c-6 8-14 20-12 32 10 2 18-8 22-18 2-8-4-16-10-14z" fill="#5aadf0"/><path d="M26 6c8 10 14 22 10 34-12 4-22-6-26-16 8-12 14-18 16-18z" fill="#1a5fb4"/></svg>
+        <svg class="s16" viewBox="0 0 52 52" fill="none"><path d="M26 6c-6 8-14 20-12 32 10 2 18-8 22-18 2-8-4-16-10-14z" fill="#5aadf0"/><path d="M26 6c8 10 14 22 10 34-12 4-22-6-26-16 8-12 14-18 16-18z" fill="#1a5fb4"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <h2>Wordmark kilitlenmesi</h2>
+  <p class="note">
+    Marka adı <b>Koçum.Net</b> — noktayla. Gönderdiğin dosyada "Koçum Net"
+    yazıyordu; nokta alan adının parçası, düşerse marka adı değişmiş oluyor.
+    ".Net" camgöbeğiyle ayrılıyor.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Yatay</h3>
+      <p>Üst çubuk, antetli kağıt, e-posta imzası.</p>
+      <div class="lock">
+        <svg class="s48" aria-hidden="true"><use href="#m-knokta" /></svg>
+        <span class="name"><b>Koçum<i>.Net</i></b><span>Sınav hazırlık koçluğu</span></span>
+      </div>
+    </div>
+    <div class="card dark">
+      <h3>Yatay — koyu</h3>
+      <p>Alt bilgi, koyu bölümler.</p>
+      <div class="lock">
+        <svg class="s48" aria-hidden="true"><use href="#m-knokta" /></svg>
+        <span class="name"><b>Koçum<i>.Net</i></b><span>Sınav hazırlık koçluğu</span></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Dikey</h3>
+      <p>Kare alanlar: sosyal medya profili, damga.</p>
+      <div class="stack">
+        <svg class="s96" aria-hidden="true"><use href="#m-knokta" /></svg>
+        <span class="name" style="text-align:center"><b>Koçum<i>.Net</i></b><span>Sınav hazırlık koçluğu</span></span>
+      </div>
+    </div>
+  </div>
+
+  <h2>Gerçek kullanım</h2>
+  <p class="note">İşaretin asıl sınavı burası — küçük ve kalabalık yerler.</p>
+  <div class="ctx">
+    <div>
+      <div class="bar">
+        <span class="lock">
+          <svg class="s32" aria-hidden="true"><use href="#m-knokta" /></svg>
+          <span class="name"><b style="font-size:16px">Koçum<i>.Net</i></b></span>
+        </span>
+        <nav><span>Hizmetler</span><span>Ürünler</span><span>Blog</span></nav>
+      </div>
+      <p class="note" style="margin-top:10px">Site üst çubuğu (32px)</p>
+    </div>
+    <div>
+      <div class="tab">
+        <svg class="s16" aria-hidden="true"><use href="#m-favicon" /></svg>
+        <span>Koçum.Net — Sınava kadar aklında</span>
+      </div>
+      <p class="note" style="margin-top:10px">Tarayıcı sekmesi (16px)</p>
+    </div>
+  </div>
+
+  <h2>Karar notu</h2>
+  <div class="grid">
+    <div class="card">
+      <h3 class="bad" style="border:0;padding:0">Gönderdiğin dosyada düzeltilmesi gerekenler</h3>
+      <ul style="margin-top:12px">
+        <li>Sarı + yeşil markada yok; palet tamamen mavi ailesi</li>
+        <li>"Koçum Net" → <b>Koçum.Net</b> (nokta alan adının parçası)</li>
+        <li>"n" kareden taşıyor → 16px'te leke</li>
+        <li>K'nın kolları hizasız, ızgaraya oturmuyor</li>
+        <li>JPG → her boyutta bulanık; logo <b>SVG</b> olmalı</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="good" style="border:0;padding:0">Önerim: Yön 2</h3>
+      <ul style="margin-top:12px">
+        <li>Check-up işaretiyle akraba (aynı yükselen hareket, aynı nokta)</li>
+        <li>16px'te hâlâ K olarak okunuyor</li>
+        <li>Tek renk çalışıyor</li>
+        <li>"Koç" fikrini taşıyor: yön gösteren, yükselten</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

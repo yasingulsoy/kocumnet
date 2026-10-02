@@ -1,6 +1,7 @@
 import { getSiteUrl } from "@/lib/site";
 import { SITE_BRAND } from "@/lib/site-brand";
 import { fetchBlogs } from "@/lib/api";
+import type { BlogPost } from "@/lib/blog";
 import { blogPath, localizedPath } from "@/lib/routes";
 import { PRODUCTS } from "@/lib/products";
 
@@ -26,7 +27,7 @@ export async function GET() {
   const enBlogs = (await fetchBlogs({ limit: 30, locale: "en" }))?.data ?? [];
   const arBlogs = (await fetchBlogs({ limit: 30, locale: "ar" }))?.data ?? [];
 
-  const blogSatirlari = (posts: any[], locale: "tr" | "en" | "ar") =>
+  const blogSatirlari = (posts: BlogPost[], locale: "tr" | "en" | "ar") =>
     posts
       .map((p) => {
         const ozet = (p.excerpt || p.meta_description || "")

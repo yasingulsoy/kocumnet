@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 1060" width="700" height="1060" font-family="Poppins, Segoe UI, sans-serif">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17305e"/><stop offset="0.55" stop-color="#1a5fb4"/><stop offset="1" stop-color="#0e90d5"/>
+    </linearGradient>
+
+    <symbol id="kn" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g)"/>
+      <g stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M10.4 8.6 V 23.4"/><path d="M12.1 16 L 18.6 9.6"/><path d="M12.1 16 L 18.9 23.4"/>
+      </g>
+      <path d="M22.4 23.4 V 17.6 a 2.6 2.6 0 0 1 5.2 0 V 23.4" fill="none" stroke="#8ecdf5"
+            stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="knokta" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g)"/>
+      <g stroke="#fff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11 8.8 V 23.2"/><path d="M12.8 16 L 21.4 23.2"/><path d="M12.8 16 L 19.8 10.2"/>
+      </g>
+      <circle cx="22.4" cy="8.6" r="2.4" fill="#fff"/>
+    </symbol>
+    <symbol id="ksade" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g)"/>
+      <g stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <path d="M11.2 8.6 V 23.4"/><path d="M13.2 16 L 21.6 8.8"/><path d="M13.2 16 L 21.8 23.4"/>
+      </g>
+    </symbol>
+    <symbol id="checkup" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#g)"/>
+      <polyline points="7.5,17.5 12.5,22 19,14 24.5,8.5" fill="none" stroke="#fff"
+                stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="24.5" cy="8.5" r="2.2" fill="#fff"/>
+    </symbol>
+    <symbol id="eski" viewBox="0 0 52 52">
+      <path d="M26 6c-6 8-14 20-12 32 10 2 18-8 22-18 2-8-4-16-10-14z" fill="#5aadf0"/>
+      <path d="M26 6c8 10 14 22 10 34-12 4-22-6-26-16 8-12 14-18 16-18z" fill="#1a5fb4"/>
+    </symbol>
+  </defs>
+  <style>
+    .t  { font-size: 20px; font-weight: 700; fill: #111834; }
+    .h  { font-size: 12px; font-weight: 600; fill: #1a5fb4; letter-spacing: .1em; }
+    .s  { font-size: 12px; fill: #6b7392; }
+    .c  { font-size: 9px; fill: #8990a8; text-anchor: middle; }
+  </style>
+  <rect width="700" height="1060" fill="#ffffff"/>
+  <text x="40" y="42" class="t">Koçum.Net — işaret karşılaştırması</text>
+  <text x="40" y="70" class="h">YÖN 1 · senin fikrin, düzeltilmiş</text>
+  <text x="40" y="89" class="s">Sarı-yeşil çıktı, "n" kare içine alındı. 24px altında "n" lekeye dönüşüyor.</text>
+  <use href="#kn" x="40" y="110" width="96" height="96"/>
+  <text x="88" y="222" class="c">96px</text>
+  <use href="#kn" x="166" y="158" width="48" height="48"/>
+  <text x="190" y="222" class="c">48px</text>
+  <use href="#kn" x="244" y="174" width="32" height="32"/>
+  <text x="260" y="222" class="c">32px</text>
+  <use href="#kn" x="306" y="182" width="24" height="24"/>
+  <text x="318" y="222" class="c">24px</text>
+  <use href="#kn" x="360" y="190" width="16" height="16"/>
+  <text x="368" y="222" class="c">16px</text>
+  <text x="40" y="270" class="h">YÖN 2 · önerim</text>
+  <text x="40" y="289" class="s">K’nın üst kolu yükseliyor, ucunda check-up işaretiyle ortak nokta var.</text>
+  <use href="#knokta" x="40" y="310" width="96" height="96"/>
+  <text x="88" y="422" class="c">96px</text>
+  <use href="#knokta" x="166" y="358" width="48" height="48"/>
+  <text x="190" y="422" class="c">48px</text>
+  <use href="#knokta" x="244" y="374" width="32" height="32"/>
+  <text x="260" y="422" class="c">32px</text>
+  <use href="#knokta" x="306" y="382" width="24" height="24"/>
+  <text x="318" y="422" class="c">24px</text>
+  <use href="#knokta" x="360" y="390" width="16" height="16"/>
+  <text x="368" y="422" class="c">16px</text>
+  <text x="40" y="470" class="h">YÖN 3 · en sade</text>
+  <text x="40" y="489" class="s">Sadece K. Her boyutta, her baskı tekniğinde sorunsuz.</text>
+  <use href="#ksade" x="40" y="510" width="96" height="96"/>
+  <text x="88" y="622" class="c">96px</text>
+  <use href="#ksade" x="166" y="558" width="48" height="48"/>
+  <text x="190" y="622" class="c">48px</text>
+  <use href="#ksade" x="244" y="574" width="32" height="32"/>
+  <text x="260" y="622" class="c">32px</text>
+  <use href="#ksade" x="306" y="582" width="24" height="24"/>
+  <text x="318" y="622" class="c">24px</text>
+  <use href="#ksade" x="360" y="590" width="16" height="16"/>
+  <text x="368" y="622" class="c">16px</text>
+  <text x="40" y="670" class="h">MEVCUT · check-up uygulaması</text>
+  <text x="40" y="689" class="s">Onay işaretinin sağ kolu yükselen grafik çizgisine dönüşüyor.</text>
+  <use href="#checkup" x="40" y="710" width="96" height="96"/>
+  <text x="88" y="822" class="c">96px</text>
+  <use href="#checkup" x="166" y="758" width="48" height="48"/>
+  <text x="190" y="822" class="c">48px</text>
+  <use href="#checkup" x="244" y="774" width="32" height="32"/>
+  <text x="260" y="822" class="c">32px</text>
+  <use href="#checkup" x="306" y="782" width="24" height="24"/>
+  <text x="318" y="822" class="c">24px</text>
+  <use href="#checkup" x="360" y="790" width="16" height="16"/>
+  <text x="368" y="822" class="c">16px</text>
+  <text x="40" y="870" class="h">MEVCUT · canlı sitedeki işaret</text>
+  <text x="40" y="889" class="s">Soyut çift yaprak. Ne K ile ne check-up ile akraba.</text>
+  <use href="#eski" x="40" y="910" width="96" height="96"/>
+  <text x="88" y="1022" class="c">96px</text>
+  <use href="#eski" x="166" y="958" width="48" height="48"/>
+  <text x="190" y="1022" class="c">48px</text>
+  <use href="#eski" x="244" y="974" width="32" height="32"/>
+  <text x="260" y="1022" class="c">32px</text>
+  <use href="#eski" x="306" y="982" width="24" height="24"/>
+  <text x="318" y="1022" class="c">24px</text>
+  <use href="#eski" x="360" y="990" width="16" height="16"/>
+  <text x="368" y="1022" class="c">16px</text>
+</svg>
