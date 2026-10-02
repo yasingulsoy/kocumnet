@@ -18,6 +18,9 @@ export const NAV_ITEMS = [
  */
 function isActive(pathname: string, href: string) {
   if (href === "/gelisim" && pathname.startsWith("/sonuc")) return true;
+  // Seviyeli check-up da bir test: girişi "Testler" sekmesinde.
+  if (href === "/paketler" && (pathname.startsWith("/seviyeli") || pathname.startsWith("/seviye/")))
+    return true;
   return pathname === href || pathname.startsWith(href + "/");
 }
 

@@ -17,6 +17,15 @@ import {
   MAX_TOPICS_PER_WEEK,
 } from "../lib/coaching";
 import { EXAMS, EXAM_SCOPES, SECILEBILIR_SINAVLAR } from "../lib/exams";
+import {
+  ayarGetir,
+  kapiMesaji,
+  karneBasligi,
+  seviye1AnaKarar,
+  telafiKarar,
+  ustSeviyeKarar,
+  VARSAYILAN_AYAR,
+} from "../lib/levels";
 import type { TopicBreakdownEntry } from "../lib/scoring";
 import type { ReviewItem } from "../lib/checkup";
 import type { TopicBreakdown } from "../lib/scoring";
@@ -346,6 +355,83 @@ check("pazar gecesi hafta değişmiyor", pazar.toISOString().startsWith("2026-03
   pazar.toISOString());
 check("pazartesi yeni hafta", pazartesi.toISOString().startsWith("2026-03-16"),
   pazartesi.toISOString());
+
+// -----------------------------------------------------------
+// Seviyeli check-up: kapi mantigi
+// -----------------------------------------------------------
+console.log("");
+console.log("Seviyeli check-up - Seviye 1 kapisi:");
+
+const ay = VARSAYILAN_AYAR;
+const eksikler = (n: number) => Array.from({ length: n }, (_, i) => "kz-" + i);
+
+// Sema: 30-50 dogru (>= %60) -> dogrudan Seviye 2
+const k60 = seviye1AnaKarar(30, 50, eksikler(20), ay);
+check("30/50 (%60) dogrudan Seviye 2", k60.tur === "SONRAKI_SEVIYE" && k60.seviye === 2);
+
+// Sema: 29 ve alti -> telafi turu
+const k29 = seviye1AnaKarar(29, 50, eksikler(21), ay);
+check("29/50 telafi turu aciyor", k29.tur === "TELAFI");
+check("telafi yalnizca eksik kazanimlardan",
+  k29.tur === "TELAFI" && k29.soruSayisi === 21, String(k29.tur === "TELAFI" ? k29.soruSayisi : "-"));
+check("telafi suresi soru sayisina gore",
+  k29.tur === "TELAFI" && k29.dakika === 21);
+
+// Matematiksel kisa devre: telafiyi tam yapsa bile baraji asamayacak ogrenci
+const k10 = seviye1AnaKarar(10, 50, eksikler(40), ay);
+check("10/50 hala telafi hakki var (50/90 = %55.6)", k10.tur === "TELAFI");
+const k9 = seviye1AnaKarar(9, 50, eksikler(41), ay);
+check("9/50 telafiye SOKULMUYOR (50/91 = %54.9 < %55)", k9.tur === "DUR");
+check("kisa devre sebebi BARAJ", k9.tur === "DUR" && k9.sebep === "BARAJ");
+
+// Hic eksik yoksa (hepsi dogru ama oran dusuk olamaz) -> savunma
+check("eksik kazanim yoksa telafi acilmaz", seviye1AnaKarar(20, 50, [], ay).tur === "DUR");
+
+console.log("");
+console.log("Seviyeli check-up - telafi sonrasi:");
+
+// Birlesik oran: (ana dogru + telafi dogru) / (ana toplam + telafi toplam)
+const t60 = telafiKarar(25, 50, 20, 25, ay);
+check("25/50 + 20/25 = 45/75 (%60) -> Seviye 2", t60.tur === "SONRAKI_SEVIYE");
+const t46 = telafiKarar(25, 50, 10, 25, ay);
+check("25/50 + 10/25 = 35/75 (%46.7) -> DUR", t46.tur === "DUR");
+check("telafi sonrasi durus sebebi ayri",
+  t46.tur === "DUR" && t46.sebep === "TELAFI_SONRASI");
+// Tam sinir: 41.25 -> 42 dogru gerekiyor
+check("sinirda 42/75 (%56) geciyor", telafiKarar(25, 50, 17, 25, ay).tur === "SONRAKI_SEVIYE");
+check("sinirda 41/75 (%54.7) geciyor DEGIL", telafiKarar(25, 50, 16, 25, ay).tur === "DUR");
+
+console.log("");
+console.log("Seviyeli check-up - Seviye 2 ve 3:");
+
+check("15/25 (%60) -> Seviye 3", ustSeviyeKarar(2, 15, 25, ay).tur === "SONRAKI_SEVIYE");
+const s14 = ustSeviyeKarar(2, 14, 25, ay);
+check("14/25 (%56) -> DUR", s14.tur === "DUR" && s14.seviye === 2);
+check("Seviye 3'te baraj yok, her sonuc BITTI",
+  ustSeviyeKarar(3, 5, 25, ay).tur === "BITTI" && ustSeviyeKarar(3, 25, 25, ay).tur === "BITTI");
+
+console.log("");
+console.log("Seviyeli check-up - ayarlar ve metin:");
+
+check("varsayilan 50 + 25 + 25 soru",
+  ay.seviye1.soruSayisi === 50 && ay.seviye2.soruSayisi === 25 && ay.seviye3.soruSayisi === 25);
+check("Seviye 2 suresi semadaki 30-35 araliginda",
+  ay.seviye2.dakika >= 30 && ay.seviye2.dakika <= 35, ay.seviye2.dakika + " dk");
+check("LGS ayri ayarlanmis (daha kisa)",
+  ayarGetir("LGS").seviye1.soruSayisi < ayarGetir("TYT").seviye1.soruSayisi);
+check("LGS telafi esigi varsayilanla ayni",
+  ayarGetir("LGS").telafiSonrasiOran === ay.telafiSonrasiOran);
+
+const mesaj = kapiMesaji(k60, 0.6);
+check("kapi mesaji sayi iceriyor", /\d/.test(mesaj.baslik), mesaj.baslik);
+check("durus mesaji 'bad' tonunda", kapiMesaji(k9, 0.18).ton === "bad");
+check("telafi mesaji 'warn' tonunda", kapiMesaji(k29, 0.58).ton === "warn");
+check("karne adlari semadaki gibi",
+  karneBasligi(1, "STOPPED") === "Seviye 1 Eksik Analiz Karnesi" &&
+  karneBasligi(2, "STOPPED") === "Seviye 2 Teşhis Karnesi" &&
+  karneBasligi(3, "COMPLETED") === "Nihai Check-up Raporu");
+check("akis surerken 'kaldin' baslig i cikmiyor",
+  karneBasligi(1, "IN_PROGRESS") === "Şu ana kadarki durumun");
 
 console.log(failed === 0 ? "\nTümü geçti.\n" : `\n${failed} kontrol BAŞARISIZ.\n`);
 process.exitCode = failed === 0 ? 0 : 1;

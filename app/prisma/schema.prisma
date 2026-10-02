@@ -133,6 +133,8 @@ model Topic {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  objectives Objective[]
+
   @@index([parentId, sortOrder])
   @@index([examScope])
 }
@@ -149,6 +151,10 @@ enum PackageKind {
   STANDARD
   INTRO
   RETEST
+  /// Seviyeli check-up. Üç aşamanın da bağlandığı tek paket satırı:
+  /// erişim hakkı, ad ve ücretlendirme buradan. Aşama süreleri ve soru
+  /// sayıları pakette DEĞİL, lib/levels.ts'te — tek doğruluk kaynağı.
+  LEVEL
 }
 
 /// Check-up paketi = kapsamı ve soru dağılımı tanımlı bir test.
@@ -250,6 +256,15 @@ model Question {
   /// LGS testine düşmemeli.
   examScopes ExamScope[] @default([])
 
+  /// Hangi kazanımı ölçüyor (seviyeli check-up). Paket testlerinde boş
+  /// olabilir — orada ölçüm konu düzeyinde.
+  objectiveId String?
+  objective   Objective? @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+
+  /// Seviyeli check-up'ta hangi seviyenin malzemesi. Boş = yalnızca paket
+  /// testlerinde kullanılır.
+  level QuestionLevel?
+
   /// Ampirik zorluk kalibrasyonu için — difficulty elle girilir, bunlar ölçülür.
   shownCount   Int @default(0)
   correctCount Int @default(0)
@@ -274,6 +289,9 @@ model Question {
 
   /// Soru seçiminin ana sorgusu: konu + yayında + zorluk.
   @@index([topicId, status, difficulty])
+  /// Seviyeli seçimin ana sorgusu: kazanım + seviye + yayında.
+  @@index([objectiveId, level, status])
+  @@index([level, status])
   @@index([status])
   @@index([importBatchId])
 }
@@ -327,8 +345,8 @@ model MediaAsset {
   /// Ekran okuyucu için zorunlu — boş bırakılırsa soru erişilemez olur.
   alt String
 
-  uploadedById String?
-  uploadedBy   User?   @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById    String?
+  uploadedBy      User?   @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   /// Yükleyen personel damgası — bkz. Question.createdByStaff.
   uploadedByStaff String?
 
@@ -353,8 +371,8 @@ model ImportBatch {
 
   questions Question[]
 
-  createdById String?
-  createdBy   User?   @relation("ImportAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById    String?
+  createdBy      User?   @relation("ImportAuthor", fields: [createdById], references: [id], onDelete: SetNull)
   /// İçe aktaran personel damgası — bkz. Question.createdByStaff.
   createdByStaff String?
 
@@ -367,11 +385,11 @@ model ImportBatch {
 // ─────────────────────────────────────────────────────────────
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id           String @id @default(cuid())
+  email        String @unique
   passwordHash String
   name         String
-  role         Role    @default(STUDENT)
+  role         Role   @default(STUDENT)
 
   grade      Grade?
   targetExam ExamScope?
@@ -379,29 +397,31 @@ model User {
 
   /// Hedef net (o sınavın matematik soru sayısına göre). Koçun ilk sorduğu
   /// üç şeyden biri: hangi sınav, ne zaman, kaç net.
-  targetNet      Decimal? @db.Decimal(5, 2)
+  targetNet      Decimal?  @db.Decimal(5, 2)
   targetExamYear Int?
   /// Haftada kaç check-up hedefliyor — plan bunun üstüne kuruluyor.
-  weeklyTestGoal Int      @default(1)
+  weeklyTestGoal Int       @default(1)
   /// Tanışma adımları tamamlandı mı. null = hiç sormadık (sorup geçmekten farklı).
   onboardedAt    DateTime?
 
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
 
-  authSessions     AuthSession[]
-  resetTokens      PasswordResetToken[]
-  checkupSessions  CheckupSession[]
-  exposures        QuestionExposure[]
-  authoredQuestions Question[]    @relation("QuestionAuthor")
-  uploadedMedia     MediaAsset[]  @relation("MediaUploader")
-  entitlements      Entitlement[]
-  grantedEntitlements Entitlement[] @relation("EntitlementGranter")
-  importBatches    ImportBatch[]  @relation("ImportAuthor")
-  studyPlans       StudyPlan[]
+  authSessions        AuthSession[]
+  resetTokens         PasswordResetToken[]
+  checkupSessions     CheckupSession[]
+  exposures           QuestionExposure[]
+  authoredQuestions   Question[]           @relation("QuestionAuthor")
+  uploadedMedia       MediaAsset[]         @relation("MediaUploader")
+  entitlements        Entitlement[]
+  grantedEntitlements Entitlement[]        @relation("EntitlementGranter")
+  importBatches       ImportBatch[]        @relation("ImportAuthor")
+  studyPlans          StudyPlan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  levelRuns LevelRun[]
 
   @@index([role])
 }
@@ -491,6 +511,32 @@ model Entitlement {
 enum SessionKind {
   PACKAGE
   TOPIC_RETEST
+  /// Seviyeli check-up'ın bir aşaması (lib/levels.ts).
+  LEVEL_STAGE
+}
+
+/// Soru hangi seviyede sorulabilir (seviyeli check-up).
+enum QuestionLevel {
+  /// Tek kazanım, temel kural/işlem. Seviye 1'in malzemesi.
+  L1_TEMEL
+  /// İki konu birleşik ya da çok adımlı. Seviye 2.
+  L2_ORTA
+  /// Sınav standardı, analiz-yorum. Seviye 3.
+  L3_ANALIZ
+}
+
+/// Bir aşama ana tur mu, telafi turu mu.
+enum StageKind {
+  MAIN
+  REMEDIAL
+}
+
+enum LevelRunStatus {
+  IN_PROGRESS
+  /// Üç seviye de tamamlandı.
+  COMPLETED
+  /// Bir kapıda durdu; stoppedAtLevel hangi seviyede olduğunu söyler.
+  STOPPED
 }
 
 /// Bir öğrencinin bir check-up denemesi.
@@ -506,6 +552,15 @@ model CheckupSession {
   /// TOPIC_RETEST ise hangi konu ölçülüyor.
   focusTopicId String?
   focusTopic   Topic?  @relation("RetestTopic", fields: [focusTopicId], references: [id], onDelete: Restrict)
+
+  /// LEVEL_STAGE ise hangi denemenin hangi aşaması.
+  /// Aşamalar BİLEREK ayrı oturum: her birinin kendi süresi var ve öğrenci
+  /// aralarında ara verebiliyor. Böylece mevcut oturum makinesi (soru
+  /// sabitleme, sayaç, cevap kaydı, sızıntı koruması) olduğu gibi çalışıyor.
+  levelRunId String?
+  levelRun   LevelRun?  @relation(fields: [levelRunId], references: [id], onDelete: Cascade)
+  stageLevel Int?
+  stageKind  StageKind?
 
   /// Havuz dar olduğu için tekrar gösterilmek zorunda kalınan soru sayısı.
   /// Hesaplanıyordu ama atılıyordu; "bu paketi tekrar çözmeni öneririm"
@@ -533,6 +588,7 @@ model CheckupSession {
   @@index([userId, status, expiresAt])
   @@index([packageId])
   @@index([focusTopicId])
+  @@index([levelRunId, stageLevel])
 }
 
 /// Oturuma seçilen soru + sıra. Cevaptan ayrı tablo: soru listesi oturum
@@ -545,7 +601,7 @@ model SessionItem {
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
 
-  sortOrder Int
+  sortOrder       Int
   /// Sorunun oturum anındaki sürümü (PLAN §4).
   questionVersion Int
 
@@ -568,7 +624,7 @@ model Answer {
   /// Sunucuda hesaplanır. null sadece boş cevapta.
   isCorrect Boolean?
 
-  timeSpentMs Int @default(0)
+  timeSpentMs  Int @default(0)
   /// Kaç kez şık değiştirdi — kararsızlık sinyali.
   changedCount Int @default(0)
 
@@ -591,7 +647,7 @@ model CheckupResult {
   totalTimeMs  Int
 
   /// { topics: [{ topicId, name, asked, correct, wrong, blank, ratio, level, avgTimeMs }] }
-  topicBreakdown Json
+  topicBreakdown        Json
   /// Zayıf konulardan türeyen ürün önerileri.
   recommendedProductIds String[] @default([])
 
@@ -600,9 +656,9 @@ model CheckupResult {
   /// "genel başarı" çizgisinde toplamak anlamsız.
   examScope ExamScope?
 
-  computedAt DateTime @default(now())
+  computedAt     DateTime @default(now())
   /// Hangi sürümle hesaplandı — puanlama mantığı değişirse eski sonuçlar ayırt edilsin.
-  scoringVersion Int @default(1)
+  scoringVersion Int      @default(1)
 
   @@index([computedAt])
 }
@@ -610,6 +666,78 @@ model CheckupResult {
 // ─────────────────────────────────────────────────────────────
 // Haftalık çalışma planı
 // ─────────────────────────────────────────────────────────────
+
+/// Kazanım — ölçülebilir en küçük öğrenme hedefi. Konunun altında durur.
+///
+/// Neden ayrı tablo: seviyeli check-up'ın telafi turu "eksik KAZANIMLARDAN
+/// yeni sorular" getiriyor. Konu seviyesinde çalışsaydı "Problemler"de bir
+/// soruyu kaçıran öğrenciye problemlerin tamamından soru gelirdi. Kazanım,
+/// konudan bir kat daha ince: "Bölme ve Bölünebilme" bir konu, "3 ve 9 ile
+/// bölünebilme kuralını uygular" bir kazanım.
+model Objective {
+  id      String @id @default(cuid())
+  topicId String
+  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  /// İçerik ekibinin kullandığı kalıcı kod — soru dosyalarında bu geçiyor.
+  code String @unique
+  name String
+
+  /// Hangi sınavlarda ölçülüyor. Boş = konusunun geçtiği her sınavda.
+  examScopes ExamScope[] @default([])
+
+  sortOrder Int           @default(0)
+  status    PublishStatus @default(DRAFT)
+
+  questions Question[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([topicId, sortOrder])
+  @@index([status])
+}
+
+/// Seviyeli check-up denemesi — üç seviyelik zincirin tamamı.
+///
+/// Aşamaların kendisi CheckupSession satırları; bu tablo yalnızca zinciri
+/// ve kapı kararlarını tutuyor.
+model LevelRun {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  examScope ExamScope
+
+  status LevelRunStatus @default(IN_PROGRESS)
+
+  /// Durduysa hangi seviyede (1 ya da 2). Tamamlandıysa null.
+  stoppedAtLevel Int?
+
+  /// Öğrencinin ulaştığı en yüksek seviye — raporun başlığı bu.
+  reachedLevel Int @default(1)
+
+  /// Şu an hangi seviye oynanabilir. Kapı açıldıkça artar.
+  unlockedLevel Int @default(1)
+
+  /// Kapı kararlarının dökümü (lib/levels.ts çıktısı). Karne bunu okuyor.
+  gateLog Json?
+
+  /// Telafi turu bekliyorsa hangi kazanımlardan soru gelecek.
+  ///
+  /// Tur BİLEREK hemen açılmıyor: şema "ekrana uyarı gelir" diyor ve
+  /// haklı — öğrenci neden ek soru çözdüğünü bilmeden soruyla
+  /// karşılaşmamalı. Ayrıca sayaç, öğrenci "devam" dediğinde başlamalı.
+  pendingRemedialIds String[] @default([])
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  stages CheckupSession[]
+
+  @@index([userId, startedAt])
+  @@index([status])
+}
 
 enum PlanStatus {
   ACTIVE
@@ -665,7 +793,7 @@ model PlanItem {
 
   targetQuestionCount Int?
   estimatedMinutes    Int
-  sortOrder           Int @default(0)
+  sortOrder           Int  @default(0)
 
   /// Önerilen yayın (lib/products.ts kimliği).
   productId String?

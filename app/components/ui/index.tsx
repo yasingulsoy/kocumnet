@@ -23,6 +23,8 @@ const VARIANTS = {
   ghost: "text-ink-soft hover:bg-surface-hover hover:text-ink",
   danger: "bg-bad-wash text-bad hover:bg-bad-fill hover:text-white",
   white: "bg-white text-brand-deep shadow-raised hover:bg-brand-wash",
+  /// Koyu/gradyan zemin üstünde ikincil eylem — beyaz düğmenin yanında.
+  outlineLight: "text-white ring-1 ring-inset ring-white/40 hover:bg-white/10",
 } as const;
 
 const SIZES = {

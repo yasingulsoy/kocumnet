@@ -24,8 +24,8 @@ export const SERVICES: ServiceRef[] = [
   { id: "sinav-hazirlik-materyalleri", titleKey: "materyalTitle", leadKey: "materyalLead" },
   { id: "sinav-calisma-koclugu", titleKey: "koclukTitle", leadKey: "koclukP1" },
   { id: "ogrenci-koclugu", titleKey: "ogrenciTitle", leadKey: "ogrenciP1" },
-  { id: "sinav-surecinde-psikolojik-destek", titleKey: "psikolojikTitle", leadKey: "psikolojikP1" },
-  { id: "sinav-surecinde-beslenme-danismanligi", titleKey: "beslenmeTitle", leadKey: "beslenmeP1" },
+  { id: "psikolojik-destek", titleKey: "psikolojikTitle", leadKey: "psikolojikP1" },
+  { id: "beslenme-danismanligi", titleKey: "beslenmeTitle", leadKey: "beslenmeP1" },
 ];
 
 /** Uzun paragrafın ilk cümlesi — kart üstünde tam paragraf çok uzun kalıyor. */

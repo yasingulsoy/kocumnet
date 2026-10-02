@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/Reveal";
+import { PageHero } from "@/components/PageHero";
+import { Card, Container, Eyebrow, LinkButton, Section, SectionHead, cn } from "@/components/ui";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { isLocale, LOCALE_OG } from "@/lib/i18n/config";
 import { languageAlternates, localizedPath } from "@/lib/routes";
+import { SERVICES } from "@/lib/services";
 
 export async function generateMetadata({
   params,
@@ -40,36 +43,35 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
   const t = await getDictionary(lang);
   const s = t.services;
 
-  /** Çapa id'leri dilden bağımsız sabittir — footer linkleri bunlara bağlı. */
-  type ServiceItem = {
-    id: string;
-    title: string;
-    expert?: string;
-    lead?: string;
-    paragraphs: string[];
-    bullets?: { title: string; text: string }[];
-    image?: { src: string; alt: string };
-    people?: { src: string; name: string; alt: string }[];
-  };
-
-  const services: ServiceItem[] = [
+  /*
+   * Hizmet sırası ve çapa kimlikleri `lib/services.ts`'te.
+   *
+   * Kimlikler dile bağımsız ve KALICI: footer'daki hızlı erişim linkleri,
+   * ana sayfadaki hizmet kartları ve dışarıya verilmiş bağlantılar bunlara
+   * bakıyor. Değiştirmek o bağlantıları kırar.
+   */
+  const icerik: Record<
+    string,
     {
-      id: "tercih-danismanligi",
-      title: s.tercihTitle,
+      expert?: string;
+      lead?: string;
+      paragraphs: string[];
+      bullets?: { title: string; text: string }[];
+      image?: { src: string; alt: string };
+      people?: { src: string; name: string }[];
+    }
+  > = {
+    "tercih-danismanligi": {
       expert: s.tercihExpert,
       paragraphs: [s.tercihP1, s.tercihP2],
-      people: [{ src: "/images/team/serhat.webp", name: "Serhat Butur", alt: "Serhat Butur" }],
+      people: [{ src: "/images/team/serhat.webp", name: "Serhat Butur" }],
     },
-    {
-      id: "sinav-hazirlik-materyalleri",
-      title: s.materyalTitle,
+    "sinav-hazirlik-materyalleri": {
       lead: s.materyalLead,
       paragraphs: [s.materyalP1, s.materyalP2],
       image: { src: "/images/hizmet-materyal.webp", alt: s.materyalImageAlt },
     },
-    {
-      id: "sinav-calisma-koclugu",
-      title: s.koclukTitle,
+    "sinav-calisma-koclugu": {
       paragraphs: [s.koclukP1],
       bullets: [
         { title: s.koclukBullet1Title, text: s.koclukBullet1Text },
@@ -78,182 +80,156 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
       ],
       image: { src: "/images/hizmet-calisma-koclugu.webp", alt: s.koclukImageAlt },
     },
-    {
-      id: "ogrenci-koclugu",
-      title: s.ogrenciTitle,
+    "ogrenci-koclugu": {
       expert: s.ogrenciExpert,
       paragraphs: [s.ogrenciP1, s.ogrenciP2],
       people: [
-        { src: "/images/team/ozlem.webp", name: "Özlem Tamimi", alt: "Özlem Tamimi" },
-        { src: "/images/team/serhat.webp", name: "Serhat Butur", alt: "Serhat Butur" },
+        { src: "/images/team/ozlem.webp", name: "Özlem Tamimi" },
+        { src: "/images/team/serhat.webp", name: "Serhat Butur" },
       ],
     },
-    {
-      id: "psikolojik-destek",
-      title: s.psikolojikTitle,
+    "psikolojik-destek": {
       expert: s.psikolojikExpert,
       paragraphs: [s.psikolojikP1, s.psikolojikP2],
-      people: [{ src: "/images/team/dilek.webp", name: "Dilek Kılıç", alt: "Dilek Kılıç" }],
+      people: [{ src: "/images/team/dilek.webp", name: "Dilek Kılıç" }],
     },
-    {
-      id: "beslenme-danismanligi",
-      title: s.beslenmeTitle,
+    "beslenme-danismanligi": {
       expert: s.beslenmeExpert,
       paragraphs: [s.beslenmeP1, s.beslenmeP2],
       image: { src: "/images/hizmet-beslenme.webp", alt: s.beslenmeImageAlt },
     },
-  ];
+  };
 
   return (
-    <main className="bg-white text-[#444] antialiased">
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#17305e] via-[#1a5fb4] to-[#0e90d5] py-20 sm:py-28">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute -top-24 -end-24 h-96 w-96 rounded-full bg-white/20 blur-3xl" />
-          <div className="absolute -bottom-24 -start-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        </div>
-        <div className="relative mx-auto max-w-5xl px-6 text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70">Koçum.Net</p>
-          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            {s.title}
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/80">
-            {s.heroSubtitle}
-          </p>
-        </div>
-      </section>
-
-      {/* Hizmet özet bağlantıları */}
-      <section className="border-b border-gray-100 bg-[#fafbfe]">
-        <div className="mx-auto max-w-5xl px-6 py-6">
-          <ul className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-            {services.map((item) => (
-              <li key={item.id}>
-                <a href={`#${item.id}`} className="font-medium text-[#1a5fb4] transition hover:underline">
-                  {item.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <div className="space-y-20 sm:space-y-24">
-          {services.map((service, i) => (
-            <article
-              key={service.id}
-              id={service.id}
-              /* Çapa boşluğu globals.css'teki scroll-padding-top ile yönetilir. */
-              className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14"
+    <main>
+      <PageHero eyebrow={t.nav.services} title={s.title} description={s.heroSubtitle}>
+        {/* Çapa rayı: altı hizmet telefonda tek satıra sığmaz, kaydırılır. */}
+        <nav aria-label={s.title} className="scroll-x -mx-5 flex gap-2 px-5 sm:mx-0 sm:px-0">
+          {SERVICES.map((item) => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              className="flex min-h-10 shrink-0 items-center rounded-full bg-surface px-4 text-caption font-medium text-ink-soft ring-1 ring-inset ring-line transition hover:text-brand hover:ring-brand/30"
             >
-              <Reveal className={i % 2 === 1 ? "lg:order-2" : undefined}>
-                <div className="flex items-start gap-4">
-                  <span className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1a5fb4]/10 text-sm font-bold text-[#1a5fb4]">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <div>
-                    <h2 className="font-display text-2xl font-bold tracking-tight text-[#151a33] sm:text-3xl">
-                      {service.title}
-                    </h2>
-                    {service.expert && (
-                      <p className="mt-1 text-sm font-semibold text-[#1a5fb4]">{service.expert}</p>
-                    )}
-                  </div>
-                </div>
-
-                {service.lead && (
-                  <p className="mt-6 inline-flex rounded-full bg-[#1a5fb4] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white">
-                    {service.lead}
-                  </p>
-                )}
-
-                <div className="mt-6 space-y-4 text-[15px] leading-relaxed text-[#444]">
-                  {service.paragraphs.map((p, idx) => (
-                    <p key={idx}>{p}</p>
-                  ))}
-                </div>
-
-                {service.bullets && (
-                  <StaggerGroup className="mt-8 grid gap-5 sm:grid-cols-3">
-                    {service.bullets.map((b) => (
-                      <StaggerItem
-                        key={b.title}
-                        className="rounded-xl border border-[#1a5fb4]/12 bg-[#fafbff] p-5"
-                      >
-                        <h3 className="text-base font-bold text-[#151a33]">{b.title}</h3>
-                        <p className="mt-2 text-sm leading-relaxed text-[#555]">{b.text}</p>
-                      </StaggerItem>
-                    ))}
-                  </StaggerGroup>
-                )}
-              </Reveal>
-
-              <Reveal delay={0.12} className={`relative ${i % 2 === 1 ? "lg:order-1" : ""}`}>
-                <div
-                  className={`absolute -top-4 h-full w-full rounded-2xl border-2 border-[#1a5fb4]/20 ${
-                    i % 2 === 1 ? "-end-4" : "-start-4"
-                  }`}
-                  aria-hidden
-                />
-                {service.people ? (
-                  <div
-                    className={`relative grid gap-4 ${
-                      service.people.length > 1 ? "grid-cols-2" : "grid-cols-1"
-                    }`}
-                  >
-                    {service.people.map((person) => (
-                      <figure
-                        key={`${person.src}-${person.name}`}
-                        className="relative overflow-hidden rounded-2xl shadow-[0_24px_60px_-28px_rgba(23,48,94,0.55)]"
-                      >
-                        <div className="relative aspect-[4/5] bg-[#edf0fa]">
-                          <Image
-                            src={person.src}
-                            alt={person.alt}
-                            fill
-                            className="object-cover object-top"
-                            sizes={
-                              service.people!.length > 1
-                                ? "(min-width: 1024px) 270px, 45vw"
-                                : "(min-width: 1024px) 560px, 100vw"
-                            }
-                          />
-                        </div>
-                        <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 pb-3 pt-10 text-sm font-semibold text-white">
-                          {person.name}
-                        </figcaption>
-                      </figure>
-                    ))}
-                  </div>
-                ) : service.image ? (
-                  <div className="relative aspect-[3/2] overflow-hidden rounded-2xl shadow-[0_24px_60px_-28px_rgba(23,48,94,0.55)]">
-                    <Image
-                      src={service.image.src}
-                      alt={service.image.alt}
-                      fill
-                      className="object-cover"
-                      sizes="(min-width: 1024px) 560px, 100vw"
-                    />
-                  </div>
-                ) : null}
-              </Reveal>
-            </article>
+              {s[item.titleKey]}
+            </a>
           ))}
-        </div>
-      </div>
+        </nav>
+      </PageHero>
 
-      <section className="border-t border-gray-100 bg-[#fafbfe] py-16 text-center">
-        <Reveal className="mx-auto max-w-3xl px-6">
-          <h2 className="font-display text-3xl font-bold text-[#151a33]">{s.ctaTitle}</h2>
-          <p className="mt-4 text-[#666]">{s.ctaDesc}</p>
-          <Link
-            href={localizedPath("contact", lang)}
-            className="mt-8 inline-flex rounded-xl bg-[#1a5fb4] px-8 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-[#154a94]"
-          >
-            {s.ctaButton}
-          </Link>
-        </Reveal>
-      </section>
+      <Section>
+        <Container className="space-y-20 sm:space-y-24">
+          {SERVICES.map((ref, i) => {
+            const d = icerik[ref.id];
+            if (!d) return null;
+            const saga = i % 2 === 1;
+
+            return (
+              <article
+                key={ref.id}
+                id={ref.id}
+                /* Çapa boşluğu globals.css'teki scroll-padding-top ile. */
+                className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14"
+              >
+                <Reveal className={saga ? "lg:order-2" : undefined}>
+                  <div className="flex items-start gap-4">
+                    <span className="font-display mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-wash text-caption font-bold text-brand">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="font-display text-h2 font-semibold tracking-tight text-ink text-balance">
+                        {s[ref.titleKey]}
+                      </h2>
+                      {d.expert ? (
+                        <p className="mt-1 text-caption font-semibold text-brand">{d.expert}</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {d.lead ? <Eyebrow className="mt-6">{d.lead}</Eyebrow> : null}
+
+                  <div className="mt-6 space-y-4 text-body text-ink-soft">
+                    {d.paragraphs.map((p, idx) => (
+                      <p key={idx}>{p}</p>
+                    ))}
+                  </div>
+
+                  {d.bullets ? (
+                    <StaggerGroup className="mt-8 grid gap-3 sm:grid-cols-3">
+                      {d.bullets.map((b) => (
+                        <StaggerItem key={b.title}>
+                          <Card className="h-full p-5">
+                            <h3 className="text-h4 font-semibold text-ink">{b.title}</h3>
+                            <p className="mt-2 text-caption text-ink-soft">{b.text}</p>
+                          </Card>
+                        </StaggerItem>
+                      ))}
+                    </StaggerGroup>
+                  ) : null}
+                </Reveal>
+
+                <Reveal delay={0.1} className={cn("relative", saga && "lg:order-1")}>
+                  {d.people ? (
+                    <div
+                      className={cn(
+                        "grid gap-4",
+                        d.people.length > 1 ? "grid-cols-2" : "grid-cols-1"
+                      )}
+                    >
+                      {d.people.map((person) => (
+                        <figure
+                          key={`${person.src}-${person.name}`}
+                          className="relative overflow-hidden rounded-3xl shadow-raised"
+                        >
+                          <div className="relative aspect-[4/5] bg-surface-sunk">
+                            <Image
+                              src={person.src}
+                              alt={person.name}
+                              fill
+                              className="object-cover object-top"
+                              sizes={
+                                d.people!.length > 1
+                                  ? "(min-width: 1024px) 270px, 45vw"
+                                  : "(min-width: 1024px) 560px, 100vw"
+                              }
+                            />
+                          </div>
+                          <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-deep/80 to-transparent px-4 pb-3 pt-10 text-caption font-semibold text-white">
+                            {person.name}
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  ) : d.image ? (
+                    <div className="relative aspect-[3/2] overflow-hidden rounded-3xl shadow-raised">
+                      <Image
+                        src={d.image.src}
+                        alt={d.image.alt}
+                        fill
+                        className="object-cover"
+                        sizes="(min-width: 1024px) 560px, 100vw"
+                      />
+                    </div>
+                  ) : null}
+                </Reveal>
+              </article>
+            );
+          })}
+        </Container>
+      </Section>
+
+      <Section tone="sunk">
+        <Container>
+          <Reveal>
+            <SectionHead center title={s.ctaTitle} description={s.ctaDesc} />
+            <div className="mt-8 flex justify-center">
+              <LinkButton href={localizedPath("contact", lang)} size="lg">
+                {s.ctaButton} <ArrowRight />
+              </LinkButton>
+            </div>
+          </Reveal>
+        </Container>
+      </Section>
     </main>
   );
 }

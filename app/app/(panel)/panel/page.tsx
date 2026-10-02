@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardList,
   Hourglass,
+  Layers,
   Play,
   Repeat,
   Sparkles,
@@ -16,6 +17,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { loadCatalog } from "@/lib/catalog";
 import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
 import { aktifPlan } from "@/lib/plan";
+import { aktifKosu } from "@/lib/level-run";
 import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
 import { daysUntilExam, examShort } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
@@ -46,7 +48,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const hata = typeof sp.hata === "string" ? sp.hata : null;
   const yeniTanisma = sp.tanisma === "1";
 
-  const [acik, sonuclarHam, katalog, plan, buHaftakiTest] = await Promise.all([
+  const [acik, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu] = await Promise.all([
     prisma.checkupSession.findFirst({
       where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now } },
       orderBy: { startedAt: "desc" },
@@ -105,6 +107,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         submittedAt: { gte: haftaBasi(now) },
       },
     }),
+    /* Seviyeli check-up devam ediyor mu — "Seviye 2 seni bekliyor". */
+    aktifKosu(user.id),
   ]);
 
   const sonuclar: (ResultLike & { sessionId: string; packageName: string })[] = sonuclarHam.map(
@@ -177,6 +181,28 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         <PlanCard plan={plan} haftaEtiketi={haftaEtiketi(plan.weekStart)} />
       ) : !yeni ? (
         <PlanOlusturKarti />
+      ) : null}
+
+      {/* ── Seviyeli check-up devam ediyor ──────────────── */}
+      {seviyeliKosu ? (
+        <Card className="flex flex-wrap items-center gap-3 border-brand/25 p-4 shadow-raised sm:p-5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
+            <Layers className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-body font-semibold text-ink">
+              {seviyeliKosu.pendingRemedialIds.length > 0
+                ? "Teyit turun bekliyor"
+                : `Seviye ${seviyeliKosu.unlockedLevel} seni bekliyor`}
+            </p>
+            <p className="text-caption text-ink-soft">
+              {examShort(seviyeliKosu.examScope)} seviyeli check-up · yarım kaldı
+            </p>
+          </div>
+          <LinkButton href={`/seviye/${seviyeliKosu.id}`} className="max-sm:w-full">
+            Devam et <ArrowRight />
+          </LinkButton>
+        </Card>
       ) : null}
 
       {/* ── 2. Tek eylem ────────────────────────────────── */}

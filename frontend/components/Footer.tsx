@@ -31,7 +31,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const servicesHref = localizedPath("services", locale);
 
   return (
-    <footer className="mt-auto border-t border-[#1a5fb4]/15 bg-[#17305e] text-white">
+    <footer className="mt-auto border-t border-line bg-brand-deep text-white">
       <div className="mx-auto max-w-[1320px] px-4 py-14 lg:px-8">
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4 lg:gap-10">
           <div className="lg:col-span-1">
@@ -57,7 +57,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </div>
 
           <nav aria-label={dict.footer.quickLinks}>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-[#6eb3f7]">
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
               {dict.footer.quickLinks}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -75,7 +75,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </nav>
 
           <nav aria-label={dict.footer.servicesTitle}>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-[#6eb3f7]">
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
               {dict.footer.servicesTitle}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -93,13 +93,13 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </nav>
 
           <div>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-[#6eb3f7]">
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
               {dict.footer.contactTitle}
             </h2>
             <address className="mt-5 space-y-4 text-sm not-italic leading-relaxed text-white/85">
               <p>
                 <span className="block text-white/60">{dict.contact.email}</span>
-                <a href={`mailto:${SITE_BRAND.email}`} className="text-[#9dcbf9] hover:underline">
+                <a href={`mailto:${SITE_BRAND.email}`} className="text-brand-bright hover:underline">
                   {SITE_BRAND.email}
                 </a>
               </p>

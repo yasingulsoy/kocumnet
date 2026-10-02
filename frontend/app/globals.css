@@ -195,6 +195,11 @@ fieldset {
   min-inline-size: 0;
 }
 
+/* Marka gradyanı — hero, CTA bantları, avatar. Tek yerde tanımlı. */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand-deep), var(--brand) 55%, var(--brand-bright));
+}
+
 /* Yatay kaydırılan şeritler (rozet listesi, sekme rayı). */
 .scroll-x {
   overflow-x: auto;

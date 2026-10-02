@@ -244,6 +244,34 @@ export function Badge({
   );
 }
 
+/** Boş liste durumu — blog yazısı yokken, arama sonucu boşken. */
+export function EmptyStateBox({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-sunk px-6 py-16 text-center">
+      {icon ? (
+        <span className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-brand-wash text-brand [&_svg]:size-7">
+          {icon}
+        </span>
+      ) : null}
+      <h2 className="font-display text-h3 font-semibold text-ink">{title}</h2>
+      {description ? (
+        <p className="mt-2 max-w-md text-body text-ink-soft">{description}</p>
+      ) : null}
+      {action ? <div className="mt-6">{action}</div> : null}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Form alanı
 // ─────────────────────────────────────────────────────────────

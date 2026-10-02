@@ -102,7 +102,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   }, []);
 
   const navLinkClass =
-    "flex items-center gap-1 whitespace-nowrap px-1 py-2 text-[15px] font-medium tracking-tight text-[#222] transition-colors hover:text-[#1a5fb4] lg:text-[14px] xl:text-[15px]";
+    "flex items-center gap-1 whitespace-nowrap px-1 py-2 text-[15px] font-medium tracking-tight text-[#222] transition-colors hover:text-brand lg:text-[14px] xl:text-[15px]";
 
   const navItems = NAV_KEYS.map((key) => ({
     key,
@@ -186,7 +186,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                             href={switchLocalePath(pathname, loc)}
                             hrefLang={loc}
                             className={`block w-full px-3 py-2 text-start hover:bg-neutral-100 ${
-                              locale === loc ? "font-semibold text-[#1a5fb4]" : ""
+                              locale === loc ? "font-semibold text-brand" : ""
                             }`}
                             onClick={() => setLangOpen(false)}
                           >
@@ -210,7 +210,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
               onClick={() => setPanelOpen(false)}
             >
               <LogoMark className="h-11 w-11 shrink-0 sm:h-12 sm:w-12" />
-              <span className="font-sans text-xl font-bold tracking-tight text-[#1b1b1b] sm:text-2xl">
+              <span className="font-sans text-xl font-bold tracking-tight text-ink sm:text-2xl">
                 Koçum.Net
               </span>
             </Link>
@@ -226,13 +226,13 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
             <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <Link
                 href={localizedPath("contact", locale)}
-                className="hidden min-h-11 items-center rounded-[5px] bg-[#1a5fb4] px-5 text-[12px] font-bold uppercase tracking-wider text-white transition hover:bg-[#154a94] min-[1100px]:inline-flex"
+                className="hidden min-h-11 items-center rounded-[5px] bg-brand px-5 text-[12px] font-bold uppercase tracking-wider text-white transition hover:bg-brand-hover min-[1100px]:inline-flex"
               >
                 {dict.nav.contact}
               </Link>
               <button
                 type="button"
-                className="flex h-11 w-11 items-center justify-center text-[#1a5fb4] transition hover:bg-neutral-50 min-[1100px]:hidden"
+                className="flex h-11 w-11 items-center justify-center text-brand transition hover:bg-neutral-50 min-[1100px]:hidden"
                 aria-controls="side-panel"
                 aria-label={dict.nav.menu}
                 onClick={() => setPanelOpen(true)}
@@ -270,13 +270,13 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           }`}
         >
           <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-            <span className="flex items-center gap-2 font-bold text-[#1b1b1b]">
+            <span className="flex items-center gap-2 font-bold text-ink">
               <LogoMark className="h-9 w-9" />
               Koçum.Net
             </span>
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center text-[#1a5fb4] hover:bg-neutral-50"
+              className="flex h-10 w-10 items-center justify-center text-brand hover:bg-neutral-50"
               aria-label={dict.nav.close}
               onClick={() => setPanelOpen(false)}
             >
@@ -298,7 +298,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
             ))}
             <Link
               href={localizedPath("contact", locale)}
-              className="mt-6 bg-[#1a5fb4] py-3.5 text-center text-[12px] font-bold uppercase tracking-wider text-white hover:bg-[#154a94]"
+              className="mt-6 bg-brand py-3.5 text-center text-[12px] font-bold uppercase tracking-wider text-white hover:bg-brand-hover"
               onClick={() => setPanelOpen(false)}
             >
               {dict.nav.contact}
@@ -317,8 +317,8 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                     onClick={() => setPanelOpen(false)}
                     className={`rounded border px-3 py-2 text-sm ${
                       locale === loc
-                        ? "border-[#1a5fb4] bg-[#1a5fb4] text-white"
-                        : "border-neutral-200 text-[#222] hover:border-[#1a5fb4]"
+                        ? "border-brand bg-brand text-white"
+                        : "border-neutral-200 text-[#222] hover:border-brand"
                     }`}
                   >
                     {LOCALE_NAMES[loc]}

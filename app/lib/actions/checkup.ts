@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { startCheckup, saveAnswer, submitCheckup, CheckupError } from "@/lib/checkup";
+import { asamaDegerlendir } from "@/lib/level-run";
+import { prisma } from "@/lib/db";
 
 export interface StartState {
   error?: string;
@@ -78,6 +80,30 @@ export async function submitCheckupAction(
   } catch (e) {
     if (e instanceof CheckupError) return { error: e.message };
     throw e;
+  }
+
+  /*
+   * Seviyeli check-up aşaması mı?
+   *
+   * Öyleyse kapı değerlendirilir ve öğrenci deneme sayfasına gider —
+   * paket sonucu ekranı (koçluk çıktısı) burada yanlış olurdu: orada
+   * "bu hafta şunu çalış" yazıyor, oysa aday sınavın ortasında.
+   */
+  const asama = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: { kind: true, levelRunId: true },
+  });
+
+  if (asama?.kind === "LEVEL_STAGE" && asama.levelRunId) {
+    try {
+      await asamaDegerlendir(sessionId, user.id);
+    } catch (e) {
+      // Kapı değerlendirilemezse de oturum kapandı; öğrenciyi boşlukta
+      // bırakmamak için deneme sayfasına gönderiyoruz.
+      if (!(e instanceof CheckupError)) throw e;
+    }
+    revalidatePath("/panel");
+    redirect(`/seviye/${asama.levelRunId}`);
   }
 
   revalidatePath("/panel");

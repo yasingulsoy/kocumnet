@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList, Layers } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { availableExamScopes, groupCatalog, loadCatalog } from "@/lib/catalog";
 import { EXAMS, isExamScope } from "@/lib/exams";
 import { PackageCard } from "@/components/PackageCard";
@@ -36,6 +37,19 @@ export default async function CatalogPage({ searchParams }: PageProps<"/paketler
   });
 
   const aktifBaslik = tur ? EXAMS[tur as keyof typeof EXAMS].short : "Tüm sınavlar";
+
+  /*
+   * Seviyeli check-up bu sınav için yayında mı.
+   *
+   * Odaklı paketlerden ayrı duruyor: o paketler haftalık ölçüm, bu
+   * yerleştirme sınavı. Katalog listesine karıştırmak ikisini de bulanık
+   * gösterirdi.
+   */
+  const seviyeliVar =
+    tur !== null &&
+    (await prisma.package.count({
+      where: { kind: "LEVEL", examScope: tur as never, status: "PUBLISHED" },
+    })) > 0;
 
   return (
     <div className="animate-fade space-y-5 sm:space-y-6">
@@ -92,6 +106,33 @@ export default async function CatalogPage({ searchParams }: PageProps<"/paketler
           </Link>
         </div>
       </nav>
+
+      {/* Seviyeli check-up — odaklı paketlerden farklı bir şey, ayrı duruyor. */}
+      {seviyeliVar ? (
+        <Link href="/seviyeli" className="group block">
+          <Card
+            interactive
+            className="bg-brand-gradient flex flex-wrap items-center gap-4 border-0 p-5 text-white shadow-brand"
+          >
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+              <Layers className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2">
+                <span className="font-display text-h3 font-bold">Seviyeli Check-up</span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-micro font-semibold">
+                  3 seviye
+                </span>
+              </p>
+              <p className="mt-1 text-caption text-white/80">
+                Nerede durduğunu ve hangi kazanımın eksik olduğunu tek tek gösterir.
+                Seviye geçemezsen üstü açılmaz.
+              </p>
+            </div>
+            <ArrowRight className="size-5 shrink-0 transition group-hover:translate-x-1" />
+          </Card>
+        </Link>
+      ) : null}
 
       {gruplar.length === 0 ? (
         <Card>

@@ -1,9 +1,26 @@
-# Check-up soru giriş şablonu (v2)
+# Check-up soru giriş şablonu (v3)
 
 Bu dosya **içerik hazırlayıcı için** yazılmıştır. Buradaki biçime uyan bir
 markdown dosyası, içe aktarma betiğiyle doğrudan veritabanına girer.
 
 Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS · ALES.
+
+---
+
+## ⚠️ v2'den ne değişti
+
+2 Ekim'de gelen **seviyeli akış şeması** sistemin şeklini değiştirdi, bu yüzden
+şablon da değişti. v2'ye göre soru yazdıysan aşağıdaki üç şey eksik kalmış olur:
+
+| v2 | v3 | Neden |
+| --- | --- | --- |
+| `Seviye: TEMEL \| OSYM` (2 seviye) | `Seviye: 1 \| 2 \| 3` | Akış üç seviyeli: temel → çok adımlı → sınav standardı. |
+| `Çift` kodu (TEMEL+ÖSYM eşi) | **kalktı** | Dört durumlu teşhis tablosunun yerini seviye kapıları aldı. Çift eşleştirmeye gerek kalmadı. |
+| `Kazanım` serbest metin, isteğe bağlı | `Kazanım Kodu` **zorunlu** (Seviye 1'de) | Telafi turu "eksik KAZANIMLARDAN yeni soru" getiriyor. Kodsuz çalışmaz. |
+| — | **Her kazanıma en az 2 soru** | Biri ana turda, öteki telafi turunda. Tek soruluk kazanım telafi turunda boş kalır. |
+
+Çift tasarımını bilerek mi bıraktın, yoksa ikisi birlikte mi yürüsün —
+söylersen ona göre düzenlerim.
 
 ---
 
@@ -27,8 +44,9 @@ Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS
 | --- | --- | --- |
 | `ID` | Benzersiz, kalıcı. Sonradan değiştirilmez. | `MAT-01-TK-01` |
 | `Konu Kodu` | **Bölüm 6'daki listeden.** Serbest metin değil. | `temel-kavramlar` |
+| `Kazanım Kodu` | **Seviye 1'de zorunlu**, 2-3'te yazılmaz. Kalıcı kod. | `TK-01` |
 | `Zorluk` | 1–5 (1 çok kolay, 5 çok zor) | `2` |
-| `Seviye` | `TEMEL` veya `OSYM` | `TEMEL` |
+| `Seviye` | `1`, `2` veya `3` (bkz. Bölüm 3) | `1` |
 | `İdeal Süre` | Saniye, sadece sayı | `60` |
 | `Soru Metni` | Bölüm 4'teki yazım biçimi | |
 | `Seçenekler` | A–E (LGS: A–D), doğru olan `[x]` | |
@@ -40,8 +58,7 @@ Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS
 | Alan | Değer | Ne işe yarar |
 | --- | --- | --- |
 | `Hedef Sınav` | Sınav kodları, virgülle. **Boş bırakılırsa konunun geçtiği her sınavda sorulabilir** — normal durum budur. | Sadece kısıtlama gerekiyorsa yaz: TYT'deki "Problemler" konusunda AYT ağırlığında bir soru yazdıysan `Hedef Sınav: AYT` diyerek LGS testine düşmesini engellersin. |
-| `Çift` | Aynı konuda eşleştirilecek soruların ortak kodu | `MAT-01-TK` — TEMEL + OSYM çiftini aynı teste sokar (bkz. Bölüm 3) |
-| `Kazanım` | Tek cümle | Sonuç ekranında "hangi kazanım eksik" yazısı |
+| `Kazanım Adı` | Tek cümle, ölçülebilir fiil ile | Karnede "şu kazanım eksik" diye yazılır. Kazanım kodunu ilk kez kullandığın soruda yaz, sonrakilerde gerekmez. |
 | `Kaynak` | `özgün` · `uyarlama` · `2023 ALES / 14` | Telif takibi + kalibrasyon |
 | `Görsel` | Dosya adı | Bölüm 5 |
 
@@ -51,28 +68,52 @@ Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS
   varsayılan: alanı boş bırak.
 - **Doğru şıkkın yanına `(Doğru Çözüm: ...)` notu** — `Çözüm Açıklaması` ile aynı
   şeyi iki kez yazıyor, ikisi zamanla çelişiyor. Doğru şık temiz kalsın.
-- **`Seviye: 1 (Temel)`** gibi parantezli açıklama — sadece `TEMEL` yaz.
+- **`Seviye: 1 (Temel)`** gibi parantezli açıklama — sadece `1` yaz.
+- **`Çift`** alanı — v3'te kalktı (bkz. yukarıdaki değişiklik tablosu).
 
 ---
 
-## 3. TEMEL + OSYM çifti
+## 3. Seviyeler ve telafi turu
 
-Çift tasarımı sistemin teşhisini keskinleştiriyor, bu yüzden destekleniyor:
+Sistem üç seviyeli ve kapılı çalışıyor:
 
-| TEMEL | OSYM | Teşhis | Öğrenciye |
-| :---: | :---: | --- | --- |
-| ✔ | ✔ | `TAM_HAKIMIYET` | Bu konu oturmuş, zamanını başka yere ayır. |
-| ✔ | ✘ | `UYGULAMA_EKSIGI` | Kuralı biliyorsun, sınav kurgusunda takılıyorsun. Soru çözmelisin. |
-| ✘ | ✔ | `DIKKAT_HATASI` | Mantığı kavramışsın, temel işlemde dikkatsizlik var. |
-| ✘ | ✘ | `KAZANIM_KAYIP` | Konu eksik. Sıfırdan anlatım. |
+```
+Seviye 1 (50 soru · her soru BİR kazanım · 50 dk)
+     │
+     ├─ ≥ %60 ──────────────────────────► Seviye 2 açılır
+     │
+     └─ < %60 ─► TELAFİ TURU (yalnızca eksik kazanımlar, YENİ sorular)
+                      │
+                      ├─ birleşik ≥ %55 ─► Seviye 2 açılır
+                      └─ birleşik < %55 ─► DURUR + Seviye 1 karnesi
 
-**Çalışması için `Çift` kodu şart.** Soru seçici havuzdan bağımsız seçim yapar;
-çift kodu olmadan aynı konudan iki TEMEL sorusu gelebilir ve matris anlamsızlaşır.
+Seviye 2 (25 soru · çok adımlı / iki konu birleşik · 32 dk)
+     ├─ ≥ %60 ──────────────────────────► Seviye 3 açılır
+     └─ < %60 ─────────────────────────► DURUR + Seviye 2 karnesi
 
-Bir konuda **3 soru** öneriyorum: `TEMEL` + `OSYM` çifti (çift kodu aynı) + bir
-`OSYM` daha. Böylece hem matris çalışır hem konu haftalık plana girebilir.
+Seviye 3 (25 soru · sınav standardı · 35 dk) ──► Nihai rapor
+```
 
----
+### Seviye 1 — tek kazanım
+Bir kuralı, bir işlemi, bir tanımı ölçer. "Şu kazanım var mı, yok mu?"
+Başka hiçbir şey sormaz. Her soru **tek bir kazanım koduna** bağlanır.
+
+### Seviye 2 — çok adımlı
+İki konunun birleştiği ya da birden fazla işlem adımı isteyen sorular.
+Kazanım koduna bağlanmaz (zaten birden fazla kazanım ölçüyor).
+
+### Seviye 3 — sınav standardı
+ÖSYM kalibresinde, analiz-yorum. Kazanım koduna bağlanmaz.
+
+### ⚠️ Yedek soru kuralı
+
+**Her kazanımın en az 2 adet Seviye 1 sorusu olmalı.** Telafi turunun tek
+anlamı, aynı kazanımı FARKLI bir soruyla yeniden sormak. Aynı soru ikinci
+kez gelirse öğrenci hatırlar, doğru yapar ve sistem kazanımın oturduğunu
+sanır — ölçüm orada çöker. Sistem aynı soruyu asla iki kez göstermiyor; ama
+yedek yoksa o kazanım telafi turunda **boş kalır**.
+
+İdeal: kazanım başına 3 Seviye 1 sorusu (ana tur + telafi + ileride tekrar).
 
 ## 4. Soru metni yazım biçimi
 
@@ -196,10 +237,10 @@ karşılığı yoksa kullan.
 * **ID:** MAT-01-TK-01
 * **Konu Kodu:** temel-kavramlar
 * **Zorluk:** 2
-* **Seviye:** TEMEL
-* **Çift:** MAT-01-TK
+* **Seviye:** 1
+* **Kazanım Kodu:** TK-03
+* **Kazanım Adı:** Pozitif tam sayı kısıtı altında en büyük/en küçük değer analizi yapar.
 * **İdeal Süre:** 60
-* **Kazanım:** Pozitif tam sayı kısıtı altında en büyük/en küçük değer analizi yapar.
 * **Kaynak:** özgün
 * **Soru Metni:**
 $a$ ve $b$ birbirinden farklı pozitif tam sayılardır.
@@ -236,6 +277,11 @@ Betik şu durumlarda **o soruyu almaz ve satır numarasıyla rapor eder**:
    girerse öğrenci aynı soruyu iki testte görür, istatistik bölünür
 7. Görsel dosyası bulunamıyor ya da alternatif metni boş
 8. `İdeal Süre` sayı değil, `Zorluk` 1–5 dışında
+9. Seviye 1 sorusunda `Kazanım Kodu` yok
+10. Seviye 2 ya da 3 sorusuna `Kazanım Kodu` yazılmış
+
+İçe aktarma ayrıca **uyarı** verir (reddetmez): bir kazanımın tek Seviye 1
+sorusu varsa, o kazanım telafi turunda boş kalacağı için listelenir.
 
 Rapor: `42 soru alındı, 3 soru reddedildi` + her ret için sebep.
 
@@ -243,27 +289,40 @@ Rapor: `42 soru alındı, 3 soru reddedildi` + her ret için sebep.
 
 ## 10. Sınav başına hedef
 
-Konular sınavlar arasında paylaşılıyor: ALES için yazdığın "Oran - Orantı"
-soruları KPSS ve TYT paketlerinde de kullanılıyor.
+### Kazanım listesi — önce bu lazım
 
-| Sınav | Konu | Sağlıklı havuz | ALES/DGS ile ortak konu |
+Seviye 1'in soru sayısı = kazanım sayısı. Şu an sistemde her yaprak konuya
+bir demo kazanım var; gerçek listede bir konunun birkaç kazanımı olur
+("Bölme ve Bölünebilme" konusunun 3 ile, 9 ile, 11 ile bölünebilme kuralları
+ayrı kazanımlardır).
+
+| Sınav | Hedef kazanım | Konu ağacından çıkan | **Yazılacak** |
 | --- | ---: | ---: | ---: |
-| ALES | 14 | 150 | 14 |
-| DGS | 14 | 150 | 14 |
-| KPSS Lisans | 20 | 210 | 13 |
-| TYT | 21 | 225 | 12 |
-| AYT | 16 | 201 | 0 |
-| LGS | 12 | 150 | 0 |
+| TYT | 50 | 32 | **18** |
+| AYT | 50 | 16 | **34** |
+| KPSS Lisans | 50 | 34 | **16** |
+| DGS | 50 | 37 | **13** |
+| ALES | 50 | 37 | **13** |
+| LGS | 35 | 12 | **23** |
 
-"Sağlıklı havuz" = paketin istediği soru sayısının 3 katı. Üç kat şart, çünkü
-aynı öğrenciye 30 gün içinde aynı soru gösterilmiyor; havuz dar olursa ikinci
-testte soru kalmıyor ve sistem "bu paketin havuzu sınırlı" uyarısı veriyor.
+Önce kazanım listesini çıkaralım (kod + tek cümlelik ad), sonra sorulara
+geçelim. Liste olmadan Seviye 1 kurulamıyor.
 
-**Başlangıç eşiği:** bir paketin yayına çıkması için her konuda, o paketin
-istediği kadar soru bulunmalı. ALES+DGS'in 8 paketi için bu **61 soru**
-(10 konuda 4'er, 7 konuda 3'er). 61 soruyla paketler açılır ama tekrar koruması
-çalışmaz: öğrenci ikinci kez çözdüğünde aynı sorular gelir ve sistem
-"bu paketin havuzu sınırlı" uyarısı verir. **183 soruda** sistem tam çalışır.
+### Soru sayısı
 
-Havuz yetmeyen paket kendiliğinden yayına çıkmaz, taslak kalır — yarım test
-başlatılmaz.
+Bir sınavın seviyeli check-up'ının açılması için gereken en az sayı:
+
+| | Seviye 1 | Seviye 2 | Seviye 3 | Toplam |
+| --- | ---: | ---: | ---: | ---: |
+| Açılış (yedeksiz) | 50 | 25 | 25 | **100** |
+| Yedekli (telafi çalışır) | 100 | 25 | 25 | **150** |
+| Sağlıklı (tekrar koruması) | 150 | 75 | 75 | **300** |
+
+Seviye 1'de yedek şart: telafi turu olmadan akışın yarısı çalışmaz.
+Seviye 2 ve 3'te tekrar koruması için 3 kat öneriyorum ama 25'er soruyla
+da sistem açılır.
+
+### Hangi sınavdan başlayalım
+
+Konular sınavlar arasında ortak olduğu için ALES/DGS ile başlamak hâlâ
+doğru: o 13 kazanım ve soruları KPSS ile TYT'nin de büyük kısmını dolduruyor.

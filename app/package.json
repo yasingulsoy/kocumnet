@@ -15,7 +15,9 @@
     "smoke": "tsx scripts/smoke.mts",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
     "test:leak": "tsx scripts/leak-test.mts",
-    "test:markup": "tsx scripts/markup-test.mts"
+    "test:markup": "tsx scripts/markup-test.mts",
+    "db:seed:levels": "tsx prisma/seed-levels.ts",
+    "test:levels": "tsx scripts/level-test.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

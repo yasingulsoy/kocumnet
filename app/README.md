@@ -17,6 +17,8 @@ npm install
 npm run db:migrate        # şema
 npm run db:seed           # konu ağacı + paketler (idempotent, tekrar çalıştırmak güvenli)
 npm run db:seed:demo      # ~2200 demo sorusu — SADECE geliştirme
+npm run db:seed:levels    # seviyeli check-up paketleri + demo kazanımlar
+                          #   üretimde: -- --yalniz-paket
 npm run dev -- --port 3100
 ```
 
@@ -34,9 +36,10 @@ Oturum jetonları rastgele üretilip hash'i saklandığı için imzalama anahtar
 Her değişiklikten sonra üçü de çalıştırılmalı:
 
 ```bash
-npm run smoke        # saf mantık: parola, içerik şeması, parmak izi, net, teşhis
+npm run smoke        # saf mantık: parola, içerik şeması, net, teşhis, SEVİYE KAPILARI
 npm run test:markup  # yazım biçimi ayrıştırma + düzenleme gidiş-dönüşü
 npm run test:leak    # uçtan uca akış + CEVAP ANAHTARI SIZINTI DENETİMİ
+npm run test:levels  # seviyeli check-up zinciri + TELAFİDE SORU TEKRARI DENETİMİ
 ```
 
 `test:leak` öğrenciye giden JSON'da `isCorrect`/`errorType` olmadığını doğrular.
@@ -62,6 +65,8 @@ app/
   (panel)/                 Girişli öğrenci — kenar çubuğu / mobil sekme çubuğu
     panel/                 Pano: haftalık plan, tek eylem, ilerleme şeridi
     paketler/              Katalog (sınava göre) → [slug]: test öncesi ekran
+    seviyeli/              Seviyeli check-up girişi: nasıl işler, başlat
+    seviye/[runId]         Aşama geçişi, telafi uyarısı, kilit ve üç karne
     sonuc/[sessionId]      Karar cümlesi → öncelik sırası → plan → kaynak → inceleme
     gelisim/               Hedef takibi (tahmini net), eğilim, konu haritası, geçmiş
     profil/                Bilgiler, HEDEF (sınav/sınıf/net/tempo), parola, erişimler
@@ -78,6 +83,10 @@ lib/
   exams.ts                 SINAV TABLOSU: soru sayısı, ceza oranı, sınıflar, sezon
   coaching.ts              Koçluk mantığı (saf): öncelik sırası, karar cümlesi, plan
   plan.ts                  Haftalık planın veritabanı tarafı
+  levels.ts                SEVİYELİ CHECK-UP kuralları (saf): kapılar, eşikler, metin
+  level-run.ts             Seviyeli sınavın zinciri: aşama aç, kapıyı değerlendir
+  level-selection.ts       Kazanım başına soru seçimi + telafi turu
+  level-report.ts          Üç karnenin verisi
   checkup.ts               Akış: başlat → cevapla → bitir → incele → konu tekrarı
   scoring.ts · diagnosis.ts · insights.ts   Puanlama, teşhis, pano okumaları (saf)
   question-selection.ts    Katmanlı soru seçimi (adaptif DEĞİL — PLAN §5)
@@ -107,6 +116,22 @@ saf fonksiyonlar olarak duruyor; hepsi `npm run smoke` ile test ediliyor.
 
 Döngü: **ölç → sırala → çalıştır → DOĞRULA → yeniden ölç.** Doğrulama adımı
 olmayan bir plan yapılacaklar listesidir; yapılacaklar listeleri terk edilir.
+
+## Seviyeli check-up
+
+Odaklı paketlerin yanında duran ikinci ürün: üç seviyeli, kapılı yerleştirme
+sınavı (`lib/levels.ts`). Haftalık ölçüm paketlerden, "nerede duruyorum"
+buradan.
+
+| Kural | Neden |
+| --- | --- |
+| **Seviye 1'de her soru BİR kazanım** | Telafi turu "eksik kazanımlardan yeni soru" getiriyor. Konu düzeyinde çalışsaydı bir soruyu kaçırana konunun tamamından soru gelirdi. |
+| **Telafide aynı soru ASLA gelmez** | Gelirse öğrenci hatırlar, doğru yapar, sistem kazanımın oturduğunu sanır. Ölçüm orada çöker. `npm run test:levels` bunu denetliyor. |
+| **Matematiksel kısa devre** | Telafinin tamamını doğru yapsa bile barajı aşamayacak öğrenci o tura sokulmaz. 50'de 9 doğrusu olanın en iyi ihtimali 50/91 = %54,9 — barajın altında. |
+| **Net yok, ham doğru sayısı** | Burada ölçülen sınav taktiği değil, kazanımın var olup olmadığı. Oturumlar `penaltyRatio = 0`. |
+| **Telafi turu kendiliğinden AÇILMAZ** | Öğrenci neden ek soru çözdüğünü bilmeden soruyla karşılaşmamalı; sayaç "devam" dediğinde başlamalı. |
+| **Seviye 3'te baraj yok** | Oraya gelen iki kapıyı geçmiş. Sonuç rapora yazılır, "kaldın" denmez. |
+| **Aşamalar ayrı oturum** | Her birinin kendi süresi var, aralarında ara verilebilir. Mevcut oturum makinesi (sayaç, cevap kaydı, sızıntı koruması) olduğu gibi çalışıyor. |
 
 ## Tasarım sistemi
 
