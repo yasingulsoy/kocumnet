@@ -39,6 +39,30 @@ const GUNCELLENEBILIR_ALANLAR = [
 ];
 
 const META_TITLE_MAX = 255;
+const IZINLI_DILLER = new Set(['tr', 'en', 'ar']);
+
+/**
+ * Düz metin alanları (başlık, özet, meta): HTML etiketi taşımaz.
+ *
+ * Eskiden ham saklanıyordu ve site bunları JSON-LD <script> bloğuna
+ * gömüyordu: "</script><script>…" içeren bir başlık sayfada betik
+ * çalıştırabilirdi (depolanmış XSS, editör → yönetici yetki yükseltmesi).
+ * Site tarafı da artık kaçırıyor; burada ikinci kat.
+ */
+function duzMetin(v, enFazla) {
+  if (v === undefined || v === null) return null;
+  const s = String(v)
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, enFazla);
+  return s === '' ? null : s;
+}
+
+function dilNormalize(v, varsayilan) {
+  const s = String(v ?? '').trim().toLowerCase();
+  return IZINLI_DILLER.has(s) ? s : varsayilan;
+}
 
 const createSlug = (text) =>
   String(text ?? '')
@@ -248,21 +272,25 @@ router.post(
       return res.status(400).json({ success: false, error: 'Başlık ve içerik gerekli' });
     }
 
+    const baslik = duzMetin(title, 500);
+    if (!baslik) return res.status(400).json({ success: false, error: 'Başlık boş olamaz' });
+
     const normalizedContent = normalizeBlogHtml(content);
     const published = toBool(is_published);
+    const ozet = duzMetin(excerpt, 1000);
 
     const govde = {
-      title: String(title).slice(0, 500),
+      title: baslik,
       content: normalizedContent,
-      excerpt: excerpt || null,
-      tags: Array.isArray(tags) ? tags.slice(0, 30).map((t) => String(t).slice(0, 60)) : [],
+      excerpt: ozet,
+      tags: Array.isArray(tags) ? tags.map((t) => duzMetin(t, 60)).filter(Boolean).slice(0, 30) : [],
       is_published: published,
       published_at: published ? new Date() : null,
       // meta_title sütunu 255; başlık 500 olabiliyor ve taşma kaydı 500
       // hatasıyla düşürüyordu.
-      meta_title: String(meta_title || title).slice(0, META_TITLE_MAX),
-      meta_description: meta_description || excerpt || null,
-      locale: String(locale || 'tr').slice(0, 10),
+      meta_title: duzMetin(meta_title, META_TITLE_MAX) || baslik.slice(0, META_TITLE_MAX),
+      meta_description: duzMetin(meta_description, 320) || ozet,
+      locale: dilNormalize(locale, 'tr'),
       author_id: req.userId,
       view_count: 0,
     };
@@ -422,16 +450,23 @@ router.put(
       if (gelen[alan] !== undefined) updateData[alan] = gelen[alan];
     }
 
-    if (updateData.title !== undefined) updateData.title = String(updateData.title).slice(0, 500);
+    if (updateData.title !== undefined) {
+      updateData.title = duzMetin(updateData.title, 500);
+      if (!updateData.title) return res.status(400).json({ success: false, error: 'Başlık boş olamaz' });
+    }
+    if (updateData.excerpt !== undefined) updateData.excerpt = duzMetin(updateData.excerpt, 1000);
     if (updateData.meta_title !== undefined) {
-      updateData.meta_title = String(updateData.meta_title).slice(0, META_TITLE_MAX);
+      updateData.meta_title = duzMetin(updateData.meta_title, META_TITLE_MAX);
+    }
+    if (updateData.meta_description !== undefined) {
+      updateData.meta_description = duzMetin(updateData.meta_description, 320);
     }
     if (updateData.tags !== undefined) {
       updateData.tags = Array.isArray(updateData.tags)
-        ? updateData.tags.slice(0, 30).map((t) => String(t).slice(0, 60))
+        ? updateData.tags.map((t) => duzMetin(t, 60)).filter(Boolean).slice(0, 30)
         : [];
     }
-    if (updateData.locale !== undefined) updateData.locale = String(updateData.locale).slice(0, 10);
+    if (updateData.locale !== undefined) updateData.locale = dilNormalize(updateData.locale, blog.locale);
 
     // İçerik: XSS temizliği + base64 gömülü görselleri dosyaya yaz.
     if (updateData.content !== undefined && updateData.content !== null) {

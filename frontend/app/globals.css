@@ -2,143 +2,13 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * Koçum.Net — tasarım belirteçleri.
- *
- * Bu dosya tek doğruluk kaynağı. Bileşenlerde ham hex YAZILMAZ: eski kodda
- * `#1a5fb4` 97 kez, `#151a33` 38 kez elle yazılmıştı ve markanın tonunu
- * değiştirmek 150 dosya satırına dokunmak demekti.
- *
- * Check-up uygulamasıyla (app/) ORTAK sistem: aynı marka renkleri, aynı
- * mavi tonlu nötrler, aynı gölge katmanları. İki ürün aynı şirketin gibi
- * görünsün diye. Ayrılan tek yer tipografi: tanıtım sitesi serif başlık
- * kullanıyor (editoryal ton), uygulama geometrik sans (araç tonu).
+ * Ortak belirteçler: renk, yazı tipi, ölçek, köşe, gölge, taban kuralları.
+ * Kaynak design/tokens.css — bu kopyayı ELLE DÜZENLEME, `node design/sync.mjs`.
+ * Check-up uygulaması ve yönetim paneli aynı dosyayı kullanır.
  */
+@import "./tokens.css";
 
-:root {
-  color-scheme: only light;
-
-  /* ── Zeminler ──────────────────────────────────────────── */
-  --bg: #ffffff;
-  --surface: #ffffff;
-  /* Bölüm ayrımı için hafif mavi zemin — düz gri değil, markayla aynı aile. */
-  --surface-sunk: #f6f8fc;
-  --surface-hover: #f1f4fa;
-
-  /* ── Metin ─────────────────────────────────────────────── */
-  /* Eski --heading (#151a33) ve --foreground (#444444) birleşti: gövde
-     metni artık nötr gri değil, başlıkla aynı aileden açık ton. */
-  --ink: #111834;
-  --ink-soft: #4b5471;
-  /* 4.67:1 — WCAG AA. Tarih, etiket, yardım metni bu renkte. */
-  --ink-faint: #6b7392;
-  /* Yalnızca DEKORATİF: ayırıcı, ikon konturu. Metin için kullanma. */
-  --ink-muted: #8990a8;
-
-  /* ── Çizgiler ──────────────────────────────────────────── */
-  --line: #e6eaf2;
-  --line-strong: #d3d9e6;
-
-  /* ── Marka ─────────────────────────────────────────────── */
-  --brand: #1a5fb4;
-  --brand-hover: #164f97;
-  --brand-deep: #17305e;
-  --brand-bright: #0e90d5;
-  --brand-wash: #eaf1fb;
-  --brand-wash-strong: #d6e4f7;
-
-  /* ── Anlam renkleri ────────────────────────────────────── */
-  /* Metin tonu (koyu) ve dolgu tonu (canlı) ayrı: rozet metninde canlı ton
-     okunmuyor, çubuk grafikte koyu ton sönük kalıyor. */
-  --ok: #047857;
-  --ok-fill: #10b981;
-  --ok-wash: #ecfdf5;
-  --warn: #b45309;
-  --warn-fill: #f59e0b;
-  --warn-wash: #fffbeb;
-  --bad: #be123c;
-  --bad-fill: #f43f5e;
-  --bad-wash: #fff1f2;
-}
-
-@theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-sunk: var(--surface-sunk);
-  --color-surface-hover: var(--surface-hover);
-
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-ink-faint: var(--ink-faint);
-  --color-ink-muted: var(--ink-muted);
-
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-brand-deep: var(--brand-deep);
-  --color-brand-bright: var(--brand-bright);
-  --color-brand-wash: var(--brand-wash);
-  --color-brand-wash-strong: var(--brand-wash-strong);
-
-  --color-ok: var(--ok);
-  --color-ok-fill: var(--ok-fill);
-  --color-ok-wash: var(--ok-wash);
-  --color-warn: var(--warn);
-  --color-warn-fill: var(--warn-fill);
-  --color-warn-wash: var(--warn-wash);
-  --color-bad: var(--bad);
-  --color-bad-fill: var(--bad-fill);
-  --color-bad-wash: var(--bad-wash);
-
-  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
-
-  /*
-   * Tipografi ölçeği.
-   *
-   * Eskiden ölçek YOKTU: text-[11px], text-[13px], text-[15px], text-[2.4rem],
-   * text-[3.4rem] gibi keyfi değerler dolaşıyordu. Sekiz adım yeter.
-   */
-  --text-micro: 0.75rem;
-  --text-micro--line-height: 1.4;
-  --text-caption: 0.8125rem;
-  --text-caption--line-height: 1.5;
-  --text-body: 0.9375rem;
-  --text-body--line-height: 1.65;
-  --text-lead: 1.0625rem;
-  --text-lead--line-height: 1.7;
-
-  --text-h4: 1.0625rem;
-  --text-h4--line-height: 1.4;
-  --text-h3: 1.375rem;
-  --text-h3--line-height: 1.3;
-  --text-h2: 1.875rem;
-  --text-h2--line-height: 1.2;
-  --text-h1: 2.5rem;
-  --text-h1--line-height: 1.1;
-  /* Yalnızca hero. clamp ile: telefonda 2rem, geniş ekranda 4.5rem. */
-  --text-display: clamp(2.25rem, 1.2rem + 4.6vw, 4.5rem);
-  --text-display--line-height: 1.04;
-
-  /* ── Köşe yarıçapı ─────────────────────────────────────── */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.25rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 2rem;
-
-  /* ── Gölgeler ──────────────────────────────────────────── */
-  /* Katmanlı: tek koyu gölge yerine iki yumuşak katman — kart zeminden
-     kalkmış görünür ama kirli durmaz. */
-  --shadow-card: 0 1px 2px 0 rgb(17 24 52 / 0.04), 0 1px 3px 0 rgb(17 24 52 / 0.05);
-  --shadow-raised: 0 8px 24px -8px rgb(17 24 52 / 0.12), 0 2px 6px -2px rgb(17 24 52 / 0.06);
-  --shadow-pop: 0 24px 48px -16px rgb(23 48 94 / 0.32);
-  --shadow-brand: 0 10px 30px -10px rgb(26 95 180 / 0.55);
-}
-
-/* ─────────────────────────────────────────────────────────── */
+/* ── Tanıtım sitesine özgü ───────────────────────────────────── */
 
 html {
   /*
@@ -153,101 +23,18 @@ html {
   scroll-padding-top: 6rem;
 }
 
-/* Hareket azaltma tercihi olanlarda yumuşak kaydırmayı da kapat. */
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }
 
 body {
   background: var(--bg);
   color: var(--ink-soft);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
 }
 
-::selection {
-  background: var(--brand);
-  color: #fff;
-}
-
-/* Klavye odağı her yerde görünür ve marka renginde. */
-:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-/*
- * fieldset varsayılanı min-inline-size: min-content — içine yatay kaydırma
- * şeridi koyulursa daralmaz, sayfayı yana taşırır.
- */
-fieldset {
-  min-inline-size: 0;
-}
-
-/* Marka gradyanı — hero, CTA bantları, avatar. Tek yerde tanımlı. */
-.bg-brand-gradient {
-  background-image: linear-gradient(135deg, var(--brand-deep), var(--brand) 55%, var(--brand-bright));
-}
-
-/* Yatay kaydırılan şeritler (rozet listesi, sekme rayı). */
-.scroll-x {
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.scroll-x::-webkit-scrollbar {
-  display: none;
-}
-
-/* ── Erişilebilirlik: içeriğe atla ──────────────────────── */
-
-.skip-link {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-.skip-link:focus {
-  position: fixed;
-  left: 1rem;
-  top: 1rem;
-  z-index: 9999;
-  width: auto;
-  height: auto;
-  padding: 0.65rem 1rem;
-  margin: 0;
-  overflow: visible;
-  clip-path: none;
-  white-space: normal;
-  background: var(--brand);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-caption);
-  font-weight: 600;
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
-/* ── Arapça (RTL) ───────────────────────────────────────── */
+/* ── Arapça (RTL) ───────────────────────────────────────────── */
 
 [dir="rtl"] {
   text-align: right;
@@ -257,9 +44,60 @@ fieldset {
   direction: rtl;
 }
 
-/* ── Blog içeriği ───────────────────────────────────────── */
+/* ── Blog içeriği ───────────────────────────────────────────── */
 
 .prose img {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+}
+
+/* ── Site yönetimi (/admin) ─────────────────────────────────── */
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-caption);
+}
+
+.data-table th {
+  padding: 0.625rem 1rem;
+  text-align: start;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: var(--surface-sunk);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  color: var(--ink-soft);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+/* Tiptap editörü: boş belge ipucu ve seçili görsel çerçevesi. */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-faint);
+}
+
+.tiptap img.ProseMirror-selectednode {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
 }

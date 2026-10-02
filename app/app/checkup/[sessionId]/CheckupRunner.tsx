@@ -409,7 +409,7 @@ export function CheckupRunner({
   const azaliyor = remaining < 5 * 60_000;
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen bg-canvas">
       {/* Üst çubuk */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-3 sm:h-16 sm:gap-5 sm:px-6">

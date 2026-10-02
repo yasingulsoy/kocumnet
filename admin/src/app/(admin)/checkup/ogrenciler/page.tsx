@@ -98,13 +98,13 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
       />
 
       <Card>
-        <form method="get" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-5 dark:border-gray-800 sm:px-6">
+        <form method="get" className="flex flex-wrap items-end gap-3 border-b border-line p-5 sm:px-6">
           <label className="min-w-0 flex-1 basis-64">
-            <span className="mb-1.5 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Ara</span>
+            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Ara</span>
             <input name="ara" defaultValue={ara} placeholder="Ad veya e-posta…" className={INPUT_CLASS} />
           </label>
           <label className="min-w-0 basis-48">
-            <span className="mb-1.5 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Sırala</span>
+            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Sırala</span>
             <select name="sirala" defaultValue={sirala} className={SELECT_CLASS}>
               {Object.entries(SIRALAMA).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -134,7 +134,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
           <div className="overflow-x-auto">
             <table className="w-full min-w-[52rem] text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50 text-left text-theme-xs text-gray-500 dark:border-gray-800 dark:bg-white/[0.02] dark:text-gray-400">
+                <tr className="border-b border-line bg-surface-sunk text-left text-micro text-ink-faint">
                   <th className="px-5 py-3 font-medium sm:px-6">Öğrenci</th>
                   <th className="px-3 py-3 font-medium">Sınıf</th>
                   <th className="px-3 py-3 font-medium">Kayıt</th>
@@ -144,46 +144,46 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
                   <th className="px-5 py-3 font-medium sm:px-6">Erişim</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody className="divide-y divide-line">
                 {ogrenciler.map((o) => {
                   const son = o.checkupSessions[0]?.result;
                   const sonToplam = son ? son.correctCount + son.wrongCount + son.blankCount : 0;
                   return (
-                    <tr key={o.id} className="group hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                    <tr key={o.id} className="group hover:bg-surface-hover">
                       <td className="px-5 py-3 sm:px-6">
                         <Link href={"/checkup/ogrenciler/" + o.id} className="flex items-center gap-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-theme-xs font-semibold text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-micro font-semibold text-brand">
                             {o.name.trim().charAt(0).toLocaleUpperCase("tr-TR")}
                           </span>
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-gray-800 group-hover:text-brand-500 dark:text-white/90">
+                            <span className="block truncate font-medium text-ink group-hover:text-brand">
                               {o.name}
                             </span>
-                            <span className="block truncate text-theme-xs text-gray-500 dark:text-gray-400">{o.email}</span>
+                            <span className="block truncate text-micro text-ink-faint">{o.email}</span>
                           </span>
                         </Link>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-gray-600 dark:text-gray-400">
+                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft">
                         {o.grade ? GRADE_LABEL[o.grade] : "—"}
-                        {o.targetExam ? <span className="text-gray-400"> · {o.targetExam}</span> : null}
+                        {o.targetExam ? <span className="text-ink-faint"> · {o.targetExam}</span> : null}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-gray-600 dark:text-gray-400" title={trDate(o.createdAt, { time: true })}>
+                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft" title={trDate(o.createdAt, { time: true })}>
                         {trDate(o.createdAt)}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-gray-600 dark:text-gray-400">
-                        {o.lastLoginAt ? relativeDay(o.lastLoginAt, now) : <span className="text-gray-400">hiç girmedi</span>}
+                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft">
+                        {o.lastLoginAt ? relativeDay(o.lastLoginAt, now) : <span className="text-ink-faint">hiç girmedi</span>}
                       </td>
-                      <td className="px-3 py-3 text-end tabular-nums text-gray-800 dark:text-white/90">
+                      <td className="px-3 py-3 text-end tabular text-ink">
                         {o._count.checkupSessions}
                       </td>
-                      <td className="px-3 py-3 text-end tabular-nums text-gray-800 dark:text-white/90">
-                        {son && sonToplam > 0 ? percent(son.correctCount / sonToplam) : <span className="text-gray-400">—</span>}
+                      <td className="px-3 py-3 text-end tabular text-ink">
+                        {son && sonToplam > 0 ? percent(son.correctCount / sonToplam) : <span className="text-ink-faint">—</span>}
                       </td>
                       <td className="px-5 py-3 sm:px-6">
                         {o.entitlements.length > 0 ? (
                           <Pill tone="brand">{o.entitlements.length} aktif hak</Pill>
                         ) : (
-                          <span className="text-theme-xs text-gray-400">—</span>
+                          <span className="text-micro text-ink-faint">—</span>
                         )}
                       </td>
                     </tr>

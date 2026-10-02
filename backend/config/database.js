@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 require('./env');
 
 const sequelize = new Sequelize({
@@ -26,9 +26,30 @@ const testConnection = async () => {
   console.log('✅ PostgreSQL bağlantısı başarılı');
 };
 
+/**
+ * sync() yeni TABLO açar ama var olan tabloya SÜTUN eklemez (alter kapalı,
+ * üretimde açılmamalı). Sonradan eklenen sütunlar burada "yoksa ekle" diye
+ * listelenir; her açılışta çalışır, idempotent.
+ */
+const EK_SUTUNLAR = [
+  { tablo: 'users', sutun: 'password_changed_at', tanim: { type: DataTypes.DATE, allowNull: true } },
+];
+
+async function ensureColumns() {
+  const qi = sequelize.getQueryInterface();
+  for (const { tablo, sutun, tanim } of EK_SUTUNLAR) {
+    const mevcut = await qi.describeTable(tablo);
+    if (!mevcut[sutun]) {
+      await qi.addColumn(tablo, sutun, tanim);
+      console.log(`· Sütun eklendi: ${tablo}.${sutun}`);
+    }
+  }
+}
+
 const syncDatabase = async () => {
   require('../models');
   await sequelize.sync({ alter: process.env.DB_SYNC_ALTER === 'true' });
+  await ensureColumns();
   console.log('✅ Veritabanı tabloları senkronize edildi');
 };
 

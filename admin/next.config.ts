@@ -1,36 +1,9 @@
 import type { NextConfig } from "next";
 
-const backendUrl =
-  process.env.BACKEND_URL ||
-  process.env.API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "";
-
-const remotePatterns: NonNullable<NextConfig["images"]>["remotePatterns"] = [];
-if (backendUrl) {
-  try {
-    const u = new URL(backendUrl);
-    remotePatterns.push({
-      protocol: u.protocol.replace(":", "") as "http" | "https",
-      hostname: u.hostname,
-      ...(u.port ? { port: u.port } : {}),
-      pathname: "/uploads/**",
-    });
-  } catch {
-    // Geçersiz URL ise remotePatterns boş kalır.
-  }
-}
-
 const nextConfig: NextConfig = {
-  /**
-   * Dev ortamında /api-backend ile backend'e proxy sırasında istek gövdesi için üst sınır.
-   * Aksi halde multipart dosya yüklemede gövdenin yalnızca ilk ~10 MB'ı backend'e iletilirdi.
-   * (Tek dosya sunucuda 50 MB'a kadar; toplu yük için daha yüksek tutuluyor.)
-   * Not: middlewareClientMaxBodySize ile birlikte kullanılamaz (Next 16).
-   */
+  poweredByHeader: false,
+
   experimental: {
-    proxyClientMaxBodySize: "500mb",
     /**
      * Check-up şekil yükleme bir server action. Varsayılan gövde sınırı 1 MB:
      * telefonla çekilmiş bir şekil fotoğrafı bunu aşar ve yükleme sessizce
@@ -41,48 +14,35 @@ const nextConfig: NextConfig = {
     },
   },
 
-  /* config options here */
-  webpack(config) {
-    config.module.rules.push({
-      test: /\.svg$/,
-      use: ["@svgr/webpack"],
-    });
-    return config;
-  },
-    
-  turbopack: {
-    rules: {
-      '*.svg': {
-        loaders: ['@svgr/webpack'],
-        as: '*.js',
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
       },
-    },
-  },
-  
-  images: {
-    remotePatterns,
-    unoptimized: process.env.NODE_ENV === 'development',
+    ];
   },
 
   /**
-   * Geliştirme: admin (ör. :3001) ile API (:5000) farklı origin; HttpOnly çerez için
-   * istekler aynı origin üzerinden proxy’lenir (/api-backend → backend).
+   * Geliştirme: panel (:3001) ile API (:5000) farklı kökende; HttpOnly oturum
+   * çerezi aynı kökene düşsün diye giriş/çıkış istekleri Next üzerinden
+   * backend'e aktarılır (/api-backend → backend). Üretimde çerez
+   * AUTH_COOKIE_DOMAIN=.kocum.net ile paylaşılır, yeniden yazma gerekmez.
    */
   async rewrites() {
-    if (process.env.NODE_ENV !== 'development') return [];
+    if (process.env.NODE_ENV !== "development") return [];
     const backend =
       process.env.BACKEND_URL ||
       process.env.API_URL ||
       process.env.NEXT_PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      'http://127.0.0.1:5000';
-    const base = backend.replace(/\/$/, '');
-    return [
-      { source: '/api-backend/:path*', destination: `${base}/:path*` },
-      // Blog içerik görselleri HTML'de relatif /uploads/... ile saklanır; dev'de
-      // editörde ve önizlemede görünmeleri için backend'e proxy'le.
-      { source: '/uploads/:path*', destination: `${base}/uploads/:path*` },
-    ];
+      "http://127.0.0.1:5000";
+    return [{ source: "/api-backend/:path*", destination: `${backend.replace(/\/$/, "")}/:path*` }];
   },
 };
 

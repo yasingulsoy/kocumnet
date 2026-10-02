@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Poppins } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
 /*
@@ -8,20 +8,21 @@ import "./globals.css";
  * yedek fontla çiziyordu — "Gelişim", "Başarı", "Çözülen" gibi kelimelerin
  * ortasında harf harf font değişiyordu. Türkçe bir üründe en görünür kusur.
  */
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin", "latin-ext"],
-  display: "swap",
-});
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+/*
+ * Üç yüzeyde (site, check-up, panel) aynı çift: Poppins başlık, Inter gövde.
+ * Değişken adları tokens.css'teki --font-sans / --font-display tarafından
+ * okunur; Geist kaldırıldı.
+ */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin", "latin-ext"],
   display: "swap",
 });
 const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin", "latin-ext"],
-  weight: ["600", "700"],
+  weight: ["500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -55,7 +56,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="tr"
-      className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} antialiased`}
+      className={`${inter.variable} ${poppins.variable} antialiased`}
     >
       <head>
         {/*
@@ -67,7 +68,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             node_modules'den @import çözmüyor; dosya public/ altına kopyalandı. */}
         <link rel="stylesheet" href="/katex/katex.min.css" />
       </head>
-      <body className="min-h-screen bg-bg font-sans text-ink">{children}</body>
+      <body className="min-h-screen bg-canvas font-sans text-ink">{children}</body>
     </html>
   );
 }

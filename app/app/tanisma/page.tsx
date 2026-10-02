@@ -19,7 +19,7 @@ export default async function TanismaPage() {
   if (!user) redirect("/giris");
 
   return (
-    <div className="flex min-h-[100svh] flex-col bg-bg">
+    <div className="flex min-h-[100svh] flex-col bg-canvas">
       <header className="px-4 pt-6 sm:px-6">
         <Wordmark />
       </header>

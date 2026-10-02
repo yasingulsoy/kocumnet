@@ -2,9 +2,12 @@ import { useId } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * Marka işareti: onay işaretinin sağ kolu yükselen bir grafik çizgisine
- * dönüşüyor — "check-up" ile "gelişim" aynı çizgide. Küçük boyutta
- * (sekme ikonu, mobil üst çubuk) da okunsun diye tek hat, kalın çizgi.
+ * Koçum.Net marka işareti — tanıtım sitesi ve yönetim paneliyle AYNI çizim
+ * (design/logo/mark.svg). K'nın üst kolu yükselen bir çizgiye dönüşüp bir
+ * noktayla bitiyor: koç yön gösterir ve yükseltir.
+ *
+ * Eskiden burada ayrı bir "✓" işareti vardı; üç yüzey üç farklı logo
+ * taşıyordu. Ürün adı ("Check-up") artık yazıda, işarette değil.
  */
 export function Logo({ className, light }: { className?: string; light?: boolean }) {
   const id = useId();
@@ -30,15 +33,12 @@ export function Logo({ className, light }: { className?: string; light?: boolean
       ) : (
         <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
       )}
-      <polyline
-        points="7.5,17.5 12.5,22 19,14 24.5,8.5"
-        fill="none"
-        stroke="white"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="24.5" cy="8.5" r="2.2" fill="white" />
+      <g stroke="#ffffff" strokeWidth="3.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
+        <path d="M11 8.8 V 23.2" />
+        <path d="M12.8 16 L 21.4 23.2" />
+        <path d="M12.8 16 L 19.8 10.2" />
+      </g>
+      <circle cx="22.4" cy="8.6" r="2.4" fill="#ffffff" />
     </svg>
   );
 }

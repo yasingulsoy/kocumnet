@@ -165,7 +165,7 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
       </section>
 
       {/* Neden */}
-      <section className="border-y border-line bg-bg py-16 sm:py-20">
+      <section className="border-y border-line bg-canvas py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-5">
           <div className="max-w-2xl">
             <h2 className="font-display text-[28px] font-bold tracking-tight text-ink sm:text-[34px] text-balance">

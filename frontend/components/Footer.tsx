@@ -1,18 +1,10 @@
 import Link from "next/link";
-import type { SVGProps } from "react";
 import { SITE_BRAND } from "@/lib/site-brand";
-import { LogoMark } from "./LogoMark";
+import { Wordmark } from "./LogoMark";
+import { InstagramIcon } from "./icons";
 import type { Locale } from "@/lib/i18n/config";
 import { localizedPath, type RouteKey } from "@/lib/routes";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
-
-function IconInstagram(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zm0 10.162a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-    </svg>
-  );
-}
 
 const QUICK_KEYS: RouteKey[] = ["home", "about", "services", "products", "blog", "contact"];
 
@@ -32,12 +24,11 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
 
   return (
     <footer className="mt-auto border-t border-line bg-brand-deep text-white">
-      <div className="mx-auto max-w-[1320px] px-4 py-14 lg:px-8">
+      <div className="mx-auto max-w-7xl px-5 py-14 sm:px-6">
         <div className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4 lg:gap-10">
           <div className="lg:col-span-1">
-            <Link href={localizedPath("home", locale)} className="inline-flex items-center gap-3">
-              <LogoMark className="h-11 w-11 shrink-0" />
-              <span className="font-sans text-xl font-bold tracking-tight">{SITE_BRAND.name}</span>
+            <Link href={localizedPath("home", locale)} className="inline-flex" aria-label={SITE_BRAND.name}>
+              <Wordmark tone="light" size="lg" />
             </Link>
             <p className="mt-5 max-w-sm text-sm leading-relaxed text-white/80">
               {dict.meta.siteDescription}
@@ -50,14 +41,14 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                 className="inline-flex items-center gap-2 transition hover:text-white"
                 aria-label="Instagram"
               >
-                <IconInstagram className="h-5 w-5" />
+                <InstagramIcon className="size-5" />
                 <span className="text-sm">{SITE_BRAND.instagramHandle}</span>
               </a>
             </div>
           </div>
 
           <nav aria-label={dict.footer.quickLinks}>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
               {dict.footer.quickLinks}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -75,7 +66,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </nav>
 
           <nav aria-label={dict.footer.servicesTitle}>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
               {dict.footer.servicesTitle}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -93,7 +84,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </nav>
 
           <div>
-            <h2 className="text-[13px] font-bold uppercase tracking-[0.2em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
               {dict.footer.contactTitle}
             </h2>
             <address className="mt-5 space-y-4 text-sm not-italic leading-relaxed text-white/85">
@@ -111,7 +102,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </div>
         </div>
 
-        <div className="mt-14 flex flex-col gap-4 border-t border-white/10 pt-8 text-[13px] text-white/65 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-14 flex flex-col gap-4 border-t border-white/10 pt-8 text-caption text-white/65 sm:flex-row sm:items-center sm:justify-between">
           <p>
             &copy; {year} {SITE_BRAND.name}. {dict.footer.rights}
           </p>

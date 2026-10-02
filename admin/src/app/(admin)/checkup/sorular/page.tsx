@@ -88,14 +88,14 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
 
       <Card>
         {/* Süzgeçler — GET formu: seçim adres çubuğunda kalır, paylaşılabilir. */}
-        <form method="get" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-5 dark:border-gray-800 sm:px-6">
+        <form method="get" className="flex flex-wrap items-end gap-3 border-b border-line p-5 sm:px-6">
           <label className="min-w-0 flex-1 basis-60">
-            <span className="mb-1.5 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Ara</span>
+            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Ara</span>
             <input name="ara" defaultValue={ara} placeholder="Soru metninde ara…" className={INPUT_CLASS} />
           </label>
 
           <label className="min-w-0 basis-60">
-            <span className="mb-1.5 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Konu</span>
+            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Konu</span>
             <select name="konu" defaultValue={konu} className={SELECT_CLASS}>
               <option value="">Tümü</option>
               {topics.map((t) => (
@@ -107,7 +107,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
           </label>
 
           <label className="min-w-0 basis-40">
-            <span className="mb-1.5 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Durum</span>
+            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Durum</span>
             <select name="durum" defaultValue={durum} className={SELECT_CLASS}>
               <option value="">Tümü</option>
               {Object.entries(QUESTION_STATUS_LABEL).map(([k, v]) => (
@@ -139,17 +139,17 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
             }
           />
         ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+          <ul className="divide-y divide-line">
             {questions.map((q) => (
               <li key={q.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 px-5 py-4 sm:flex-nowrap sm:px-6">
                 <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                   <Link
                     href={"/checkup/sorular/" + q.id}
-                    className="line-clamp-2 text-sm font-medium text-gray-800 hover:text-brand-500 dark:text-white/90"
+                    className="line-clamp-2 text-sm font-medium text-ink hover:text-brand"
                   >
                     {q.stemText || "(metinsiz soru)"}
                   </Link>
-                  <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-theme-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
                     <span>
                       {q.topic.examScope} · {q.topic.name}
                     </span>
@@ -160,7 +160,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                         {q.shownCount} kez soruldu · {percent(q.correctCount / q.shownCount)} doğru
                       </span>
                     ) : null}
-                    {q.solution === null ? <span className="text-warning-600 dark:text-orange-400">çözüm yok</span> : null}
+                    {q.solution === null ? <span className="text-warn">çözüm yok</span> : null}
                     {q.sourceRef ? <span>{q.sourceRef}</span> : null}
                     <span title={q.updatedByStaff ?? undefined}>
                       güncellendi {trDate(q.updatedAt, { year: false })}

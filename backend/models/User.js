@@ -59,6 +59,15 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    /**
+     * Parola en son ne zaman değişti. Bu andan ÖNCE imzalanmış oturum
+     * jetonları geçersizdir (middleware/auth.js): çalınan bir çerez, parola
+     * değişince 6 saat daha çalışmaz.
+     */
+    password_changed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: 'users',

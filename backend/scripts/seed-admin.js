@@ -7,8 +7,20 @@ async function seedAdmin() {
   await sequelize.authenticate();
   await sequelize.sync();
 
-  const email = (process.env.ADMIN_EMAIL || 'admin@kocumnet.com').trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || 'Admin123!';
+  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = String(process.env.ADMIN_PASSWORD || '');
+
+  /*
+   * Varsayılan değer YOK. Eskiden ADMIN_PASSWORD boşsa "Admin123!" ile hesap
+   * açılıyor ve parola ekrana yazılıyordu — depoda geçen bir parolayla
+   * üretimde yönetici hesabı.
+   */
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    throw new Error('ADMIN_EMAIL tanımlı değil ya da geçersiz.');
+  }
+  if (password.length < 12) {
+    throw new Error('ADMIN_PASSWORD en az 12 karakter olmalı (ortam değişkeni olarak ver, dosyaya yazma).');
+  }
 
   const existing = await User.findOne({ where: { email } });
   if (existing) {
@@ -28,8 +40,8 @@ async function seedAdmin() {
     is_active: true,
   });
 
-  console.log(`✅ Admin kullanıcı oluşturuldu: ${email}`);
-  console.log(`   Şifre: ${password}`);
+  console.log(`✅ Yönetici hesabı oluşturuldu: ${email}`);
+  console.log('   İlk girişten sonra parolayı panelden değiştir ve ADMIN_PASSWORD değişkenini sil.');
   await sequelize.close();
 }
 

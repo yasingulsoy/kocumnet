@@ -50,7 +50,7 @@ export default async function PackagesPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-left text-theme-xs text-gray-500 dark:border-gray-800 dark:bg-white/[0.02] dark:text-gray-400">
+              <tr className="border-b border-line bg-surface-sunk text-left text-micro text-ink-faint">
                 <th className="px-5 py-3 font-medium sm:px-6">Paket</th>
                 <th className="px-3 py-3 font-medium">Kapsam</th>
                 <th className="px-3 py-3 font-medium">Havuz</th>
@@ -59,25 +59,25 @@ export default async function PackagesPage() {
                 <th className="px-5 py-3 font-medium sm:px-6">Erişim</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-line">
               {health.map((p) => (
                 <tr key={p.id} className="align-middle">
                   <td className="px-5 py-3.5 sm:px-6">
-                    <p className="font-medium text-gray-800 dark:text-white/90">{p.name}</p>
-                    <p className="text-theme-xs text-gray-500 dark:text-gray-400">{p.slug}</p>
+                    <p className="font-medium text-ink">{p.name}</p>
+                    <p className="text-micro text-ink-faint">{p.slug}</p>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3.5 text-gray-600 dark:text-gray-400">
+                  <td className="whitespace-nowrap px-3 py-3.5 text-ink-soft">
                     {p.examScope} · {p.questionCount} soru · {p.durationMinutes} dk · {p.topicCount} konu
                   </td>
                   <td className="px-3 py-3.5">
                     <Pill tone={STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
                     {p.blocking.length > 0 ? (
-                      <p className="mt-1 max-w-56 truncate text-theme-xs text-error-600 dark:text-error-500" title={p.blocking.map((b) => b.name + " " + b.have + "/" + b.need).join(", ")}>
+                      <p className="mt-1 max-w-56 truncate text-micro text-bad" title={p.blocking.map((b) => b.name + " " + b.have + "/" + b.need).join(", ")}>
                         eksik: {p.blocking.map((b) => b.name).join(", ")}
                       </p>
                     ) : null}
                   </td>
-                  <td className="px-3 py-3.5 text-end tabular-nums text-gray-800 dark:text-white/90">
+                  <td className="px-3 py-3.5 text-end tabular text-ink">
                     {trNumber(testMap.get(p.id) ?? 0)}
                   </td>
                   <td className="px-3 py-3.5">
@@ -101,7 +101,7 @@ export default async function PackagesPage() {
         </div>
       </Card>
 
-      <p className="mt-4 text-theme-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-4 text-micro text-ink-faint">
         Havuzu yetmeyen paket yayına alınamaz — öğrencinin kataloğda görüp &quot;Başla&quot;ya
         bastığında hata alması, hiç görmemesinden kötü. Ücretliye çevrilen pakette erişim hakkı
         olmayan öğrenci yeni test başlatamaz; tamamlanmış sonuçları durur.

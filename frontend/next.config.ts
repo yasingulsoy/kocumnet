@@ -44,8 +44,34 @@ remotePatterns.push({
 });
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   images: {
     remotePatterns,
+  },
+  experimental: {
+    /**
+     * /admin blog editörü: kapak görseli ve base64 gömülü içerik görselleri
+     * server action gövdesiyle gelir. Varsayılan 1 MB bir kapağa yetmez.
+     * Backend tarafı 10 MB; pay bırakıyoruz.
+     */
+    serverActions: { bodySizeLimit: "12mb" },
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+      {
+        // Yönetim paneli hiçbir çerçeveye gömülmez (clickjacking).
+        source: "/admin/:path*",
+        headers: [{ key: "X-Frame-Options", value: "DENY" }],
+      },
+    ];
   },
 };
 

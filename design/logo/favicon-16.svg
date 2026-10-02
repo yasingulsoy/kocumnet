@@ -1,0 +1,18 @@
+<!--
+  16px favicon.
+
+  Büyük logodan iki farkı var ve ikisi de bilinçli:
+  · Gradyan YOK. 16 pikselde üç duraklı gradyan bant (banding) yapıyor,
+    düz marka mavisi temiz çıkıyor.
+  · Çizgi kalınlığı 3.3 → 3.8, kollar biraz kısaldı. İnce çizgi bu
+    boyutta piksele oturmayıp griye dönüşüyor.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="16" height="16" role="img" aria-label="Koçum.Net">
+  <rect width="32" height="32" rx="8" fill="#1a5fb4" />
+  <g stroke="#ffffff" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M11.4 9.4 V 22.6" />
+    <path d="M13.2 16 L 21 22.6" />
+    <path d="M13.2 16 L 19.4 10.8" />
+  </g>
+  <circle cx="21.6" cy="9.4" r="2.5" fill="#ffffff" />
+</svg>

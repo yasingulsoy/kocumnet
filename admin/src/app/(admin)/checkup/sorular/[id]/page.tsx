@@ -116,17 +116,17 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
             <span
               key={c.label}
               className={
-                "rounded-lg border px-3 py-1.5 text-theme-xs tabular-nums " +
+                "rounded-lg border px-3 py-1.5 text-micro tabular " +
                 (c.isCorrect
-                  ? "border-success-500/50 bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-500"
-                  : "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-400")
+                  ? "border-ok/50 bg-ok-wash text-ok"
+                  : "border-line text-ink-soft")
               }
               title={c.chosenCount + " öğrenci bu şıkkı seçti"}
             >
               <strong className="font-semibold">{c.label}</strong> {percent(c.chosenCount / secimToplam)}
             </span>
           ))}
-          <span className="self-center text-theme-xs text-gray-500 dark:text-gray-400">
+          <span className="self-center text-micro text-ink-faint">
             şık seçilme oranları ({secimToplam} cevap)
           </span>
         </div>

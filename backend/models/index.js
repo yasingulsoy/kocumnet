@@ -1,14 +1,19 @@
 const User = require('./User');
 const Blog = require('./Blog');
 const ContactMessage = require('./ContactMessage');
+const StaffToken = require('./StaffToken');
 
 Blog.belongsTo(User, { foreignKey: 'author_id', as: 'author' });
 User.hasMany(Blog, { foreignKey: 'author_id', as: 'blogs' });
 
 ContactMessage.belongsTo(User, { foreignKey: 'handled_by', as: 'handler' });
 
+StaffToken.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(StaffToken, { foreignKey: 'user_id', as: 'tokens' });
+
 module.exports = {
   User,
   Blog,
   ContactMessage,
+  StaffToken,
 };

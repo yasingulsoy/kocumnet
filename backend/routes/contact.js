@@ -4,7 +4,7 @@ const { ContactMessage } = require('../models');
 const { contactLimiter } = require('../middleware/rateLimits');
 const { asyncHandler } = require('../utils/http');
 const { JWT_SECRET, FRONTEND_URL } = require('../config/env');
-const { notifyNewContactMessage } = require('../utils/mailer');
+const { notifyNewContactMessage, sendContactAutoReply } = require('../utils/mailer');
 
 const router = express.Router();
 
@@ -79,6 +79,11 @@ router.post(
     // kullanıcıya başarısız demiyoruz — mesaj zaten kaydedildi.
     notifyNewContactMessage(kayit).catch((e) =>
       console.error('İletişim mesajı bildirimi gönderilemedi:', e.message)
+    );
+    // Gönderene "aldık" yanıtı — formun dilinde. Mesajın kopyası da içinde:
+    // kullanıcı ne yazdığını hatırlasın, spam klasörüne düşmesin diye kısa.
+    sendContactAutoReply(kayit).catch((e) =>
+      console.error('İletişim otomatik yanıtı gönderilemedi:', e.message)
     );
 
     console.log(`· Yeni iletişim mesajı #${kayit.id} (${kayit.source}, ${kayit.locale}) — ${FRONTEND_URL}`);

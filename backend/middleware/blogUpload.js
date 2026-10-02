@@ -31,10 +31,14 @@ const getBlogWallStorage = (blogId) => {
       cb(null, blogWallDir);
     },
     filename: (req, file, cb) => {
-      // Ürün resimlerindeki gibi: blog ID ile aynı isimde dosya
-      const ext = path.extname(file.originalname);
-      const fileName = `${blogId}${ext}`;
-      cb(null, fileName);
+      /*
+       * Zaman damgalı ad. Eskiden `${blogId}.webp` sabitti: yeni yükleme
+       * daha DOĞRULANMADAN mevcut kapağın üstüne yazılıyordu (bozuk dosya
+       * gelirse kapak kayboluyordu) ve adres hiç değişmediği için
+       * `immutable` önbellekteki eski kapak bir yıl görünmeye devam ediyordu.
+       */
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${blogId}-${Date.now()}${ext}`);
     }
   });
 };

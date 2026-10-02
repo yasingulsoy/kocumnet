@@ -76,13 +76,13 @@ export function ContentPreview({
   const content = useMemo(() => markupToContent(markup), [markup]);
 
   if (!content.blocks.length) {
-    return <p className="text-sm italic text-gray-400 dark:text-gray-500">{placeholder}</p>;
+    return <p className="text-sm italic text-ink-faint">{placeholder}</p>;
   }
 
   return (
     <div
       className={
-        "text-gray-800 dark:text-white/90 " + (compact ? "text-[15px]" : "space-y-1 text-base")
+        "text-ink " + (compact ? "text-[15px]" : "space-y-1 text-base")
       }
     >
       {content.blocks.map((block, i) => {
@@ -114,7 +114,7 @@ export function ContentPreview({
               <ul key={i} className="my-3 space-y-1.5">
                 {block.items.map((item, j) => (
                   <li key={j} className="flex gap-2.5">
-                    <span className="min-w-[1.75rem] shrink-0 text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <span className="min-w-[1.75rem] shrink-0 text-sm font-medium text-ink-faint">
                       {block.style === "roman"
                         ? (ROMAN[j] ?? j + 1) + "."
                         : block.style === "ordered"
@@ -136,9 +136,9 @@ export function ContentPreview({
                 <img
                   src={mediaUrl(block.mediaId)}
                   alt={block.alt}
-                  className="mx-auto max-h-64 max-w-full rounded-lg border border-gray-200 bg-white dark:border-gray-700"
+                  className="mx-auto max-h-64 max-w-full rounded-lg border border-line bg-surface"
                 />
-                <figcaption className="mt-1 text-center text-theme-xs text-gray-500 dark:text-gray-400">
+                <figcaption className="mt-1 text-center text-micro text-ink-faint">
                   {block.alt}
                 </figcaption>
               </figure>

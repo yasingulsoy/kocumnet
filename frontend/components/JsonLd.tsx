@@ -1,4 +1,5 @@
 import { SITE_BRAND } from "@/lib/site-brand";
+import { jsonLd } from "@/lib/jsonld";
 import { getSiteUrl } from "@/lib/site";
 import { LOCALE_HREFLANG, type Locale } from "@/lib/i18n/config";
 import { localizedPath } from "@/lib/routes";
@@ -12,7 +13,7 @@ const LANGUAGE_NAMES: Record<Locale, string> = {
 export function JsonLd({ locale }: { locale: Locale }) {
   const url = getSiteUrl();
   const homeUrl = `${url}${localizedPath("home", locale)}`;
-  const logoUrl = `${url}/favicon.ico`;
+  const logoUrl = `${url}/icons/icon-512.png`;
 
   const graph = {
     "@context": "https://schema.org",
@@ -77,6 +78,6 @@ export function JsonLd({ locale }: { locale: Locale }) {
   };
 
   return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(graph) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(graph) }} />
   );
 }

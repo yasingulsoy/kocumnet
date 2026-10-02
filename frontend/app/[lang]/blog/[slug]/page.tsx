@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { jsonLd } from "@/lib/jsonld";
 import { fetchBlogBySlug, fetchBlogs, getImageUrl, BACKEND_URL } from "@/lib/api";
 import { getSiteUrl } from "@/lib/site";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -115,8 +116,8 @@ export default async function BlogDetailPage({ params }: Props) {
 
   return (
     <main className="bg-white text-ink-soft antialiased">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(blogPostingSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(blogPostingSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
 
       {/*
         Blog detayında koyu hero KALIYOR (tone="deep"): yazının kendisi uzun
@@ -191,7 +192,7 @@ export default async function BlogDetailPage({ params }: Props) {
         )}
 
         <article
-          className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-ink prose-p:text-ink-soft prose-p:leading-relaxed prose-a:text-brand prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-img:shadow-lg prose-strong:text-ink prose-blockquote:border-s-[#1a5fb4] prose-blockquote:text-ink-soft"
+          className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-ink prose-p:text-ink-soft prose-p:leading-relaxed prose-a:text-brand prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-img:shadow-lg prose-strong:text-ink prose-blockquote:border-s-brand prose-blockquote:text-ink-soft"
           dangerouslySetInnerHTML={{ __html: processedContent }}
         />
 

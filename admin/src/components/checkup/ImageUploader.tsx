@@ -47,8 +47,8 @@ export function ImageUploader({ onInsert }: { onInsert: (markup: string) => void
   };
 
   return (
-    <div className="rounded-xl border border-dashed border-gray-300 p-4 dark:border-gray-700">
-      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Şekil / grafik ekle</p>
+    <div className="rounded-xl border border-dashed border-line-strong p-4">
+      <p className="text-sm font-medium text-ink-soft">Şekil / grafik ekle</p>
 
       {error ? <Notice className="mt-3">{error}</Notice> : null}
 
@@ -58,7 +58,7 @@ export function ImageUploader({ onInsert }: { onInsert: (markup: string) => void
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           aria-label="Görsel dosyası"
-          className="min-w-0 flex-1 basis-56 text-theme-sm text-gray-600 file:me-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-theme-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200 dark:text-gray-400 dark:file:bg-white/5 dark:file:text-gray-300"
+          className="min-w-0 flex-1 basis-56 text-caption text-ink-soft file:me-3 file:rounded-lg file:border-0 file:bg-surface-sunk file:px-3 file:py-2 file:text-caption file:font-medium file:text-ink-soft hover:file:bg-line"
         />
         <input
           value={alt}
@@ -78,7 +78,7 @@ export function ImageUploader({ onInsert }: { onInsert: (markup: string) => void
         </button>
       </div>
 
-      <p className="mt-2 text-theme-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-2 text-micro text-ink-faint">
         PNG, JPEG, WebP veya GIF · en fazla 8 MB. Görsel 1200 piksele küçültülüp WebP&apos;ye
         çevrilir. SVG kabul edilmiyor (script taşıyabilir).
       </p>

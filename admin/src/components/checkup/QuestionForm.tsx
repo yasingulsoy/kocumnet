@@ -66,10 +66,10 @@ const BOS: QuestionInitial = {
 };
 
 const PREVIEW_BOX =
-  "rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/60";
+  "rounded-xl border border-line bg-surface-sunk p-4";
 const PREVIEW_LABEL =
-  "mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500";
-const CODE = "rounded bg-gray-100 px-1 py-0.5 text-theme-xs dark:bg-white/5 " + MONO;
+  "mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint";
+const CODE = "rounded bg-surface-sunk px-1 py-0.5 text-micro " + MONO;
 
 export function QuestionForm({
   topics,
@@ -204,8 +204,8 @@ export function QuestionForm({
                 />
               </Field>
 
-              <details className="group text-theme-sm text-gray-600 dark:text-gray-400">
-                <summary className="cursor-pointer select-none font-medium text-gray-700 hover:text-brand-500 dark:text-gray-300">
+              <details className="group text-caption text-ink-soft">
+                <summary className="cursor-pointer select-none font-medium text-ink-soft hover:text-brand">
                   Yazım kuralları
                 </summary>
                 <ul className="mt-2 space-y-1.5 ps-4">
@@ -253,8 +253,8 @@ export function QuestionForm({
               title="Şıklar"
               description="Doğru şıkkı harfe tıklayarak seç. Hata tipi, öğrenci o çeldiriciyi seçtiğinde hangi hatayı yaptığını kaydeder."
               action={
-                <span className="text-theme-xs tabular-nums text-gray-500 dark:text-gray-400">
-                  {doluSikSayisi} şık · doğru: <strong className="text-success-600">{LABELS[correctIndex]}</strong>
+                <span className="text-micro tabular text-ink-faint">
+                  {doluSikSayisi} şık · doğru: <strong className="text-ok">{LABELS[correctIndex]}</strong>
                 </span>
               }
             />
@@ -270,8 +270,8 @@ export function QuestionForm({
                     className={clsx(
                       "rounded-xl border p-3 transition",
                       dogru
-                        ? "border-success-500/60 bg-success-50/60 dark:border-success-500/40 dark:bg-success-500/10"
-                        : "border-gray-200 dark:border-gray-800"
+                        ? "border-ok/60 bg-ok-wash/60"
+                        : "border-line"
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -283,8 +283,8 @@ export function QuestionForm({
                         className={clsx(
                           "mt-1 flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition",
                           dogru
-                            ? "border-success-500 bg-success-500 text-white"
-                            : "border-gray-300 text-gray-500 hover:border-success-500 hover:text-success-600 dark:border-gray-700 dark:text-gray-400"
+                            ? "border-ok bg-ok-fill text-white"
+                            : "border-line-strong text-ink-faint hover:border-ok hover:text-ok"
                         )}
                       >
                         {LABELS[i]}
@@ -301,7 +301,7 @@ export function QuestionForm({
                         />
 
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900/60">
+                          <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface-sunk px-3 py-1.5">
                             <ContentPreview markup={value} compact placeholder="—" />
                           </div>
 

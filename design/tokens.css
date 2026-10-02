@@ -1,0 +1,342 @@
+/*
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  Koçum.Net — ORTAK TASARIM BELİRTEÇLERİ (tek doğruluk kaynağı)        ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
+ * Bu dosya `design/tokens.css` içinde yaşar ve üç projeye BİREBİR kopyalanır:
+ *
+ *   frontend/app/tokens.css      tanıtım sitesi + kocum.net/admin
+ *   app/app/tokens.css           check-up uygulaması
+ *   admin/src/app/tokens.css     check-up yönetim paneli
+ *
+ * Kopyaları ELLE DÜZENLEME. Değişiklik burada yapılır, sonra:
+ *
+ *   node design/sync.mjs          → kopyalar
+ *   node design/sync.mjs --check  → eşitliği doğrular (build öncesi)
+ *
+ * Neden kopya, neden paket değil: üç proje ayrı ayrı deploy ediliyor
+ * (Dokploy her klasörü kendi başına derliyor), kök dizinde workspace yok.
+ * Aynı desen Prisma şeması için zaten kullanılıyor (admin/scripts/checkup-sync.mjs).
+ *
+ * ───────────────────────────────────────────────────────────────────────
+ * TASARIM KARARLARI
+ *
+ * Renk      Lacivert · mavi · camgöbeği (#17305e · #1a5fb4 · #0e90d5).
+ *           Nötrler saf gri DEĞİL, mavi tonlu: üç yüzey tek parça görünsün.
+ * Yazı      Poppins (başlık, logodaki yazıyla aynı) + Inter (gövde, arayüz).
+ *           Inter: tablo rakamları hizalı (tabular), 13px'te okunur, Türkçe tam.
+ *           Fraunces (serif) ve Geist kaldırıldı — üç yüzeyde tek çift.
+ * Köşe      Tailwind varsayılanından bir kademe yumuşak. rounded-2xl kart,
+ *           rounded-xl düğme/giriş, rounded-full rozet.
+ * Gölge     İki yumuşak katman; tek koyu gölge yok.
+ * Yoğunluk  Aynı belirteç adları, yüzeye göre farklı değer olabilir:
+ *           uygulama ve panel `:root` içinde h1/h2/h3'ü küçültür
+ *           ("yoğunluk modu"). Bunun için ölçek ve köşe yarıçapı `inline`
+ *           OLMAYAN @theme bloğunda — yardımcı sınıflar var() referanslar.
+ *
+ * Bileşenlerde HAM HEX YAZILMAZ. İstisna: SVG fill, üçüncü taraf marka
+ * renkleri (sosyal medya), themeColor meta.
+ */
+
+:root {
+  color-scheme: only light;
+
+  /* ── Zeminler ─────────────────────────────────────────────── */
+  --bg: #ffffff;
+  /* Uygulama ve panel tuvali: beyaz kartların üstünde durduğu hafif mavi
+     zemin. Tanıtım sitesi kullanmaz. */
+  --canvas: #f4f6fb;
+  --surface: #ffffff;
+  --surface-sunk: #f6f8fc;
+  --surface-hover: #f1f4fa;
+
+  /* ── Metin ────────────────────────────────────────────────── */
+  --ink: #111834;
+  --ink-soft: #4b5471;
+  /* 4.67:1 — WCAG AA. Tarih, etiket, yardım metni. */
+  --ink-faint: #6b7392;
+  /* Yalnızca DEKORATİF (ayırıcı, ikon konturu). Metin için kullanma. */
+  --ink-muted: #8990a8;
+
+  /* ── Çizgiler ─────────────────────────────────────────────── */
+  --line: #e6eaf2;
+  --line-strong: #d3d9e6;
+
+  /* ── Marka ────────────────────────────────────────────────── */
+  --brand: #1a5fb4;
+  --brand-hover: #164f97;
+  --brand-deep: #17305e;
+  --brand-bright: #0e90d5;
+  --brand-wash: #eaf1fb;
+  --brand-wash-strong: #d6e4f7;
+
+  /* ── Anlam renkleri ───────────────────────────────────────── */
+  /* Metin tonu (koyu) ve dolgu tonu (canlı) ayrı: rozet metninde canlı ton
+     okunmuyor, çubuk grafikte koyu ton sönük kalıyor. */
+  --ok: #047857;
+  --ok-fill: #10b981;
+  --ok-wash: #ecfdf5;
+  --warn: #b45309;
+  --warn-fill: #f59e0b;
+  --warn-wash: #fffbeb;
+  --bad: #be123c;
+  --bad-fill: #f43f5e;
+  --bad-wash: #fff1f2;
+
+  /* ── Dokunma hedefleri ────────────────────────────────────── */
+  --tap: 2.75rem;
+  --tap-comfort: 3rem;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-bright: var(--brand-bright);
+  --color-brand-wash: var(--brand-wash);
+  --color-brand-wash-strong: var(--brand-wash-strong);
+
+  --color-ok: var(--ok);
+  --color-ok-fill: var(--ok-fill);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-warn-wash: var(--warn-wash);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-bad-wash: var(--bad-wash);
+
+  /* ── Yazı tipleri ─────────────────────────────────────────── */
+  /* Değişkenler her projenin kök layout'unda next/font ile tanımlanır:
+     --font-inter ve --font-poppins. subsets'te "latin-ext" ŞART (ğ ş İ ı). */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-poppins), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── Gölgeler ─────────────────────────────────────────────── */
+  --shadow-card: 0 1px 2px 0 rgb(17 24 52 / 0.04), 0 1px 3px 0 rgb(17 24 52 / 0.05);
+  --shadow-raised: 0 8px 24px -8px rgb(17 24 52 / 0.12), 0 2px 6px -2px rgb(17 24 52 / 0.06);
+  --shadow-pop: 0 24px 48px -16px rgb(23 48 94 / 0.32);
+  --shadow-brand: 0 10px 30px -10px rgb(26 95 180 / 0.55);
+
+  /* ── Hareket ──────────────────────────────────────────────── */
+  --animate-rise: rise 0.45s cubic-bezier(0.21, 0.6, 0.35, 1) both;
+  --animate-fade: fade 0.3s ease-out both;
+  --animate-soft-pulse: soft-pulse 1.6s ease-in-out infinite;
+}
+
+/*
+ * Ölçek ve köşe yarıçapı BİLEREK `inline` DEĞİL: Tailwind bu değerleri
+ * yardımcı sınıfa gömmek yerine var() ile referanslar. Böylece uygulama ve
+ * panel kendi globals.css'inde `:root { --text-h1: 1.75rem }` yazarak
+ * yoğunluğu değiştirebilir — aynı sınıf adı, yüzeye göre değer.
+ * (`@theme inline` olsaydı değer sınıfa gömülür, geçersiz kılınamazdı.)
+ */
+@theme {
+  /* ── Tipografi ölçeği ─────────────────────────────────────── */
+  /* Keyfi text-[13.5px] değerleri yerine sekiz gövde/başlık adımı + sayı
+     adımları. Yüzeyler h1/h2/h3'ü :root'ta yeniden tanımlayabilir. */
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.4;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.5;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.6;
+  /* Soru/şık metni bunun altına DÜŞMEZ (uygulama). */
+  --text-read: 1.0625rem;
+  --text-read--line-height: 1.65;
+  /* Giriş paragrafı (tanıtım). */
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.7;
+
+  --text-h4: 1.0625rem;
+  --text-h4--line-height: 1.4;
+  --text-h3: 1.375rem;
+  --text-h3--line-height: 1.3;
+  --text-h2: 1.875rem;
+  --text-h2--line-height: 1.2;
+  --text-h1: 2.5rem;
+  --text-h1--line-height: 1.1;
+  /* Yalnızca hero: telefonda 2.25rem, geniş ekranda 4.5rem. */
+  --text-display: clamp(2.25rem, 1.2rem + 4.6vw, 4.5rem);
+  --text-display--line-height: 1.04;
+
+  /* Büyük sayılar (net, yüzde, sayaç). */
+  --text-num-sm: 1.375rem;
+  --text-num-sm--line-height: 1;
+  --text-num-md: 2rem;
+  --text-num-md--line-height: 1;
+  --text-num-lg: 2.5rem;
+  --text-num-lg--line-height: 1;
+
+  /* ── Köşe yarıçapı ────────────────────────────────────────── */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────── */
+/* Ortak taban kuralları — üç yüzeyde aynı                       */
+/* ───────────────────────────────────────────────────────────── */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Inter: alternatif tek katlı a, açık rakamlar. */
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* Klavye odağı her yerde görünür ve marka renginde. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/*
+ * Tarayıcı varsayılanı fieldset { min-inline-size: min-content }: içindeki
+ * yatay kaydırma şeridi daralmak yerine fieldset'i genişletiyor ve bütün
+ * sayfa yana kayıyordu.
+ */
+fieldset {
+  min-inline-size: 0;
+}
+
+/* Sayılar hizalı dursun: net, süre, tablo sütunu. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Marka gradyanı — hero, CTA bandı, avatar. Tek yerde tanımlı. */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand-deep), var(--brand) 55%, var(--brand-bright));
+}
+
+/* Gradyan zeminde ince ızgara: düz renk "boş" durmasın. */
+.bg-grid-fade {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at top right, black 20%, transparent 70%);
+}
+
+/* Yatay kaydırılan şeritler (rozet listesi, sekme rayı, tablo). */
+.scroll-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* Alt çubuklar iPhone ev çubuğunun altında kalmasın. */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* ── Erişilebilirlik: içeriğe atla ───────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link:focus {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 9999;
+  width: auto;
+  height: auto;
+  padding: 0.65rem 1rem;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  background: var(--brand-deep);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Hareket azaltma tercihi: tüm animasyon ve geçişler kapanır. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

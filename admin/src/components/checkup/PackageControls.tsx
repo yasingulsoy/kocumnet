@@ -82,17 +82,17 @@ export function PackageFreeToggle({ id, isFree, name }: { id: string; isFree: bo
       <span
         className={clsx(
           "relative h-5 w-9 rounded-full transition",
-          value ? "bg-gray-200 dark:bg-white/10" : "bg-brand-500"
+          value ? "bg-line" : "bg-brand"
         )}
       >
         <span
           className={clsx(
-            "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-theme-sm transition-transform",
+            "absolute top-0.5 left-0.5 size-4 rounded-full bg-surface shadow-card transition-transform",
             !value && "translate-x-4"
           )}
         />
       </span>
-      <span className="text-theme-xs font-medium text-gray-700 dark:text-gray-300">
+      <span className="text-micro font-medium text-ink-soft">
         {value ? "Ücretsiz" : "Ücretli"}
       </span>
     </button>

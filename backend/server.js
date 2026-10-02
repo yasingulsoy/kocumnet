@@ -54,6 +54,9 @@ app.use(
 );
 
 app.use(requestLogger);
+// Hız sınırı gövde ayrıştırmadan ÖNCE: eskiden 10 MB'lık JSON, sınır
+// devreye girmeden önce okunup ayrıştırılıyordu.
+app.use('/api', apiLimiter);
 app.use(express.json({ limit: '10mb' }));
 // Eskiden varsayılan 100 kb'da kalıyordu; JSON ile arasındaki uçurum
 // "aynı veri form olarak gelince neden reddediliyor" hatalarına yol açar.
@@ -71,8 +74,6 @@ app.use(
     },
   })
 );
-
-app.use('/api', apiLimiter);
 
 app.get('/api/health', async (_req, res) => {
   // Veritabanına gerçekten dokunuyoruz: eski sürüm Postgres kapalıyken de

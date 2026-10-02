@@ -37,8 +37,8 @@ export default async function PoolPage() {
       />
 
       <section>
-        <h2 className="text-base font-semibold text-gray-800 dark:text-white/90">Paketler</h2>
-        <p className="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
+        <h2 className="text-base font-semibold text-ink">Paketler</h2>
+        <p className="mt-0.5 text-caption text-ink-faint">
           Bir paket, istediği her konuda yeterli yayında soru yoksa başlatılamaz. Tekrar engeli
           yüzünden ihtiyacın 2 katı sağlıklı sayılır — öğrenci aynı paketi ikinci kez çözebilsin.
         </p>
@@ -48,8 +48,8 @@ export default async function PoolPage() {
             <Card key={p.id} className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">{p.name}</p>
-                  <p className="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                  <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
+                  <p className="mt-0.5 text-micro text-ink-faint">
                     {p.examScope} · {p.questionCount} soru · {p.topicCount} konu ·{" "}
                     {QUESTION_STATUS_LABEL[p.status]}
                   </p>
@@ -58,14 +58,14 @@ export default async function PoolPage() {
               </div>
 
               {p.gaps.length > 0 ? (
-                <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-theme-sm dark:border-gray-800">
+                <ul className="mt-4 space-y-1.5 border-t border-line pt-3 text-caption">
                   {p.gaps.map((g) => (
                     <li key={g.name} className="flex justify-between gap-3">
-                      <span className="truncate text-gray-600 dark:text-gray-400">{g.name}</span>
+                      <span className="truncate text-ink-soft">{g.name}</span>
                       <span
                         className={clsx(
-                          "shrink-0 tabular-nums font-medium",
-                          g.have < g.need ? "text-error-600 dark:text-error-500" : "text-warning-600 dark:text-orange-400"
+                          "shrink-0 tabular font-medium",
+                          g.have < g.need ? "text-bad" : "text-warn"
                         )}
                         title={"Yayında " + g.have + ", sağlıklı havuz için " + g.need * 2}
                       >
@@ -75,7 +75,7 @@ export default async function PoolPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="mt-4 border-t border-gray-100 pt-3 text-theme-sm text-success-600 dark:border-gray-800 dark:text-success-500">
+                <p className="mt-4 border-t border-line pt-3 text-caption text-ok">
                   Her konuda yeterli soru var.
                 </p>
               )}
@@ -92,7 +92,7 @@ export default async function PoolPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[44rem] text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-left text-theme-xs font-medium text-gray-500 dark:border-gray-800 dark:bg-white/[0.02] dark:text-gray-400">
+              <tr className="border-b border-line bg-surface-sunk text-left text-micro font-medium text-ink-faint">
                 <th className="px-5 py-3 font-medium sm:px-6">Konu</th>
                 <th className="px-3 py-3 text-end font-medium">Yayında</th>
                 <th className="px-3 py-3 text-end font-medium">Kolay</th>
@@ -102,21 +102,21 @@ export default async function PoolPage() {
                 <th className="px-5 py-3 sm:px-6" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-line">
               {topicRows.map((r) => {
                 const eksikBant = r.published > 0 && (r.easy === 0 || r.medium === 0 || r.hard === 0);
                 return (
-                  <tr key={r.topicId} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                  <tr key={r.topicId} className="hover:bg-surface-hover">
                     <td className="px-5 py-3 sm:px-6">
-                      <span className="me-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/5 dark:text-gray-400">
+                      <span className="me-2 rounded bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">
                         {r.examScope}
                       </span>
-                      <span className="font-medium text-gray-800 dark:text-white/90">{r.name}</span>
+                      <span className="font-medium text-ink">{r.name}</span>
                     </td>
                     <td
                       className={clsx(
-                        "px-3 py-3 text-end tabular-nums font-medium",
-                        r.published === 0 ? "text-error-600 dark:text-error-500" : "text-gray-800 dark:text-white/90"
+                        "px-3 py-3 text-end tabular font-medium",
+                        r.published === 0 ? "text-bad" : "text-ink"
                       )}
                     >
                       {r.published}
@@ -124,12 +124,12 @@ export default async function PoolPage() {
                     <NumCell value={r.easy} />
                     <NumCell value={r.medium} />
                     <NumCell value={r.hard} />
-                    <td className="px-3 py-3 text-end tabular-nums text-gray-400">{r.draft || ""}</td>
+                    <td className="px-3 py-3 text-end tabular text-ink-faint">{r.draft || ""}</td>
                     <td className="whitespace-nowrap px-5 py-3 text-end sm:px-6">
                       {eksikBant ? <Pill tone="warn">zorluk dengesiz</Pill> : null}
                       <Link
                         href={"/checkup/sorular?konu=" + encodeURIComponent(r.slug)}
-                        className="ms-3 text-theme-sm font-medium text-brand-500 hover:text-brand-600"
+                        className="ms-3 text-caption font-medium text-brand hover:text-brand-hover"
                       >
                         Sorular
                       </Link>
@@ -149,8 +149,8 @@ function NumCell({ value }: { value: number }) {
   return (
     <td
       className={clsx(
-        "px-3 py-3 text-end tabular-nums",
-        value === 0 ? "text-error-600 dark:text-error-500" : "text-gray-600 dark:text-gray-400"
+        "px-3 py-3 text-end tabular",
+        value === 0 ? "text-bad" : "text-ink-soft"
       )}
     >
       {value}

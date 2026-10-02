@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircleIcon, GroupIcon, ListIcon, PieChartIcon } from "@/icons/index";
+import { CircleCheck, ListChecks, PieChart, Users } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { PACKAGE_STATE_LABEL, loadPackageHealth, loadTopicPool } from "@/lib/checkup/pool";
@@ -172,10 +172,10 @@ export default async function CheckupOverviewPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-800 dark:text-white/90">
+          <h1 className="text-2xl font-semibold text-ink">
             Matematik Check-up
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-ink-faint">
             Öğrenci uygulamasının özeti — kayıtlar, testler ve soru havuzu.
           </p>
         </div>
@@ -192,7 +192,7 @@ export default async function CheckupOverviewPage() {
       </div>
 
       {sorunluPaket.length > 0 ? (
-        <div className="rounded-xl border border-error-500/40 bg-error-50 px-4 py-3 text-sm text-error-800 dark:border-error-500/30 dark:bg-error-500/15 dark:text-error-400">
+        <div className="rounded-xl border border-bad/40 bg-bad-wash px-4 py-3 text-sm text-bad">
           <strong className="font-semibold">
             Yayındaki {sorunluPaket.length} paketin havuzu yetersiz:
           </strong>{" "}
@@ -209,13 +209,13 @@ export default async function CheckupOverviewPage() {
           label="Kayıtlı öğrenci"
           value={trNumber(ogrenci)}
           sub={yeniOgrenci > 0 ? "+" + yeniOgrenci + " son 7 günde" : "Son 7 günde yeni kayıt yok"}
-          icon={<GroupIcon />}
+          icon={<Users />}
         />
         <StatCard
           label="Tamamlanan test"
           value={trNumber(tamamlanan)}
           sub={tamamlanan7 + " son 7 günde · " + suruyor + " şu an çözülüyor"}
-          icon={<CheckCircleIcon />}
+          icon={<CircleCheck />}
           tone="ok"
         />
         <StatCard
@@ -226,14 +226,14 @@ export default async function CheckupOverviewPage() {
               ? basari30._count._all + " testte doğru / sorulan"
               : "Son 30 günde test yok"
           }
-          icon={<PieChartIcon />}
+          icon={<PieChart />}
           tone="info"
         />
         <StatCard
           label="Yayındaki soru"
           value={trNumber(yayinda)}
           sub={hazirlikta > 0 ? hazirlikta + " taslak / incelemede" : "Bekleyen taslak yok"}
-          icon={<ListIcon />}
+          icon={<ListChecks />}
           tone="warn"
         />
       </div>
@@ -245,12 +245,12 @@ export default async function CheckupOverviewPage() {
             title="Son 14 gün"
             description={test14 + " tamamlanan test · " + kayit14 + " yeni kayıt"}
             action={
-              <div className="flex items-center gap-4 text-theme-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-4 text-micro text-ink-faint">
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm bg-brand-500" /> Test
+                  <span className="size-2.5 rounded-sm bg-brand" /> Test
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm bg-brand-200 dark:bg-brand-500/40" /> Kayıt
+                  <span className="size-2.5 rounded-sm bg-brand-wash-strong" /> Kayıt
                 </span>
               </div>
             }
@@ -261,17 +261,17 @@ export default async function CheckupOverviewPage() {
                 <div
                   key={g.k}
                   title={g.etiket + ": " + g.test + " test, " + g.kayit + " kayıt"}
-                  className="flex h-full min-w-0 flex-1 items-end justify-center gap-0.5 rounded-md hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                  className="flex h-full min-w-0 flex-1 items-end justify-center gap-0.5 rounded-md hover:bg-surface-hover"
                 >
-                  <div className="w-full max-w-3 rounded-t bg-brand-500" style={{ height: yukseklik(g.test) }} />
+                  <div className="w-full max-w-3 rounded-t bg-brand" style={{ height: yukseklik(g.test) }} />
                   <div
-                    className="w-full max-w-3 rounded-t bg-brand-200 dark:bg-brand-500/40"
+                    className="w-full max-w-3 rounded-t bg-brand-wash-strong"
                     style={{ height: yukseklik(g.kayit) }}
                   />
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex gap-1 border-t border-gray-100 pt-2 text-[10px] tabular-nums text-gray-400 dark:border-gray-800 sm:gap-2">
+            <div className="mt-2 flex gap-1 border-t border-line pt-2 text-[10px] tabular text-ink-faint sm:gap-2">
               {gunler.map((g, i) => (
                 <span key={g.k} className="min-w-0 flex-1 text-center">
                   {i % 2 === 1 || i === 13 ? g.gun : ""}
@@ -287,17 +287,17 @@ export default async function CheckupOverviewPage() {
             title="Paketler"
             description="Havuzu yetmeyen paket öğrenciye açılmaz."
             action={
-              <Link href="/checkup/paketler" className="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+              <Link href="/checkup/paketler" className="text-caption font-medium text-brand hover:text-brand-hover">
                 Yönet
               </Link>
             }
           />
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+          <ul className="divide-y divide-line">
             {health.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">{p.name}</p>
-                  <p className="text-theme-xs text-gray-500 dark:text-gray-400">
+                  <p className="truncate text-sm font-medium text-ink">{p.name}</p>
+                  <p className="text-micro text-ink-faint">
                     {p.examScope} · {QUESTION_STATUS_LABEL[p.status]} · {p.isFree ? "ücretsiz" : "ücretli"}
                   </p>
                 </div>
@@ -325,9 +325,9 @@ export default async function CheckupOverviewPage() {
               {zorKonular.map((k) => (
                 <li key={k.name}>
                   <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium text-gray-700 dark:text-gray-300">{k.name}</span>
-                    <span className="shrink-0 tabular-nums text-gray-500 dark:text-gray-400">
-                      <strong className="font-semibold text-gray-800 dark:text-white/90">{percent(k.ratio)}</strong>{" "}
+                    <span className="truncate font-medium text-ink-soft">{k.name}</span>
+                    <span className="shrink-0 tabular text-ink-faint">
+                      <strong className="font-semibold text-ink">{percent(k.ratio)}</strong>{" "}
                       · {k.correct}/{k.asked}
                     </span>
                   </div>
@@ -344,7 +344,7 @@ export default async function CheckupOverviewPage() {
             <CardHeader
               title="Son tamamlanan testler"
               action={
-                <Link href="/checkup/ogrenciler" className="text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                <Link href="/checkup/ogrenciler" className="text-caption font-medium text-brand hover:text-brand-hover">
                   Öğrenciler
                 </Link>
               }
@@ -352,7 +352,7 @@ export default async function CheckupOverviewPage() {
             {sonTestler.length === 0 ? (
               <EmptyState title="Henüz tamamlanan test yok" />
             ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              <ul className="divide-y divide-line">
                 {sonTestler.map((t) => {
                   const r = t.result;
                   const toplam = r ? r.correctCount + r.wrongCount + r.blankCount : 0;
@@ -362,21 +362,21 @@ export default async function CheckupOverviewPage() {
                       <div className="min-w-0 flex-1">
                         <Link
                           href={"/checkup/ogrenciler/" + t.user.id}
-                          className="block truncate text-sm font-medium text-gray-800 hover:text-brand-500 dark:text-white/90"
+                          className="block truncate text-sm font-medium text-ink hover:text-brand"
                         >
                           {t.user.name}
                         </Link>
-                        <p className="truncate text-theme-xs text-gray-500 dark:text-gray-400">
+                        <p className="truncate text-micro text-ink-faint">
                           {t.package.name}
                           {t.submittedAt ? " · " + relativeDay(t.submittedAt, now) : ""}
                         </p>
                       </div>
                       {r ? (
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-semibold tabular-nums text-gray-800 dark:text-white/90">
+                          <p className="text-sm font-semibold tabular text-ink">
                             {trNumber(Number(r.netScore), 2)} net
                           </p>
-                          <p className="text-theme-xs tabular-nums text-gray-500 dark:text-gray-400">
+                          <p className="text-micro tabular text-ink-faint">
                             {r.correctCount}D {r.wrongCount}Y {r.blankCount}B
                             {oran !== null ? " · " + percent(oran) : ""}
                           </p>
@@ -404,19 +404,19 @@ export default async function CheckupOverviewPage() {
           {sonKayitlar.length === 0 ? (
             <EmptyState title="Henüz kayıtlı öğrenci yok" />
           ) : (
-            <ul className="grid divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
+            <ul className="grid divide-y divide-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
               {sonKayitlar.map((u) => (
                 <li key={u.id}>
                   <Link
                     href={"/checkup/ogrenciler/" + u.id}
-                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.02] sm:px-6"
+                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-hover sm:px-6"
                   >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-theme-xs font-semibold text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-micro font-semibold text-brand">
                       {u.name.trim().charAt(0).toLocaleUpperCase("tr-TR")}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-gray-800 dark:text-white/90">{u.name}</span>
-                      <span className="block truncate text-theme-xs text-gray-500 dark:text-gray-400">
+                      <span className="block truncate text-sm font-medium text-ink">{u.name}</span>
+                      <span className="block truncate text-micro text-ink-faint">
                         {u.grade ? GRADE_LABEL[u.grade] + " · " : ""}
                         {relativeDay(u.createdAt, now)}
                       </span>

@@ -30,7 +30,7 @@ export function GateNotice({
           </p>
           <p className="mt-2">
             Çıkış yapıp yeniden giriş yapmayı dene. Sorun sürerse teknik ekibe iletin:
-            backend ortamında <code className="rounded bg-gray-100 px-1 py-0.5 text-theme-xs dark:bg-white/5">AUTH_COOKIE_DOMAIN=.kocum.net</code>{" "}
+            backend ortamında <code className="rounded bg-surface-sunk px-1 py-0.5 text-micro">AUTH_COOKIE_DOMAIN=.kocum.net</code>{" "}
             tanımlı olmalı; değilse oturum çerezi yalnızca API alan adına gidiyor.
           </p>
         </>
@@ -70,7 +70,7 @@ export function GateNotice({
 
   return (
     <Card className="mx-auto mt-6 max-w-xl p-6 sm:p-8">
-      <div className="flex size-12 items-center justify-center rounded-xl bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-orange-400">
+      <div className="flex size-12 items-center justify-center rounded-xl bg-warn-wash text-warn">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
           <path
             d="M12 8v5m0 3.5h.01M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
@@ -81,10 +81,10 @@ export function GateNotice({
           />
         </svg>
       </div>
-      <h1 className="mt-4 text-lg font-semibold text-gray-800 dark:text-white/90">
+      <h1 className="mt-4 text-lg font-semibold text-ink">
         {icerik.baslik}
       </h1>
-      <div className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+      <div className="mt-2 text-sm leading-relaxed text-ink-soft">
         {icerik.metin}
       </div>
       {icerik.eylem ? <div className="mt-5">{icerik.eylem}</div> : null}

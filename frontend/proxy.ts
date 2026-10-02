@@ -71,6 +71,7 @@ export const config = {
   // Statik dosyalar, API, Next dahili yollar ve kök-seviye bot dosyaları hariç her istek.
   // (llms.txt dil öneki almamalı — /tr/llms.txt diye bir şey yok.)
   matcher: [
-    "/((?!api|_next/static|_next/image|images|uploads|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|robots.txt|llms.txt|manifest.webmanifest).*)",
+    // /admin site yönetimi: dil öneki almaz, yeniden yazılmaz.
+    "/((?!api|admin|_next/static|_next/image|images|icons|uploads|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|robots.txt|llms.txt|manifest.webmanifest).*)",
   ],
 };

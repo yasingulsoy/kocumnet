@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { Fraunces, Poppins } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import { JsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
@@ -25,23 +25,22 @@ import "../globals.css";
  * fontla çiziyor: "Gelişim", "Başarı", "Çözüm" gibi kelimelerin ortasında
  * harf harf font değişiyor. Türkçe bir sitede en görünür kusur bu.
  */
-const poppins = Poppins({
-  variable: "--font-poppins",
+/*
+ * Üç yüzeyde (site, check-up, panel) aynı çift: Poppins başlık, Inter gövde.
+ * Poppins logodaki yazıyla aynı; Inter tablo rakamlarını hizalı tutar ve
+ * 13px'te okunur. Yazı tipi değişkenleri tokens.css'teki --font-sans /
+ * --font-display tarafından okunur.
+ */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-/*
- * Başlık yazı tipi. Değişken font — ağırlık aralığını kendisi taşıyor,
- * weight dizisi verilmiyor. Caladea'nın yerine geçti: aynı editoryal tonu
- * daha çağdaş bir harf çizimiyle veriyor. Geri dönmek istersen bu bloğu
- * Caladea ile değiştirmek yeterli, geri kalan kod --font-display üzerinden
- * çalışıyor.
- */
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700"],
   display: "swap",
 });
 
@@ -138,9 +137,9 @@ export default async function RootLayout({
        * hesaplarını bozabiliyor. Sticky footer, body'deki min-h-screen +
        * flex-col ve footer'daki mt-auto ile sağlanıyor.
        */
-      className={`${poppins.variable} ${fraunces.variable} antialiased`}
+      className={`${inter.variable} ${poppins.variable} antialiased`}
     >
-      <body className="min-h-screen flex flex-col bg-background font-sans text-foreground">
+      <body className="flex min-h-screen flex-col bg-bg font-sans text-ink-soft">
         {/*
           Güvenlik ağı: framer-motion, animasyonların başlangıç durumunu
           (opacity:0) sunucu HTML'ine gömer. JavaScript yüklenmezse bu stil

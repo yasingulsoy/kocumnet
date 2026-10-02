@@ -189,7 +189,7 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[30rem] text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50 text-left text-theme-xs text-gray-500 dark:border-gray-800 dark:bg-white/[0.02] dark:text-gray-400">
+                    <tr className="border-b border-line bg-surface-sunk text-left text-micro text-ink-faint">
                       <th className="px-5 py-3 font-medium sm:px-6">Paket</th>
                       <th className="px-3 py-3 font-medium">Durum</th>
                       <th className="px-3 py-3 text-end font-medium">D / Y / B</th>
@@ -197,7 +197,7 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
                       <th className="px-5 py-3 text-end font-medium sm:px-6">Başarı</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  <tbody className="divide-y divide-line">
                     {ogrenci.checkupSessions.map((s) => {
                       // Süresi geçmiş ama henüz "süresi doldu"ya çekilmemiş oturum
                       // (öğrenci uygulaması bunu tembelce, bir sonraki ziyarette yapıyor).
@@ -208,8 +208,8 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
                       return (
                         <tr key={s.id}>
                           <td className="px-5 py-3 sm:px-6">
-                            <p className="font-medium text-gray-800 dark:text-white/90">{s.package.name}</p>
-                            <p className="text-theme-xs text-gray-500 dark:text-gray-400">
+                            <p className="font-medium text-ink">{s.package.name}</p>
+                            <p className="text-micro text-ink-faint">
                               {trDate(s.submittedAt ?? s.startedAt, { time: true })}
                               {r ? " · " + durationMinutes(r.totalTimeMs) : ""}
                             </p>
@@ -217,13 +217,13 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
                           <td className="px-3 py-3">
                             <Pill tone={SESSION_TONE[durum]}>{SESSION_STATUS_LABEL[durum]}</Pill>
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-end tabular-nums text-gray-600 dark:text-gray-400">
+                          <td className="whitespace-nowrap px-3 py-3 text-end tabular text-ink-soft">
                             {r ? r.correctCount + " / " + r.wrongCount + " / " + r.blankCount : "—"}
                           </td>
-                          <td className="px-3 py-3 text-end font-medium tabular-nums text-gray-800 dark:text-white/90">
+                          <td className="px-3 py-3 text-end font-medium tabular text-ink">
                             {r ? trNumber(Number(r.netScore), 2) : "—"}
                           </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-gray-800 dark:text-white/90 sm:px-6">
+                          <td className="px-5 py-3 text-end tabular text-ink sm:px-6">
                             {r && toplam > 0 ? percent(r.correctCount / toplam) : "—"}
                           </td>
                         </tr>
@@ -244,12 +244,12 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
             {konular.length === 0 ? (
               <EmptyState title="Henüz veri yok" description="Öğrenci bir test tamamladığında konular burada görünür." />
             ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              <ul className="divide-y divide-line">
                 {konular.map((k) => (
                   <li key={k.topicId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:px-6">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">{k.name}</p>
-                      <p className="text-theme-xs tabular-nums text-gray-500 dark:text-gray-400">
+                      <p className="truncate text-sm font-medium text-ink">{k.name}</p>
+                      <p className="text-micro tabular text-ink-faint">
                         {k.correct}/{k.asked} doğru · {percent(k.ratio)}
                       </p>
                     </div>
@@ -272,17 +272,17 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
           />
           <div className="space-y-5 p-5 sm:p-6">
             {aktifHaklar.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Aktif erişim hakkı yok.</p>
+              <p className="text-sm text-ink-faint">Aktif erişim hakkı yok.</p>
             ) : (
               <ul className="space-y-3">
                 {aktifHaklar.map((e) => {
                   const kapsam = e.package?.name ?? "Tüm paketler";
                   return (
-                    <li key={e.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                    <li key={e.id} className="rounded-xl border border-line p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 dark:text-white/90">{kapsam}</p>
-                          <p className="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                          <p className="text-sm font-medium text-ink">{kapsam}</p>
+                          <p className="mt-0.5 text-micro text-ink-faint">
                             {e.expiresAt ? trDate(e.expiresAt) + " tarihine kadar" : "Süresiz"}
                             {" · "}
                             {e.source}
@@ -291,8 +291,8 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
                         <RevokeButton id={e.id} label={kapsam} />
                       </div>
                       {e.note || e.grantedByStaff ? (
-                        <p className="mt-2 border-t border-gray-100 pt-2 text-theme-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                          {e.note ? <span className="text-gray-700 dark:text-gray-300">{e.note} · </span> : null}
+                        <p className="mt-2 border-t border-line pt-2 text-micro text-ink-faint">
+                          {e.note ? <span className="text-ink-soft">{e.note} · </span> : null}
                           {trDate(e.createdAt)}
                           {e.grantedByStaff ? " · veren: " + e.grantedByStaff : ""}
                         </p>
@@ -303,8 +303,8 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
               </ul>
             )}
 
-            <div className="border-t border-gray-100 pt-5 dark:border-gray-800">
-              <p className="mb-3 text-sm font-semibold text-gray-800 dark:text-white/90">Hak ver</p>
+            <div className="border-t border-line pt-5">
+              <p className="mb-3 text-sm font-semibold text-ink">Hak ver</p>
               {ucretliPaketler.length === 0 ? (
                 <Notice tone="info" className="mb-4">
                   Şu an tüm paketler ücretsiz; tek tek hak vermeye gerek yok. Abonelik yine de
@@ -315,14 +315,14 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
             </div>
 
             {gecmisHaklar.length > 0 ? (
-              <details className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                <summary className="cursor-pointer select-none text-theme-sm font-medium text-gray-600 hover:text-brand-500 dark:text-gray-400">
+              <details className="border-t border-line pt-4">
+                <summary className="cursor-pointer select-none text-caption font-medium text-ink-soft hover:text-brand">
                   Geçmiş haklar ({gecmisHaklar.length})
                 </summary>
                 <ul className="mt-3 space-y-2">
                   {gecmisHaklar.map((e) => (
-                    <li key={e.id} className="text-theme-xs text-gray-500 dark:text-gray-400">
-                      <span className={clsx("font-medium", "text-gray-700 line-through dark:text-gray-300")}>
+                    <li key={e.id} className="text-micro text-ink-faint">
+                      <span className={clsx("font-medium", "text-ink-soft line-through")}>
                         {e.package?.name ?? "Tüm paketler"}
                       </span>
                       {" · "}

@@ -9,28 +9,50 @@ function getAdminJwt(req) {
   return null;
 }
 
+/**
+ * Jeton, parolanın son değiştiği andan önce imzalanmışsa geçersiz. 1 saniye
+ * pay: parola değiştirilip hemen yeni çerez verildiğinde iat aynı saniyeye
+ * düşebiliyor.
+ */
+function jetonEskimis(decoded, user) {
+  if (!user.password_changed_at) return false;
+  const iatMs = Number(decoded.iat || 0) * 1000;
+  return iatMs + 1000 < new Date(user.password_changed_at).getTime();
+}
+
+/**
+ * Çerezdeki jetonu çözer ve aktif personeli döndürür; yoksa null.
+ * Veritabanı hatası 401 DEĞİL — fırlatır. Eskiden her hata 401'e düşüyordu
+ * ve geçici bir DB kesintisi herkesi "çıkış yapmış" gösteriyordu.
+ */
+async function resolveStaff(req) {
+  const token = getAdminJwt(req);
+  if (!token) return null;
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+  const user = await User.findByPk(decoded.id);
+  if (!user || !user.is_active || jetonEskimis(decoded, user)) return null;
+  return user;
+}
+
 // Panele erişebilen aktif personel (admin/manager/editor/viewer — hepsi giriş yapabilir).
 // Yetki farkı requireRole ile ayrı ayrı uygulanır.
 const authenticateAdmin = async (req, res, next) => {
   try {
-    const token = getAdminJwt(req);
-    if (!token) {
-      return res.status(401).json({ success: false, error: 'Token bulunamadı' });
+    const user = await resolveStaff(req);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Oturum yok ya da geçersiz' });
     }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findByPk(decoded.id);
-
-    if (!user || !user.is_active) {
-      return res.status(401).json({ success: false, error: 'Geçersiz token veya hesap pasif' });
-    }
-
     req.user = user;
     req.userId = user.id;
     req.userRole = user.role;
     next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Geçersiz token' });
+  } catch (e) {
+    next(e);
   }
 };
 
@@ -50,13 +72,8 @@ const requireRole = (...roles) => (req, res, next) => {
 // Blog taslaklarının panelde görünürlüğü buna bağlı.
 const optionalAdmin = async (req, res, next) => {
   try {
-    const token = getAdminJwt(req);
-    if (!token) return next();
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findByPk(decoded.id);
-
-    if (user && user.is_active) {
+    const user = await resolveStaff(req);
+    if (user) {
       req.isStaff = true;
       req.isAdmin = !!user.is_admin;
       req.user = user;
@@ -64,7 +81,7 @@ const optionalAdmin = async (req, res, next) => {
       req.userRole = user.role;
     }
   } catch {
-    // ignore
+    // Oturum isteğe bağlı: hata olursa misafir gibi devam.
   }
   next();
 };
@@ -74,4 +91,5 @@ module.exports = {
   requireRole,
   optionalAdmin,
   getAdminJwt,
+  resolveStaff,
 };
