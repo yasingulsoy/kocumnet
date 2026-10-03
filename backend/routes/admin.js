@@ -308,10 +308,9 @@ router.get(
   '/users',
   requireRole('admin', 'manager'),
   asyncHandler(async (req, res) => {
-    const users = await User.findAll({
-      order: [['created_at', 'DESC']],
-      attributes: { exclude: ['password_hash'] },
-    });
+    // password_hash OKUNUR ama formatUser dışarı vermez: has_password bundan türüyor.
+    // (Eskiden exclude ediliyordu ve herkes "davet bekliyor" görünüyordu.)
+    const users = await User.findAll({ order: [['created_at', 'DESC']] });
     res.json({ success: true, data: users.map(formatUser) });
   })
 );

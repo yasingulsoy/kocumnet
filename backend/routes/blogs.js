@@ -29,6 +29,7 @@ const AUTHOR_FIELDS = ['id', 'username', 'first_name', 'last_name'];
 /** Yalnızca bu alanlar istemciden güncellenebilir. */
 const GUNCELLENEBILIR_ALANLAR = [
   'title',
+  'slug',
   'content',
   'excerpt',
   'tags',
@@ -114,6 +115,9 @@ async function benzersizSlug(baslik, haricId = null) {
   // Sıra dışı durum: 50 çakışma. Zaman damgası kesin çözüyor.
   return `${temel}-${Date.now()}`;
 }
+
+/** Elle girilen adres: küçük harf, rakam, tire. 3-120 karakter. */
+const SLUG_DESENI = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function benzersizSlugHatasi(error) {
   return error && error.name === 'SequelizeUniqueConstraintError';
@@ -498,7 +502,28 @@ router.put(
       updateData.image = null;
     }
 
-    if (updateData.title && updateData.title !== blog.title) {
+    /*
+     * ADRES (slug) KURALI:
+     *  · Elle verilen slug her zaman kazanır (biçim + benzersizlik denetlenir).
+     *  · Yayındaki yazının adresi başlık değişince DEĞİŞMEZ: paylaşılmış,
+     *    indekslenmiş bir bağlantı 404 vermemeli. Eskiden başlıktaki tek bir
+     *    harf düzeltmesi bile canlı adresi kırıyordu.
+     *  · Taslakta başlık değişince adres başlığı izler (henüz kimse görmedi).
+     */
+    if (updateData.slug !== undefined) {
+      const istenen = String(updateData.slug).trim().toLowerCase();
+      if (!SLUG_DESENI.test(istenen) || istenen.length < 3 || istenen.length > 120) {
+        return res.status(400).json({
+          success: false,
+          error: 'Adres yalnızca küçük harf, rakam ve tire içerebilir (3-120 karakter). Örnek: tyt-matematik-plani',
+        });
+      }
+      if (istenen !== blog.slug) {
+        const dolu = await Blog.findOne({ where: { slug: istenen, id: { [Op.ne]: blog.id } }, attributes: ['id'] });
+        if (dolu) return res.status(400).json({ success: false, error: 'Bu adres başka bir yazıda kullanılıyor.' });
+      }
+      updateData.slug = istenen;
+    } else if (updateData.title && updateData.title !== blog.title && !blog.is_published) {
       updateData.slug = await benzersizSlug(updateData.title, blog.id);
     }
 

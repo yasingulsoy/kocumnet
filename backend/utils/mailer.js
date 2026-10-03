@@ -22,8 +22,21 @@ const SITE_ADMIN_URL = `${SITE_URL}/admin`;
 const MAIL_FROM = (process.env.MAIL_FROM || 'Koçum.Net <noreply@kocum.net>').trim();
 const MARKA = 'Koçum.Net';
 
+const SMTP_URL = String(process.env.SMTP_URL || '').trim();
+
+/**
+ * Geliştirme taşıyıcısı: SMTP_URL=log://console
+ * Posta "gönderilmiş" sayılır ama yalnızca sunucu günlüğüne yazılır. Davet ve
+ * parola sıfırlama akışları gerçek SMTP olmadan uçtan uca denenebilsin diye.
+ * ÜRETİMDE REDDEDİLİR: gönderilmiş sanılan davet kimseye ulaşmazdı.
+ */
+const LOG_TASIYICI = /^log:/i.test(SMTP_URL);
+if (LOG_TASIYICI && IS_PRODUCTION) {
+  throw new Error('SMTP_URL=log:// yalnızca geliştirmede kullanılabilir; üretimde gerçek bir SMTP adresi ver.');
+}
+
 function isMailConfigured() {
-  return String(process.env.SMTP_URL || '').trim() !== '';
+  return SMTP_URL !== '';
 }
 
 let transportCache = null;
@@ -33,10 +46,10 @@ let transportCache = null;
  * URL'i kendimiz çözüp seçeneklerle birlikte veriyoruz.
  */
 function getTransport() {
-  if (!isMailConfigured()) return null;
+  if (!isMailConfigured() || LOG_TASIYICI) return null;
   if (transportCache) return transportCache;
 
-  const u = new URL(String(process.env.SMTP_URL).trim());
+  const u = new URL(SMTP_URL);
   const secure = u.protocol === 'smtps:';
   const nodemailer = require('nodemailer');
   transportCache = nodemailer.createTransport({
@@ -158,13 +171,13 @@ async function sendMail({ to, subject, html, text, replyTo }) {
 
   if (!transport) {
     if (!IS_PRODUCTION) {
-      console.log('\n─── E-POSTA (SMTP yok, gönderilmedi) ───');
+      console.log(LOG_TASIYICI ? '\n─── E-POSTA (log taşıyıcısı) ───' : '\n─── E-POSTA (SMTP yok, gönderilmedi) ───');
       console.log('Kime :', alicilar.join(', '));
       console.log('Konu :', subject);
       console.log(text);
       console.log('────────────────────────────────────────\n');
     }
-    return { sent: false, reason: 'not-configured' };
+    return LOG_TASIYICI ? { sent: true, reason: 'logged' } : { sent: false, reason: 'not-configured' };
   }
 
   try {

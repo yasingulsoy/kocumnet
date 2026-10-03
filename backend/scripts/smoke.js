@@ -33,6 +33,9 @@ function cerezKabi() {
     baslik() {
       return [...kavanoz].map(([k, v]) => `${k}=${v}`).join('; ');
     },
+    deger(ad) {
+      return kavanoz.get(ad) || null;
+    },
     kaydet(res) {
       const raw = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
       for (const satir of raw) {
@@ -45,11 +48,17 @@ function cerezKabi() {
 }
 
 async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
+  // Çift gönderim: kaptaki csrf_token çerezi varsa aynı değeri başlığa koy.
+  // Eskiden konmuyordu ve test yalnızca CSRF_DISABLED=1 ile geçiyordu — yani
+  // asıl korumanın çalıştığı yol hiç denenmiyordu.
+  const yazma = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+  const csrf = cerez && yazma ? cerez.deger('csrf_token') : null;
   const res = await fetch(BASE + yol, {
     method,
     headers: {
       ...(body ? { 'content-type': 'application/json' } : {}),
       ...(cerez ? { cookie: cerez.baslik() } : {}),
+      ...(csrf ? { 'x-csrf-token': csrf } : {}),
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -177,10 +186,10 @@ async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
         const sonra = await iste(`/api/blogs/${id}`, { cerez });
         const b = sonra.json && sonra.json.data;
         ok(
-          'toplu atama engelleniyor (author_id / slug / view_count)',
-          b && b.author_id !== 999999 && b.slug !== 'ele-gecirildi' && b.view_count === 0
+          'toplu atama engelleniyor (author_id / view_count)',
+          b && b.author_id !== 999999 && b.view_count === 0
         );
-        ok('izinli alan güncelleniyor (excerpt)', b && b.excerpt === 'özet');
+        ok('izinli alanlar güncelleniyor (excerpt, slug)', b && b.excerpt === 'özet' && b.slug === 'ele-gecirildi');
 
         await iste(`/api/blogs/${id}`, { method: 'PUT', body: { image: '../../.env' }, cerez });
         const sonra2 = await iste(`/api/blogs/${id}`, { cerez });
