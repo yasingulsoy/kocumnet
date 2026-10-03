@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { LogoMark as Logo, Wordmark } from "@/components/LogoMark";
+import { Wordmark } from "@/components/LogoMark";
 import { cn } from "@/components/ui";
 import { logoutAction } from "@/lib/admin/actions";
 import { MANAGE_ROLES, ROLE_LABEL, type Staff } from "@/lib/admin/types";
@@ -132,9 +132,9 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
 
       <aside className="fixed inset-y-0 start-0 z-40 hidden w-[264px] flex-col border-e border-line bg-surface lg:flex">
         <div className="flex h-16 items-center px-5">
-          <Link href="/admin" aria-label="Genel bakış" className="flex flex-col">
-            <Wordmark />
-            <span className="ms-[46px] -mt-0.5 text-[9.5px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+          <Link href="/admin" aria-label="Genel bakış" className="flex flex-col items-start gap-1.5">
+            <Wordmark className="h-7" />
+            <span className="ps-0.5 text-[9.5px] font-semibold uppercase leading-none tracking-[0.16em] text-ink-faint">
               Site yönetimi
             </span>
           </Link>
@@ -146,9 +146,11 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
       </aside>
 
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
-        <Link href="/admin" aria-label="Genel bakış" className="flex items-center gap-2.5">
-          <Logo />
-          <span className="font-display text-body font-bold tracking-tight text-brand-deep">Site yönetimi</span>
+        <Link href="/admin" aria-label="Genel bakış" className="flex items-center gap-2">
+          <Wordmark className="h-[22px]" />
+          <span className="rounded-md bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+            yönetim
+          </span>
         </Link>
         <button
           type="button"
@@ -176,7 +178,7 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
           )}
         >
           <div className="flex h-14 items-center justify-between border-b border-line px-4">
-            <Wordmark />
+            <Wordmark className="h-[22px]" />
             <button
               type="button"
               onClick={() => setAcik(false)}

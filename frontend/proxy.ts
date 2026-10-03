@@ -83,6 +83,7 @@ export const config = {
   // (llms.txt dil öneki almamalı — /tr/llms.txt diye bir şey yok.)
   matcher: [
     // /admin site yönetimi: dil öneki almaz, yeniden yazılmaz.
-    "/((?!api|admin|_next/static|_next/image|images|icons|uploads|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|robots.txt|llms.txt|manifest.webmanifest).*)",
+    // /brand: marka dosyaları (e-posta logosu, basın için logo) — public/brand.
+    "/((?!api|admin|_next/static|_next/image|images|icons|brand|uploads|favicon.ico|icon.svg|apple-icon.png|sitemap.xml|robots.txt|llms.txt|manifest.webmanifest).*)",
   ],
 };

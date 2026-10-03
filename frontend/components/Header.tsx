@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, Globe, Mail, MapPin, Menu, X } from "lucide-react";
 import { SITE_BRAND } from "@/lib/site-brand";
-import { LogoMark, Wordmark } from "./LogoMark";
+import { Wordmark } from "./LogoMark";
 import { InstagramIcon } from "./icons";
 import { buttonClass, cn } from "./ui";
 import { LOCALES, LOCALE_NAMES, type Locale } from "@/lib/i18n/config";
@@ -223,10 +223,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           )}
         >
           <div className="flex h-[4.5rem] items-center justify-between border-b border-line px-5">
-            <span className="flex items-center gap-2.5 font-display text-[1.125rem] font-bold text-brand-deep">
-              <LogoMark />
-              Koçum<span className="text-brand-bright">.Net</span>
-            </span>
+            <Wordmark />
             <button
               type="button"
               className="flex size-11 items-center justify-center rounded-xl text-ink transition hover:bg-surface-hover"

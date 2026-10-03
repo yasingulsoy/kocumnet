@@ -9,7 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
-    theme_color: "#1a5fb4",
+    // Üst çubuk beyaz; mavi şerit logonun sarı/lacivertiyle çakışıyordu.
+    theme_color: "#ffffff",
     lang: "tr",
     dir: "ltr",
     categories: ["education"],
@@ -27,7 +28,7 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
       {
-        // Android adaptive icon — kenarlarda güvenli alan bırakır, kırpılınca "K" kesilmez
+        // Android adaptive icon — kenarlarda güvenli alan bırakır, kırpılınca "k" kesilmez
         src: "/icons/icon-maskable-512.png",
         sizes: "512x512",
         type: "image/png",

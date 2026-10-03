@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { logoutRequest } from "@/lib/api";
 import { ROLE_LABEL, type Staff } from "@/lib/checkup/roles";
-import { Logo, Wordmark } from "@/components/brand/Logo";
+import { Wordmark } from "@/components/brand/Logo";
 
 /**
  * Panel çerçevesi: masaüstünde sabit sol kenar çubuğu, mobilde üst çubuk +
@@ -167,9 +167,11 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
 
       {/* Mobil üst çubuk */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
-        <Link href="/checkup" aria-label="Genel bakış" className="flex items-center gap-2.5">
-          <Logo />
-          <span className="font-display text-body font-bold tracking-tight text-brand-deep">Panel</span>
+        <Link href="/checkup" aria-label="Genel bakış" className="flex items-center gap-2">
+          <Wordmark compact />
+          <span className="rounded-md bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+            panel
+          </span>
         </Link>
         <button
           type="button"
@@ -205,7 +207,7 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
           )}
         >
           <div className="flex h-14 items-center justify-between border-b border-line px-4">
-            <Wordmark />
+            <Wordmark compact />
             <button
               type="button"
               onClick={() => setAcik(false)}

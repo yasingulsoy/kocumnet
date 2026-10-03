@@ -112,11 +112,8 @@ function renderMail({ baslik, metin, eylem, sonMetin, kutu, dipnot, yon = 'ltr' 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6fb;padding:32px 12px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;border:1px solid #e6eaf2;overflow:hidden;">
-  <tr><td style="background:#17305e;background-image:linear-gradient(135deg,#17305e,#1a5fb4 55%,#0e90d5);padding:22px 28px;">
-    <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-      <td style="vertical-align:middle;"><img src="${SITE_URL}/icons/icon-192.png" width="36" height="36" alt="" style="display:block;border-radius:10px;"></td>
-      <td style="vertical-align:middle;padding-left:12px;font-size:17px;font-weight:700;color:#ffffff;letter-spacing:-0.01em;">Koçum<span style="color:#8ecdf5;">.Net</span></td>
-    </tr></table>
+  <tr><td style="background:#ffffff;padding:26px 28px 8px;text-align:${align};">
+    <img src="${SITE_URL}/brand/eposta-logo.png" width="160" height="39" alt="Koçum.Net" style="display:inline-block;border:0;outline:none;">
   </td></tr>
   <tr><td style="padding:30px 28px 10px;text-align:${align};">
     <h1 style="margin:0 0 16px;font-size:22px;line-height:1.25;font-weight:700;color:#111834;letter-spacing:-0.01em;">${kacir(baslik)}</h1>

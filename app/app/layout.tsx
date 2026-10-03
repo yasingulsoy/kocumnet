@@ -37,6 +37,16 @@ export const metadata: Metadata = {
   // Check-up bir uygulama, pazarlama sayfası değil: arama motorlarına açılacak
   // yüzey /kocum.net; burası giriş gerektiriyor.
   robots: { index: false, follow: false },
+  // Arama motoruna kapalı ama bağlantı WhatsApp'tan paylaşılıyor: önizleme
+  // görseli app/opengraph-image.png (design/brand'den, sync ile gelir).
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    siteName: "Koçum.Net",
+    title: "Matematik Check-up · Koçum.Net",
+    description: "Net kaç değil, nerede eksiğin var? 20 dakikalık bir testle hangi konuda zayıf olduğunu gör.",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {

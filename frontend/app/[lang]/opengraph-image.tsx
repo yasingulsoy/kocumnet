@@ -2,17 +2,20 @@ import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { LOCALES, isLocale } from "@/lib/i18n/config";
+import { BRAND_COLORS, WORDMARK } from "@/lib/brand-paths";
 
 /**
- * Paylaşım görseli (Open Graph / Twitter). Eskiden HİÇ yoktu: WhatsApp,
- * LinkedIn ve X'te paylaşılan her sayfa görselsiz çıkıyordu.
+ * Paylaşım görseli (Open Graph / X / WhatsApp / LinkedIn) — "Fosfor".
  *
- * Marka gradyanı + K işareti + wordmark + dile göre slogan. Yazı tipleri
- * assets/fonts altında (OFL lisanslı): Satori woff2 okumaz, TTF ister ve
- * DEĞİŞKEN (variable) fontu da okuyamıyor — Inter'in değişken dosyası
- * "reading '256'" hatasıyla düşüyordu; iki statik Poppins kesimi kullanılıyor.
+ * Kâğıt zemin, logo, dile göre slogan; sloganın son kelimesi logodaki gibi
+ * fosforlu kalemle çizilmiş. Logo yol verisinden çiziliyor (lib/brand-paths.ts),
+ * yazı tipine bağlı değil.
+ *
+ * Satori TTF ister ve değişken (variable) fontu okuyamıyor: slogan için iki
+ * statik Poppins kesimi assets/fonts altında. Arapça BİLEREK İngilizce:
+ * Satori Arapça harfleri bitiştiremiyor, bozuk Arapça yerine İngilizce.
  */
-export const alt = "Koçum.Net";
+export const alt = "Koçum.Net — Sınava kadar aklında";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -20,21 +23,18 @@ export function generateStaticParams() {
   return LOCALES.map((lang) => ({ lang }));
 }
 
-const SLOGAN: Record<string, { ust: string; alt: string }> = {
-  tr: { ust: "Sınava kadar aklında", alt: "Sınav hazırlık koçluğu · tercih danışmanlığı · matematik check-up" },
-  en: { ust: "In your mind until the exam", alt: "Exam coaching · university choice counselling · math check-up" },
-  /*
-   * Arapça metin BİLEREK yok: Satori'de karmaşık yazı şekillendirme (harf
-   * bitişmesi, sağdan sola) yok — Arapça harfler kopuk ve ters çıkıyor,
-   * `direction: rtl` ise çizimi düşürüyor. Bozuk Arapça yerine İngilizce.
-   */
-  ar: { ust: "In your mind until the exam", alt: "Exam coaching · university choice counselling · math check-up" },
+const METIN: Record<string, { bas: string; son: string; alt: string }> = {
+  tr: { bas: "Sınava kadar", son: "aklında.", alt: "Sınav koçluğu · tercih danışmanlığı · matematik check-up" },
+  en: { bas: "In your mind until", son: "the exam.", alt: "Exam coaching · university choice counselling · math check-up" },
+  ar: { bas: "In your mind until", son: "the exam.", alt: "Exam coaching · university choice counselling · math check-up" },
 };
+
+const LOGO_GEN = 380;
+const LOGO_YUK = Math.round((LOGO_GEN * WORDMARK.height) / WORDMARK.width);
 
 export default async function Image({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
-  const dil = isLocale(lang) ? lang : "tr";
-  const s = SLOGAN[dil];
+  const t = METIN[isLocale(lang) ? lang : "tr"];
   const [kalin, normal] = await Promise.all([
     readFile(join(process.cwd(), "assets/fonts/Poppins-Bold.ttf")),
     readFile(join(process.cwd(), "assets/fonts/Poppins-Regular.ttf")),
@@ -49,31 +49,53 @@ export default async function Image({ params }: { params: Promise<{ lang: string
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: 72,
-          backgroundImage: "linear-gradient(135deg, #17305e 0%, #1a5fb4 55%, #0e90d5 100%)",
-          color: "#fff",
+          padding: "68px 80px",
+          background: "#fffdf6",
+          color: BRAND_COLORS.ink,
           fontFamily: "Poppins",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-          <svg width="96" height="96" viewBox="0 0 32 32">
-            <rect x="0.5" y="0.5" width="31" height="31" rx="8.5" fill="rgba(255,255,255,0.14)" stroke="rgba(255,255,255,0.3)" />
-            <g stroke="#fff" strokeWidth="3.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
-              <path d="M11 8.8 V 23.2" />
-              <path d="M12.8 16 L 21.4 23.2" />
-              <path d="M12.8 16 L 19.8 10.2" />
-            </g>
-            <circle cx="22.4" cy="8.6" r="2.4" fill="#fff" />
-          </svg>
-          <div style={{ display: "flex", fontWeight: 700, fontSize: 56, letterSpacing: -1 }}>
-            Koçum<span style={{ color: "#8ecdf5" }}>.Net</span>
+        <svg width={LOGO_GEN} height={LOGO_YUK} viewBox={WORDMARK.viewBox}>
+          <path d={WORDMARK.swipe} fill={BRAND_COLORS.highlight} />
+          <path d={WORDMARK.koc} fill={BRAND_COLORS.ink} />
+          <path d={WORDMARK.net} fill={BRAND_COLORS.ink} />
+        </svg>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              gap: 24,
+              fontWeight: 700,
+              fontSize: 84,
+              lineHeight: 1.05,
+              letterSpacing: -2,
+            }}
+          >
+            <span>{t.bas}</span>
+            <div style={{ display: "flex", position: "relative" }}>
+              {/* Fosforlu kalem: metnin arkasında, hafif eğik. */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: -10,
+                  right: -14,
+                  top: 26,
+                  bottom: -4,
+                  background: BRAND_COLORS.highlight,
+                  borderRadius: 6,
+                  transform: "rotate(-2.5deg)",
+                }}
+              />
+              <span style={{ position: "relative" }}>{t.son}</span>
+            </div>
           </div>
+          <div style={{ fontWeight: 400, fontSize: 30, color: "#5b6478" }}>{t.alt}</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ fontWeight: 700, fontSize: 76, lineHeight: 1.05, letterSpacing: -2, maxWidth: 1000 }}>{s.ust}</div>
-          <div style={{ fontSize: 30, color: "rgba(255,255,255,0.78)", maxWidth: 1000 }}>{s.alt}</div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 26, color: "rgba(255,255,255,0.7)" }}>
+
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 24, color: "#5b6478" }}>
           <span>kocum.net</span>
           <span>İstanbul</span>
         </div>

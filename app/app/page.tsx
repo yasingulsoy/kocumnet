@@ -78,9 +78,7 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
             </Badge>
             <h1 className="font-display mt-5 text-[40px] font-bold leading-[1.08] tracking-tight text-ink sm:text-[54px] text-balance">
               Net kaç değil,{" "}
-              <span className="bg-gradient-to-r from-brand to-brand-bright bg-clip-text text-transparent">
-                nerede eksiğin var?
-              </span>
+              <span className="marker">nerede eksiğin var?</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
               20 dakikalık bir testle matematikte hangi konuda güçlü, hangisinde zayıf

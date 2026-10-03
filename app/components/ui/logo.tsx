@@ -1,48 +1,39 @@
-import { useId } from "react";
+import { BRAND_COLORS, MONOGRAM, WORDMARK } from "@/lib/brand-paths";
 import { cn } from "@/lib/cn";
 
-/**
- * Koçum.Net marka işareti — tanıtım sitesi ve yönetim paneliyle AYNI çizim
- * (design/logo/mark.svg). K'nın üst kolu yükselen bir çizgiye dönüşüp bir
- * noktayla bitiyor: koç yön gösterir ve yükseltir.
+/*
+ * Koçum.Net marka işaretleri — "Fosfor". Tanıtım sitesi ve yönetim
+ * paneliyle AYNI çizim: yol verisi design/brand/'dan (lib/brand-paths.ts
+ * otomatik kopya; `node design/sync.mjs`). Yazı tipine bağlı değil.
  *
- * Eskiden burada ayrı bir "✓" işareti vardı; üç yüzey üç farklı logo
- * taşıyordu. Ürün adı ("Check-up") artık yazıda, işarette değil.
+ * Ürün adı ("Check-up") işarette değil, logonun yanında metin olarak durur.
  */
-export function Logo({ className, light }: { className?: string; light?: boolean }) {
-  const id = useId();
+
+/** Kare ikon: fosforlu sarı zemin, lacivert "k". Sınav ekranının üst çubuğu ve favicon. */
+export function Logo({ className }: { className?: string; light?: boolean }) {
   return (
-    <svg viewBox="0 0 32 32" aria-hidden className={cn("size-8 shrink-0", className)}>
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#17305e" />
-          <stop offset="0.55" stopColor="#1a5fb4" />
-          <stop offset="1" stopColor="#0e90d5" />
-        </linearGradient>
-      </defs>
-      {light ? (
-        <rect
-          x="0.5"
-          y="0.5"
-          width="31"
-          height="31"
-          rx="8.5"
-          fill="rgb(255 255 255 / 0.14)"
-          stroke="rgb(255 255 255 / 0.28)"
-        />
-      ) : (
-        <rect width="32" height="32" rx="9" fill={`url(#${id})`} />
-      )}
-      <g stroke="#ffffff" strokeWidth="3.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
-        <path d="M11 8.8 V 23.2" />
-        <path d="M12.8 16 L 21.4 23.2" />
-        <path d="M12.8 16 L 19.8 10.2" />
-      </g>
-      <circle cx="22.4" cy="8.6" r="2.4" fill="#ffffff" />
+    <svg viewBox={MONOGRAM.viewBox} aria-hidden className={cn("size-8 shrink-0", className)}>
+      <rect width="64" height="64" rx={MONOGRAM.radius} fill={BRAND_COLORS.highlight} />
+      <path d={MONOGRAM.k} fill={BRAND_COLORS.ink} />
     </svg>
   );
 }
 
+/** Yalnızca "koçum.net" yazısı. light: koyu zemin (beyaz "koçum."). */
+export function LogoYazi({ className, light }: { className?: string; light?: boolean }) {
+  return (
+    <svg viewBox={WORDMARK.viewBox} role="img" aria-label="Koçum.Net" className={cn("h-7 w-auto shrink-0", className)}>
+      <path d={WORDMARK.swipe} fill={BRAND_COLORS.highlight} />
+      <path d={WORDMARK.koc} fill={light ? "#ffffff" : BRAND_COLORS.ink} />
+      <path d={WORDMARK.net} fill={BRAND_COLORS.ink} />
+    </svg>
+  );
+}
+
+/**
+ * Logo + ürün adı.
+ * compact: dar mobil çubuk — logo küçük, ürün adı yanında etiket olarak.
+ */
 export function Wordmark({
   className,
   tone = "dark",
@@ -50,33 +41,34 @@ export function Wordmark({
 }: {
   className?: string;
   tone?: "dark" | "light";
-  /** Yalnızca işaret + "Check-up" (dar mobil çubuk). */
   compact?: boolean;
 }) {
   const light = tone === "light";
-  return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <Logo light={light} />
-      <span className="flex flex-col leading-none">
-        {compact ? null : (
-          <span
-            className={cn(
-              "font-display text-[15px] font-bold tracking-tight",
-              light ? "text-white" : "text-brand-deep"
-            )}
-          >
-            Koçum<span className={light ? "text-white/70" : "text-brand-bright"}>.Net</span>
-          </span>
-        )}
+  if (compact) {
+    return (
+      <span className={cn("inline-flex items-center gap-2", className)}>
+        <LogoYazi light={light} className="h-[22px]" />
         <span
           className={cn(
-            "font-semibold uppercase tracking-[0.16em]",
-            compact ? "font-display text-sm tracking-tight normal-case" : "mt-1 text-[9.5px]",
-            light ? "text-white/70" : compact ? "text-brand-deep" : "text-ink-faint"
+            "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+            light ? "bg-white/10 text-white/80" : "bg-surface-sunk text-ink-soft"
           )}
         >
-          {compact ? "Check-up" : "Matematik Check-up"}
+          check-up
         </span>
+      </span>
+    );
+  }
+  return (
+    <span className={cn("inline-flex flex-col items-start gap-1.5", className)}>
+      <LogoYazi light={light} />
+      <span
+        className={cn(
+          "ps-0.5 text-[9.5px] font-semibold uppercase leading-none tracking-[0.16em]",
+          light ? "text-white/70" : "text-ink-faint"
+        )}
+      >
+        Matematik Check-up
       </span>
     </span>
   );

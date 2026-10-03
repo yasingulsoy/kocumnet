@@ -36,6 +36,21 @@ import { PRODUCTS } from "@/lib/products";
  */
 const CHECKUP_URL = process.env.NEXT_PUBLIC_CHECKUP_URL?.trim();
 
+/**
+ * Başlığın son kelimesi fosforlu kalemle çizilir — logodaki "net" gibi.
+ * Kelime sırası mantıksal; Arapçada da son kelime doğru yerde vurgulanır.
+ */
+function fosforla(baslik: string) {
+  const i = baslik.trimEnd().lastIndexOf(" ");
+  if (i < 0) return <span className="marker">{baslik}</span>;
+  return (
+    <>
+      {baslik.slice(0, i + 1)}
+      <span className="marker">{baslik.slice(i + 1)}</span>
+    </>
+  );
+}
+
 export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
   if (!isLocale(lang)) notFound();
@@ -78,7 +93,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             </Reveal>
             <Reveal y={20} delay={0.06}>
               <h1 className="font-display mt-4 text-display font-semibold tracking-tight text-ink text-balance">
-                {h.heroTitle}
+                {fosforla(h.heroTitle)}
               </h1>
             </Reveal>
             <Reveal y={20} delay={0.12}>

@@ -85,10 +85,10 @@ export function renderMail({ baslik, metin, eylem, sonMetin, kutu, dipnot, altBa
 <body style="margin:0;padding:0;background:#f4f6fb;font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6fb;padding:32px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;border:1px solid #e6eaf2;overflow:hidden;">
-  <tr><td style="background:#17305e;background-image:linear-gradient(135deg,#17305e,#1a5fb4 55%,#0e90d5);padding:22px 28px;">
+  <tr><td style="background:#ffffff;padding:26px 28px 8px;">
     <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-      <td style="vertical-align:middle;"><img src="${appUrl()}/icons/icon-192.png" width="36" height="36" alt="" style="display:block;border-radius:10px;"></td>
-      <td style="vertical-align:middle;padding-left:12px;font-size:17px;font-weight:700;color:#ffffff;letter-spacing:-0.01em;">Koçum<span style="color:#8ecdf5;">.Net</span> <span style="font-weight:500;color:rgba(255,255,255,0.7);font-size:13px;">· Check-up</span></td>
+      <td style="vertical-align:middle;"><img src="${appUrl()}/brand/eposta-logo.png" width="160" height="39" alt="Koçum.Net" style="display:block;border:0;outline:none;"></td>
+      <td style="vertical-align:middle;padding-left:10px;"><span style="display:inline-block;padding:3px 7px;border-radius:6px;background:#f4f6fb;color:#4b5471;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;">check-up</span></td>
     </tr></table>
   </td></tr>
   <tr><td style="padding:30px 28px 10px;">
