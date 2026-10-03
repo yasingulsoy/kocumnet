@@ -1,8 +1,12 @@
-# Koçum.Net — logo çalışması
+# Koçum.Net — logo çalışması (arşiv)
 
-Bu klasör bir **öneri dosyası**. Henüz hiçbir yere bağlanmadı: site ve
-check-up uygulaması hâlâ kendi eski işaretlerini kullanıyor. Yön seçilince
-bağlarım.
+> **Sonuç (3 Ekim 2026): "Fosfor" seçildi.** koçum.net, "net" fosforlu
+> kalemle çizili. Kullanılan dosyalar ve kurallar artık `design/brand/`
+> (rehber: `design/brand/index.html`). Bu klasör yalnızca keşif arşivi:
+> aşağıdaki metin ve `svg/` ilk tur (K + nokta), `v2/` ikinci tur (kare
+> içinde K), `v3/` altı ayrı yön. Fosfor `v3/`'ten çıktı.
+
+İlk turun notları aşağıda olduğu gibi duruyor.
 
 ```
 logo/

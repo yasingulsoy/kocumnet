@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Koçum.Net · bambaşka logo yönleri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Baloo+2:wght@800&family=Caveat:wght@700&family=DM+Serif+Display&family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Outfit:wght@600;800&display=swap">
+<style>
+  :root { --ink:#16181f; --soft:#555b6b; --faint:#7a8090; --line:#e8e8ec; color-scheme: light; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#fafafa; color:var(--soft); font:15px/1.6 Inter, system-ui, sans-serif; }
+  main { max-width:1160px; margin:0 auto; padding:40px 16px 72px; }
+  h1 { font:700 32px/1.15 Inter, sans-serif; color:var(--ink); margin:0; letter-spacing:-.02em; }
+  .giris { max-width:760px; margin:10px 0 0; }
+  .baslik2 { margin:30px 0 10px; font:700 12px/1 Inter, sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+  .telefon { display:flex; flex-wrap:wrap; gap:18px; padding:22px; border-radius:24px; background:linear-gradient(160deg,#3a4256,#141821); }
+  .app { display:flex; flex-direction:column; align-items:center; gap:6px; text-decoration:none; }
+  .app small { color:#fff; font-size:11px; }
+  .ikon { display:block; width:60px; height:60px; border-radius:14px; overflow:hidden; }
+  .ikon svg, .fav svg, .sym svg { width:100%; height:100%; display:block; }
+  .sekmeler { display:flex; flex-wrap:wrap; gap:8px; }
+  .mock { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .sekme { gap:8px; padding:8px 12px; background:#eef0f3; border-radius:10px 10px 0 0; border-bottom:none; font-size:12px; min-width:0; flex:1; }
+  .sekme span:last-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sekme.dar { flex:0 0 auto; border-radius:10px; border-bottom:1px solid var(--line); }
+  .fav { display:block; width:16px; height:16px; flex:0 0 16px; }
+
+  .yon { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); margin-top:28px; background:#fff; border:1px solid var(--line); border-radius:24px; overflow:hidden; }
+  .yon.oneri { border:2px solid #16181f; box-shadow:0 18px 40px -22px rgb(0 0 0 / .35); }
+  .sahne { position:relative; display:flex; align-items:center; justify-content:center; min-height:300px; padding:40px 24px; }
+  .rozet { position:absolute; top:16px; left:16px; background:#16181f; color:#fff; font:600 12px/1 Inter, sans-serif; padding:7px 11px; border-radius:999px; }
+  .buyuk { font-size:52px; }
+  .detay { padding:26px; }
+  h2 { display:flex; align-items:center; gap:10px; font:700 24px/1.2 Inter, sans-serif; color:var(--ink); margin:0 0 6px; letter-spacing:-.01em; }
+  h2 .no { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#f0f0f3; font-size:13px; color:var(--soft); }
+  .fikir { margin:0 0 16px; }
+  .baglam { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; }
+  .detay { min-width:0; }
+  .baslik { padding:10px 14px; }
+  .baslik .kucuk { font-size:20px; }
+  .baslik nav { margin-left:auto; font-size:12px; color:var(--faint); white-space:nowrap; }
+  .satir { display:flex; align-items:center; gap:12px; }
+  .uyg { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 12px; border-radius:16px; background:linear-gradient(160deg,#3a4256,#141821); }
+  .uyg .ikon { width:52px; height:52px; border-radius:12px; }
+  .uyg small { color:#fff; font-size:10px; }
+  dl { margin:16px 0 0; display:grid; gap:8px; font-size:13.5px; }
+  dl div { display:grid; grid-template-columns:52px 1fr; gap:8px; }
+  dt { font-weight:700; color:var(--ink); } dd { margin:0; }
+  .palet { display:flex; flex-wrap:wrap; gap:6px 14px; margin:16px 0 0; font-size:12px; color:var(--faint); }
+  .palet span { display:inline-flex; align-items:center; gap:6px; }
+  .palet i { width:14px; height:14px; border-radius:50%; box-shadow:inset 0 0 0 1px rgb(0 0 0 / .12); }
+  .palet .font { font-style:italic; }
+
+  /* Kilitlenmeler — ölçek kapsayıcının font-size'ı */
+  .lk { display:inline-flex; align-items:center; gap:.35em; line-height:1; white-space:nowrap; }
+  .lk .t { display:flex; flex-direction:column; gap:.18em; }
+  .lk .tag { font-size:.28em; }
+  .kucuk .tag { display:none; }
+  .sym { display:block; flex:none; }
+
+  .optik .wm { font-family:Manrope, sans-serif; font-weight:800; color:#1c1f2b; letter-spacing:-.035em; }
+  .optik .wm i { font-style:normal; color:#ef5b5b; }
+  .optik .tag { font-family:Manrope, sans-serif; font-weight:700; color:#ef5b5b; letter-spacing:.02em; }
+
+  .koc .wm { font-family:Outfit, sans-serif; font-weight:800; color:#1f1d33; letter-spacing:-.03em; }
+  .koc .wm i { font-style:normal; font-weight:600; color:#ff6b3d; }
+  .koc .tag { font-family:Outfit, sans-serif; font-weight:600; color:#1f1d33; opacity:.7; }
+
+  .fosfor .wm { position:relative; isolation:isolate; font-family:'Baloo 2', sans-serif; font-weight:800; font-size:1.25em; color:#14213d; letter-spacing:-.02em; }
+  .fosfor mark { position:relative; background:none; color:inherit; padding:0 .04em; }
+  .fosfor mark::before { content:""; position:absolute; z-index:-1; left:-.06em; right:-.08em; top:.3em; bottom:.12em; background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%2060%22%20preserveAspectRatio%3D%22none%22%3E%3Cpath%20d%3D%22M6%2014%20C50%206%20120%2011%20196%204%20L198%2050%20C140%2057%2070%2051%202%2057%20Z%22%20fill%3D%22%23ffd43b%22%2F%3E%3C%2Fsvg%3E") no-repeat center/100% 100%; transform:rotate(-2.5deg); }
+  .fosfor .tag { font-family:Inter, sans-serif; font-weight:600; color:#14213d; opacity:.65; font-size:.24em; }
+
+  .muhur .wm { font-family:'DM Serif Display', serif; color:#1e4636; font-size:1.05em; }
+  .muhur .tag { font-family:Inter, sans-serif; font-weight:700; color:#c8a14a; letter-spacing:.32em; font-size:.22em; }
+
+  .aferin { gap:.08em; align-items:flex-end; }
+  .aferin .wm { position:relative; font-family:Caveat, cursive; font-weight:700; font-size:1.55em; color:#2340a0; line-height:.9; }
+  .aferin .alt { position:absolute; left:.02em; right:-.04em; bottom:-.12em; height:.2em; width:100%; }
+  .aferin .tik { width:.8em; height:.7em; margin:0 .06em .55em .04em; }
+  .aferin .net { font-family:Inter, sans-serif; font-weight:700; font-size:.36em; color:#2340a0; opacity:.75; margin-bottom:.35em; letter-spacing:.04em; }
+
+  .blok { gap:.4em; }
+  .blok .kutu { display:inline-flex; flex-direction:column; justify-content:flex-end; width:4.6em; height:4.6em; padding:.3em .28em; border-radius:.22em; background:#111111; color:#fff; font-family:'Archivo Black', sans-serif; font-size:.62em; line-height:.92; letter-spacing:-.02em; }
+  .blok .kutu b { color:#c6f35e; font-weight:400; }
+  .blok .tag { font-family:'Archivo Black', sans-serif; font-size:.3em; line-height:1.05; color:#111111; text-transform:uppercase; }
+  .kucuk .blok .kutu { font-size:.42em; }
+
+  @media (max-width: 860px) {
+    .yon { grid-template-columns:minmax(0,1fr); }
+    .sahne { min-height:220px; }
+    .buyuk { font-size:32px; }
+    .baslik nav { display:none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Koçum.Net · bambaşka yönler</h1>
+  <p class="giris">Kare kutuda beyaz K yok. Altı ayrı dünya: her birinin kendi fikri, rengi ve yazı tipi var. Her yön büyük hâliyle, sitenin başlığında, tarayıcı sekmesinde ve telefon ana ekranında. Renkler değiştirilebilir; önce <strong>fikri</strong> seç.</p>
+
+  <p class="baslik2">Telefon ana ekranında</p>
+  <div class="telefon"><a class="app" href="#optik"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#fff7f2"/><circle cx="14" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="14" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="38" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="56" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="56" r="4.6" fill="#1c1f2b"/></svg></span><small>Optik</small></a><a class="app" href="#koc"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span><small>Koç</small></a><a class="app" href="#fosfor"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#ffd43b"/>
+<text x="32" y="47" text-anchor="middle" font-family="'Baloo 2'" font-weight="800" font-size="48" fill="#14213d">k</text></svg></span><small>Fosfor</small></a><a class="app" href="#muhur"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#1e4636"/><circle cx="32" cy="32" r="27" fill="none" stroke="#c8a14a" stroke-width="1.6"/>
+<text x="32" y="45" text-anchor="middle" font-family="'DM Serif Display'" font-size="38" fill="#f4ecdd">K</text></svg></span><small>Mühür</small></a><a class="app" href="#aferin"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#fbf7ef"/>
+<text x="27" y="50" text-anchor="middle" font-family="Caveat" font-weight="700" font-size="56" fill="#2340a0">k</text>
+<g transform="translate(30 6) scale(0.48)"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></g></svg></span><small>Aferin</small></a><a class="app" href="#blok"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12" fill="#111111"/>
+<text x="11" y="47" font-family="'Archivo Black'" font-size="40" fill="#fff">K</text><rect x="44" y="39" width="9" height="9" fill="#c6f35e"/></svg></span><small>Blok</small></a></div>
+
+  <p class="baslik2">Tarayıcı sekmesinde (16 px)</p>
+  <div class="sekmeler"><a class="mock sekme dar" href="#optik"><span class="fav"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#fff7f2"/><circle cx="7" cy="7" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="7" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="25" cy="7" r="3.7" fill="#1c1f2b"/><circle cx="7" cy="16" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="16" r="3.7" fill="#1c1f2b"/><circle cx="25" cy="16" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="7" cy="25" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="25" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="25" cy="25" r="3.7" fill="#1c1f2b"/></svg></span><span>Optik</span></a><a class="mock sekme dar" href="#koc"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span><span>Koç</span></a><a class="mock sekme dar" href="#fosfor"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#ffd43b"/>
+<text x="32" y="47" text-anchor="middle" font-family="'Baloo 2'" font-weight="800" font-size="48" fill="#14213d">k</text></svg></span><span>Fosfor</span></a><a class="mock sekme dar" href="#muhur"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#1e4636"/><circle cx="32" cy="32" r="27" fill="none" stroke="#c8a14a" stroke-width="1.6"/>
+<text x="32" y="45" text-anchor="middle" font-family="'DM Serif Display'" font-size="38" fill="#f4ecdd">K</text></svg></span><span>Mühür</span></a><a class="mock sekme dar" href="#aferin"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#fbf7ef"/>
+<text x="27" y="50" text-anchor="middle" font-family="Caveat" font-weight="700" font-size="56" fill="#2340a0">k</text>
+<g transform="translate(30 6) scale(0.48)"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></g></svg></span><span>Aferin</span></a><a class="mock sekme dar" href="#blok"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12" fill="#111111"/>
+<text x="11" y="47" font-family="'Archivo Black'" font-size="40" fill="#fff">K</text><rect x="44" y="39" width="9" height="9" fill="#c6f35e"/></svg></span><span>Blok</span></a></div>
+
+  
+<section class="yon oneri" id="optik">
+  <div class="sahne" style="background:#fff7f2">
+    <span class="rozet">Önerim</span>
+    <div class="buyuk"><div class="lk optik"><span class="sym" style="width:1.6em;height:1.6em"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="14" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="9.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="9.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="14" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="21.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="21.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="38" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="33.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="33.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="45.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="45.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="56" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="57.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="57.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="56" r="4.6" fill="#1c1f2b"/></svg></span>
+<span class="t"><span class="wm">koçum<i>.</i>net</span><span class="tag">sınava kadar aklında</span></span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">1</span>Optik</h2>
+    <p class="fikir">Sınav kâğıdı. Optik formda doldurulan baloncuklar bir K çiziyor. Türkiye'de sınava giren her öğrenci bu formu ilk bakışta tanır.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk optik"><span class="sym" style="width:1.6em;height:1.6em"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="14" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="9.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="9.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="14" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="21.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="21.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="38" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="33.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="33.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="45.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="50" y="45.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">D</text><circle cx="14" cy="56" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="26" y="57.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">B</text><circle cx="38" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><text x="38" y="57.6" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="4.4" fill="#ef5b5b">C</text><circle cx="50" cy="56" r="4.6" fill="#1c1f2b"/></svg></span>
+<span class="t"><span class="wm">koçum<i>.</i>net</span><span class="tag">sınava kadar aklında</span></span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#fff7f2"/><circle cx="7" cy="7" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="7" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="25" cy="7" r="3.7" fill="#1c1f2b"/><circle cx="7" cy="16" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="16" r="3.7" fill="#1c1f2b"/><circle cx="25" cy="16" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="7" cy="25" r="3.7" fill="#1c1f2b"/><circle cx="16" cy="25" r="3" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="25" cy="25" r="3.7" fill="#1c1f2b"/></svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#fff7f2"/><circle cx="14" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="8" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="8" r="4.6" fill="#1c1f2b"/><circle cx="14" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="20" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="20" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="32" r="4.6" fill="#1c1f2b"/><circle cx="38" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="32" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="44" r="4.6" fill="#1c1f2b"/><circle cx="50" cy="44" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="14" cy="56" r="4.6" fill="#1c1f2b"/><circle cx="26" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="38" cy="56" r="3.9" fill="none" stroke="#ef5b5b" stroke-width="1.4"/><circle cx="50" cy="56" r="4.6" fill="#1c1f2b"/></svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>Yalnızca bu sektöre ait, kimsenin kopyalayamayacağı bir görüntü. Baloncuk her yere taşınır: yükleniyor animasyonu, ilerleme çubuğu, sosyal medya şablonu, fasikül kapağı.</dd></div>
+      <div><dt>Risk</dt><dd>Noktalı yapı 16 px'te sadeleşmeli (sekmede 3 × 3'lük K kullanılıyor).</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#1c1f2b"></i>Mürekkep</span><span><i style="background:#ef5b5b"></i>Optik pembesi</span><span><i style="background:#fff7f2"></i>Kâğıt</span><span class="font">Manrope ExtraBold</span></p>
+  </div>
+</section>
+<section class="yon" id="koc">
+  <div class="sahne" style="background:#fff4ec">
+    
+    <div class="buyuk"><div class="lk koc"><span class="sym" style="width:1.45em;height:1.45em"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span>
+<span class="t"><span class="wm">Koçum<i>.net</i></span><span class="tag">Sınava kadar aklında</span></span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">2</span>Koç</h2>
+    <p class="fikir">"Koçum!" diye seslenen biri. Koç hem koç hem koç: boynuzları kıvrık, sevimli ama kararlı bir amblem.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk koc"><span class="sym" style="width:1.45em;height:1.45em"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span>
+<span class="t"><span class="wm">Koçum<i>.net</i></span><span class="tag">Sınava kadar aklında</span></span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#ff6b3d"/>
+<g fill="none" stroke="#1f1d33" stroke-width="5.2" stroke-linecap="round">
+<path d="M26.5 22.5 C21.5 12.5, 8 13.5, 8 25 C8 34, 18 36, 20.2 29.5 C21.6 25, 15.8 22.6, 14.2 27"/>
+<path d="M37.5 22.5 C42.5 12.5, 56 13.5, 56 25 C56 34, 46 36, 43.8 29.5 C42.4 25, 48.2 22.6, 49.8 27"/>
+</g>
+<path d="M23.5 25 C23.5 19.2, 40.5 19.2, 40.5 25 L38.6 41.5 C37.6 49.5, 26.4 49.5, 25.4 41.5 Z" fill="#1f1d33"/>
+<circle cx="28.3" cy="31" r="2" fill="#ff6b3d"/><circle cx="35.7" cy="31" r="2" fill="#ff6b3d"/>
+<path d="M29.8 42.6 Q32 44.8 34.2 42.6" stroke="#ff6b3d" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+</svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>En sıcak ve en akılda kalan seçenek; çıkartma, maskot, sosyal medya için kendiliğinden karakter. Gençlere hitap ediyor.</dd></div>
+      <div><dt>Risk</dt><dd>Koç burcu (♈) çağrışımı. Velilere fazla oyuncu gelebilir. Üretimde bir illüstratörün elinden geçmeli.</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#ff6b3d"></i>Turuncu</span><span><i style="background:#1f1d33"></i>Gece</span><span><i style="background:#fff4ec"></i>Krem</span><span class="font">Outfit ExtraBold</span></p>
+  </div>
+</section>
+<section class="yon" id="fosfor">
+  <div class="sahne" style="background:#ffffff">
+    
+    <div class="buyuk"><div class="lk fosfor"><span class="t"><span class="wm">koçum.<mark>net</mark></span><span class="tag">sınav koçluğu · soru bankası · check-up</span></span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">3</span>Fosfor</h2>
+    <p class="fikir">Ders çalışan birinin masası. "net" fosforlu kalemle çizilmiş: sınavda önemli olan tek şey net.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk fosfor"><span class="t"><span class="wm">koçum.<mark>net</mark></span><span class="tag">sınav koçluğu · soru bankası · check-up</span></span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#ffd43b"/>
+<text x="32" y="47" text-anchor="middle" font-family="'Baloo 2'" font-weight="800" font-size="48" fill="#14213d">k</text></svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#ffd43b"/>
+<text x="32" y="47" text-anchor="middle" font-family="'Baloo 2'" font-weight="800" font-size="48" fill="#14213d">k</text></svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>Alan adı bir kelime oyununa dönüşüyor (.net = sınav neti). Simge gerektirmeyen, enerjik, eğlenceli bir yazı logosu.</dd></div>
+      <div><dt>Risk</dt><dd>Simgesi zayıf: ikon tek başına bir harf. Fosfor sarısı beyaz zeminde küçük yazılarda okunmaz, yalnızca vurgu için.</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#ffd43b"></i>Fosforlu sarı</span><span><i style="background:#14213d"></i>Lacivert</span><span><i style="background:#ffffff"></i>Beyaz</span><span class="font">Baloo 2 ExtraBold</span></p>
+  </div>
+</section>
+<section class="yon" id="muhur">
+  <div class="sahne" style="background:#f4ecdd">
+    
+    <div class="buyuk"><div class="lk muhur"><span class="sym" style="width:2.3em;height:2.3em"><svg viewBox="0 0 120 120" aria-hidden="true">
+<defs><path id="halka3" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs>
+<circle cx="60" cy="60" r="59" fill="#1e4636"/>
+<circle cx="60" cy="60" r="55" fill="none" stroke="#c8a14a" stroke-width="1.2"/>
+<circle cx="60" cy="60" r="37" fill="none" stroke="#c8a14a" stroke-width="1"/>
+<text font-family="Inter" font-weight="700" font-size="8.2" letter-spacing="1.6" fill="#c8a14a"><textPath href="#halka3" textLength="286" lengthAdjust="spacing">KOÇUM.NET · SINAVA KADAR AKLINDA ·</textPath></text>
+<text x="60" y="76" text-anchor="middle" font-family="'DM Serif Display'" font-size="46" fill="#f4ecdd">K</text>
+</svg></span>
+<span class="t"><span class="wm">Koçum.Net</span><span class="tag">SINAV KOÇLUĞU</span></span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">4</span>Mühür</h2>
+    <p class="fikir">Köklü bir dershane ya da üniversite mührü. Ciddi, güven veren, kurumsal.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk muhur"><span class="sym" style="width:2.3em;height:2.3em"><svg viewBox="0 0 120 120" aria-hidden="true">
+<defs><path id="halka4" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0"/></defs>
+<circle cx="60" cy="60" r="59" fill="#1e4636"/>
+<circle cx="60" cy="60" r="55" fill="none" stroke="#c8a14a" stroke-width="1.2"/>
+<circle cx="60" cy="60" r="37" fill="none" stroke="#c8a14a" stroke-width="1"/>
+<text font-family="Inter" font-weight="700" font-size="8.2" letter-spacing="1.6" fill="#c8a14a"><textPath href="#halka4" textLength="286" lengthAdjust="spacing">KOÇUM.NET · SINAVA KADAR AKLINDA ·</textPath></text>
+<text x="60" y="76" text-anchor="middle" font-family="'DM Serif Display'" font-size="46" fill="#f4ecdd">K</text>
+</svg></span>
+<span class="t"><span class="wm">Koçum.Net</span><span class="tag">SINAV KOÇLUĞU</span></span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#1e4636"/><circle cx="32" cy="32" r="27" fill="none" stroke="#c8a14a" stroke-width="1.6"/>
+<text x="32" y="45" text-anchor="middle" font-family="'DM Serif Display'" font-size="38" fill="#f4ecdd">K</text></svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#1e4636"/><circle cx="32" cy="32" r="27" fill="none" stroke="#c8a14a" stroke-width="1.6"/>
+<text x="32" y="45" text-anchor="middle" font-family="'DM Serif Display'" font-size="38" fill="#f4ecdd">K</text></svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>Velilere ve yetişkin adaylara (KPSS, ALES, DGS) en güven veren seçenek. Belge, sertifika, karne üzerinde çok iyi durur.</dd></div>
+      <div><dt>Risk</dt><dd>Gençlere eski moda gelebilir. Halkadaki yazı küçük boyutta okunmaz; ikon yalnızca K.</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#1e4636"></i>Orman yeşili</span><span><i style="background:#c8a14a"></i>Altın</span><span><i style="background:#f4ecdd"></i>Fildişi</span><span class="font">DM Serif Display</span></p>
+  </div>
+</section>
+<section class="yon" id="aferin">
+  <div class="sahne" style="background:#fbf7ef">
+    
+    <div class="buyuk"><div class="lk aferin"><span class="wm">koçum<svg class="alt" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><path d="M4 14 C50 6 120 5 196 12" stroke="#e5383b" stroke-width="5" stroke-linecap="round" fill="none"/></svg></span><svg class="tik" viewBox="8 8 50 44" aria-hidden="true"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></svg><span class="net">.net</span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">5</span>Aferin</h2>
+    <p class="fikir">Öğretmenin kâğıda düştüğü not: "Aferin koçum ✓". El yazısı, kırmızı kalemle altı çizili.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk aferin"><span class="wm">koçum<svg class="alt" viewBox="0 0 200 22" preserveAspectRatio="none" aria-hidden="true"><path d="M4 14 C50 6 120 5 196 12" stroke="#e5383b" stroke-width="5" stroke-linecap="round" fill="none"/></svg></span><svg class="tik" viewBox="8 8 50 44" aria-hidden="true"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></svg><span class="net">.net</span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#fbf7ef"/>
+<text x="27" y="50" text-anchor="middle" font-family="Caveat" font-weight="700" font-size="56" fill="#2340a0">k</text>
+<g transform="translate(30 6) scale(0.48)"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></g></svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#fbf7ef"/>
+<text x="27" y="50" text-anchor="middle" font-family="Caveat" font-weight="700" font-size="56" fill="#2340a0">k</text>
+<g transform="translate(30 6) scale(0.48)"><path d="M13 33.5 C16.5 35 20.5 40 24.5 47.5 C25.2 48.8 26.7 48.7 27.4 47.4 C33 36 41.5 24.5 52.5 15.5 C53.6 14.6 52.6 13 51.3 13.7 C39.8 20 31.7 30.4 26.3 41 C23.6 36.4 20.2 32.6 15.4 30.9 C13.3 30.2 11.5 32.8 13 33.5 Z" fill="#e5383b"/></g></svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>Koçluğun insani yanı: kişisel, sıcak, seninle ilgilenen biri var. Markanın sesiyle birebir örtüşüyor.</dd></div>
+      <div><dt>Risk</dt><dd>Hazır el yazısı fonttan logo ucuz durur; yayına çıkmadan özel çizim şart. Uzun metinlerde okunurluk düşük.</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#2340a0"></i>Dolma kalem mavisi</span><span><i style="background:#e5383b"></i>Öğretmen kırmızısı</span><span><i style="background:#fbf7ef"></i>Defter</span><span class="font">Caveat (geçici; özel el yazısı çizilmeli)</span></p>
+  </div>
+</section>
+<section class="yon" id="blok">
+  <div class="sahne" style="background:#f2f2ee">
+    
+    <div class="buyuk"><div class="lk blok"><span class="kutu">KOÇUM<b>.NET</b></span><span class="tag">Sınava<br>kadar<br>aklında.</span></div></div>
+  </div>
+  <div class="detay">
+    <h2><span class="no">6</span>Blok</h2>
+    <p class="fikir">Spor markası ya da dergi kapağı gibi: kalın, büyük harf, kare blok. ".NET" skor tabelası gibi parlıyor.</p>
+    <div class="baglam">
+      <div class="mock baslik"><div class="kucuk"><div class="lk blok"><span class="kutu">KOÇUM<b>.NET</b></span><span class="tag">Sınava<br>kadar<br>aklında.</span></div></div><nav>Hizmetler · Blog · İletişim</nav></div>
+      <div class="satir">
+        <div class="mock sekme"><span class="fav"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12" fill="#111111"/>
+<text x="11" y="47" font-family="'Archivo Black'" font-size="40" fill="#fff">K</text><rect x="44" y="39" width="9" height="9" fill="#c6f35e"/></svg></span><span>Koçum.Net — Sınava kadar aklında</span></div>
+        <div class="uyg"><span class="ikon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12" fill="#111111"/>
+<text x="11" y="47" font-family="'Archivo Black'" font-size="40" fill="#fff">K</text><rect x="44" y="39" width="9" height="9" fill="#c6f35e"/></svg></span><small>Koçum.Net</small></div>
+      </div>
+    </div>
+    <dl>
+      <div><dt>Neden</dt><dd>En cesur ve en güncel görünen seçenek; Instagram ve reklam görsellerinde dikkat çeker.</dd></div>
+      <div><dt>Risk</dt><dd>Moda akımına bağlı; birkaç yıl içinde eskiyebilir. Velilere sert ve soğuk gelebilir.</dd></div>
+    </dl>
+    <p class="palet"><span><i style="background:#111111"></i>Siyah</span><span><i style="background:#c6f35e"></i>Asit yeşili</span><span><i style="background:#ffffff"></i>Beyaz</span><span class="font">Archivo Black</span></p>
+  </div>
+</section>
+</main>
+</body>
+</html>
