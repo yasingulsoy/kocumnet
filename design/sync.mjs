@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 /**
- * design/tokens.css → üç projeye kopyalar; --check ile eşitliği doğrular.
+ * Ortak tasarım dosyalarını üç projeye dağıtır; --check ile eşitliği doğrular.
  *
  *   node design/sync.mjs          kopyala
- *   node design/sync.mjs --check  farklıysa 1 ile çık (build öncesi)
+ *   node design/sync.mjs --check  farklıysa 1 ile çık (CI ve build öncesi)
  *
- * Aynı desen Prisma şeması için admin/scripts/checkup-sync.mjs'te var.
+ * Kaynaklar (yalnızca burada düzenlenir):
+ *   design/tokens.css               renk, yazı tipi, ölçek, köşe, gölge
+ *   design/brand/brand-paths.ts     logo yol verisi (design/brand/build.mjs üretir)
+ *   design/brand/svg|png/...        favicon, uygulama ikonları, e-posta logosu
+ *
+ * Neden kopya: üç proje ayrı ayrı deploy ediliyor (Dokploy her klasörü kendi
+ * başına derliyor), kök dizinde workspace yok. Aynı desen Prisma şeması için
+ * admin/scripts/checkup-sync.mjs'te var.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -13,35 +20,65 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
+const B = (...p) => join(here, "brand", ...p);
 
-const KAYNAK = join(here, "tokens.css");
-const HEDEFLER = [
-  join(root, "frontend", "app", "tokens.css"),
-  join(root, "app", "app", "tokens.css"),
-  join(root, "admin", "src", "app", "tokens.css"),
+const PROJE = {
+  frontend: { app: join(root, "frontend", "app"), lib: join(root, "frontend", "lib"), pub: join(root, "frontend", "public") },
+  app: { app: join(root, "app", "app"), lib: join(root, "app", "lib"), pub: join(root, "app", "public") },
+  admin: { app: join(root, "admin", "src", "app"), lib: join(root, "admin", "src", "lib"), pub: join(root, "admin", "public") },
+};
+const hepsi = Object.values(PROJE);
+
+/** [kaynak, hedefler[]] */
+const ISLER = [
+  [join(here, "tokens.css"), hepsi.map((p) => join(p.app, "tokens.css"))],
+  [B("brand-paths.ts"), hepsi.map((p) => join(p.lib, "brand-paths.ts"))],
+  // Tarayıcı sekmesi, ana ekran, PWA — Next app/ kuralları + public/icons
+  [B("svg", "ikon.svg"), hepsi.map((p) => join(p.app, "icon.svg"))],
+  [B("png", "favicon.ico"), hepsi.map((p) => join(p.app, "favicon.ico"))],
+  [B("png", "apple-touch-icon-180.png"), hepsi.map((p) => join(p.app, "apple-icon.png"))],
+  [B("png", "ikon-192.png"), hepsi.map((p) => join(p.pub, "icons", "icon-192.png"))],
+  [B("png", "ikon-512.png"), hepsi.map((p) => join(p.pub, "icons", "icon-512.png"))],
+  [B("png", "ikon-maskable-512.png"), hepsi.map((p) => join(p.pub, "icons", "icon-maskable-512.png"))],
+  // E-posta başlığı (backend → kocum.net, check-up → kendi alan adı)
+  [B("png", "eposta-logo.png"), [join(PROJE.frontend.pub, "brand", "eposta-logo.png"), join(PROJE.app.pub, "brand", "eposta-logo.png")]],
+  // Check-up paylaşım görseli (Next dosya kuralı: app/opengraph-image.png)
+  [B("sosyal", "og-checkup-1200x630.png"), [join(PROJE.app.app, "opengraph-image.png")]],
+  // Basın/indirme için herkese açık logo dosyaları
+  [B("svg", "logo-acik.svg"), [join(PROJE.frontend.pub, "brand", "logo-acik.svg")]],
+  [B("svg", "logo-koyu.svg"), [join(PROJE.frontend.pub, "brand", "logo-koyu.svg")]],
 ];
 
 const check = process.argv.includes("--check");
-const kaynak = readFileSync(KAYNAK, "utf8");
-
+const ad = (p) => relative(root, p).replaceAll("\\", "/");
 let farkli = 0;
-for (const hedef of HEDEFLER) {
-  const ad = relative(root, hedef).replaceAll("\\", "/");
-  if (check) {
-    if (!existsSync(hedef)) {
-      console.error(`✗ ${ad} yok`);
-      farkli++;
-    } else if (readFileSync(hedef, "utf8") !== kaynak) {
-      console.error(`✗ ${ad} design/tokens.css'ten farklı — \`node design/sync.mjs\` çalıştır`);
-      farkli++;
-    } else {
-      console.log(`✓ ${ad}`);
-    }
+
+for (const [kaynak, hedefler] of ISLER) {
+  if (!existsSync(kaynak)) {
+    console.error(`✗ kaynak yok: ${ad(kaynak)} — önce: cd design && npm install && npm run marka`);
+    farkli++;
     continue;
   }
-  mkdirSync(dirname(hedef), { recursive: true });
-  copyFileSync(KAYNAK, hedef);
-  console.log(`→ ${ad}`);
+  const veri = readFileSync(kaynak);
+  for (const hedef of hedefler) {
+    if (check) {
+      if (!existsSync(hedef)) {
+        console.error(`✗ ${ad(hedef)} yok`);
+        farkli++;
+      } else if (!readFileSync(hedef).equals(veri)) {
+        console.error(`✗ ${ad(hedef)} ${ad(kaynak)}'tan farklı — \`node design/sync.mjs\` çalıştır`);
+        farkli++;
+      }
+      continue;
+    }
+    mkdirSync(dirname(hedef), { recursive: true });
+    copyFileSync(kaynak, hedef);
+  }
 }
 
-if (check && farkli) process.exit(1);
+if (check) {
+  if (farkli) process.exit(1);
+  console.log(`✓ ${ISLER.reduce((n, [, h]) => n + h.length, 0)} kopya güncel`);
+} else {
+  console.log(`→ ${ISLER.reduce((n, [, h]) => n + h.length, 0)} dosya dağıtıldı`);
+}

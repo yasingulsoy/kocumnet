@@ -1,18 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
-  
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#17305e" />
-      <stop offset="0.55" stop-color="#1a5fb4" />
-      <stop offset="1" stop-color="#0e90d5" />
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="9" fill="url(#g)" />
-  <g transform="translate(0 0) scale(1)">
-  <g stroke="#ffffff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M11 8.8 V 23.2" />
-    <path d="M12.8 16 L 21.4 23.2" />
-    <path d="M12.8 16 L 19.8 10.2" />
-  </g>
-  <circle cx="22.4" cy="8.6" r="2.4" fill="#ffffff" /></g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Koçum.Net"><rect width="64" height="64" rx="14" fill="#ffd43b"/><path d="M39.23 34.10L32.24 40.12L25.58 35.99L37.67 23.63Q40.46 23.63 42.16 24.86Q43.85 26.10 43.85 27.98L43.85 27.98Q43.85 29.59 42.72 30.83Q41.59 32.06 39.23 34.10L39.23 34.10ZM33.75 46.95L26.01 37.27L33.37 34.10L44.71 45.39Q44.49 47.86 43.26 49.23Q42.02 50.60 39.71 50.60L39.71 50.60Q38.04 50.60 36.67 49.77Q35.30 48.93 33.75 46.95L33.75 46.95ZM19.29 46.25L19.29 35.93L28.43 35.93L28.43 50.06Q27.84 50.22 26.73 50.39Q25.63 50.55 24.34 50.55L24.34 50.55Q21.71 50.55 20.50 49.63Q19.29 48.72 19.29 46.25L19.29 46.25ZM28.43 18.90L28.43 40.71L19.29 40.71L19.29 15.08Q19.88 14.92 20.99 14.76Q22.09 14.60 23.38 14.60L23.38 14.60Q26.06 14.60 27.24 15.49Q28.43 16.37 28.43 18.90L28.43 18.90Z" fill="#14213d"/></svg>

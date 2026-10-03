@@ -1,0 +1,15 @@
+{
+  "name": "kocumnet-design",
+  "private": true,
+  "description": "Marka kiti ve tasarım belirteçleri üreticisi. Uygulamaların bağımlılığı değil; yalnızca üretim zamanında kullanılır.",
+  "type": "module",
+  "scripts": {
+    "marka": "node brand/build.mjs",
+    "sync": "node sync.mjs",
+    "check": "node sync.mjs --check"
+  },
+  "devDependencies": {
+    "opentype.js": "^1.3.4",
+    "sharp": "^0.35.4"
+  }
+}

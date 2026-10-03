@@ -23,7 +23,9 @@
  *
  * Renk      Lacivert · mavi · camgöbeği (#17305e · #1a5fb4 · #0e90d5).
  *           Nötrler saf gri DEĞİL, mavi tonlu: üç yüzey tek parça görünsün.
- * Yazı      Poppins (başlık, logodaki yazıyla aynı) + Inter (gövde, arayüz).
+ * Logo      "Fosfor": koçum.net, "net" fosforlu kalemle çizilmiş. Kaynak
+ *           design/brand/ (yazı çizgiye çevrilmiş Baloo 2 ExtraBold).
+ * Yazı      Poppins (başlık) + Inter (gövde, arayüz). Baloo 2 YALNIZCA logoda.
  *           Inter: tablo rakamları hizalı (tabular), 13px'te okunur, Türkçe tam.
  *           Fraunces (serif) ve Geist kaldırıldı — üç yüzeyde tek çift.
  * Köşe      Tailwind varsayılanından bir kademe yumuşak. rounded-2xl kart,
@@ -83,6 +85,12 @@
   --bad-fill: #f43f5e;
   --bad-wash: #fff1f2;
 
+  /* ── Fosfor (marka vurgusu) ───────────────────────────────── */
+  /* Logodaki fosforlu kalem. YALNIZCA vurgu: metin rengi olarak kullanılmaz
+     (beyaz zeminde kontrast 1,4:1). Üstündeki yazı her zaman --highlight-ink. */
+  --highlight: #ffd43b;
+  --highlight-ink: #14213d;
+
   /* ── Dokunma hedefleri ────────────────────────────────────── */
   --tap: 2.75rem;
   --tap-comfort: 3rem;
@@ -119,6 +127,9 @@
   --color-bad: var(--bad);
   --color-bad-fill: var(--bad-fill);
   --color-bad-wash: var(--bad-wash);
+
+  --color-highlight: var(--highlight);
+  --color-highlight-ink: var(--highlight-ink);
 
   /* ── Yazı tipleri ─────────────────────────────────────────── */
   /* Değişkenler her projenin kök layout'unda next/font ile tanımlanır:
@@ -238,9 +249,28 @@ body {
   font-feature-settings: "cv11", "ss01";
 }
 
+/* Metin seçmek fosforlu kalemle çizmek gibi görünsün — logonun imzası. */
 ::selection {
-  background: var(--brand);
-  color: #fff;
+  background: var(--highlight);
+  color: var(--highlight-ink);
+}
+
+/*
+ * Fosforlu kalem vurgusu: logodaki "net"in arkasındaki şekil. Başlıkta tek
+ * kelime ya da kısa ifade için; paragraf içinde kullanma. Satır kırılırsa
+ * her satır kendi vurgusunu alır (box-decoration-break).
+ * Renk veri adresinde sabit (#ffd43b = --highlight): CSS değişkeni oraya girmiyor.
+ */
+.marker {
+  padding: 0 0.1em;
+  margin: 0 -0.04em;
+  color: var(--highlight-ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'%3E%3Cpath d='M6 14C50 6 120 11 196 4L198 50C140 57 70 51 2 57Z' fill='%23ffd43b'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 100% 70%;
+  background-position: 0 80%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 /* Klavye odağı her yerde görünür ve marka renginde. */

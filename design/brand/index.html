@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Koçum.Net · Marka kiti</title>
+<link rel="icon" href="svg/ikon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@800&family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
+<style>
+  :root { --ink:#14213d; --sari:#ffd43b; --kagit:#fffdf6; --soft:#4b5471; --faint:#6b7392; --line:#e6e8ee; --mavi:#1a5fb4; color-scheme: light; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f6f6f3; color:var(--soft); font:15px/1.6 Inter, system-ui, sans-serif; }
+  ::selection { background:var(--sari); color:var(--ink); }
+  a { color:var(--mavi); }
+  .ust { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:14px; padding:14px 20px; background:rgb(255 255 255 / .92); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .ust img { height:30px; }
+  .ust nav { margin-left:auto; display:flex; gap:16px; flex-wrap:wrap; font-size:13px; }
+  .ust nav a { color:var(--soft); text-decoration:none; }
+  .ust nav a:hover { color:var(--ink); }
+  main { max-width:1120px; margin:0 auto; padding:40px 16px 80px; }
+  h1 { font:700 40px/1.1 Poppins, sans-serif; color:var(--ink); margin:0; letter-spacing:-.02em; }
+  h2 { font:700 26px/1.2 Poppins, sans-serif; color:var(--ink); margin:56px 0 6px; letter-spacing:-.01em; }
+  h3 { font:600 15px/1.3 Inter, sans-serif; color:var(--ink); margin:0; }
+  h2[id] { scroll-margin-top:76px; }
+  .giris { max-width:720px; margin:12px 0 0; font-size:16px; }
+  .marker { padding:0 .1em; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'%3E%3Cpath d='M6 14C50 6 120 11 196 4L198 50C140 57 70 51 2 57Z' fill='%23ffd43b'/%3E%3C/svg%3E") no-repeat 0 80% / 100% 70%; }
+  .alt { color:var(--faint); font-size:14px; margin:0 0 20px; max-width:760px; }
+  .izgara { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:16px; }
+  .kart { background:#fff; border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+  .onizleme { display:flex; align-items:center; justify-content:center; min-height:170px; padding:32px; }
+  .onizleme img { max-width:82%; max-height:96px; }
+  .bilgi { padding:16px 18px 18px; border-top:1px solid var(--line); }
+  .bilgi p { margin:4px 0 10px; font-size:13px; color:var(--faint); }
+  .indir { display:flex; flex-wrap:wrap; gap:6px; }
+  .indir a { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#f1f2f5; color:var(--ink); font-size:12px; font-weight:600; text-decoration:none; }
+  .indir a:hover { background:var(--sari); }
+  .z-beyaz { background:#fff; } .z-kagit { background:var(--kagit); } .z-ink { background:var(--ink); } .z-sari { background:var(--sari); }
+  .ikonlar { display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap; padding:28px; }
+  .ikonlar figure { margin:0; text-align:center; font-size:11px; color:var(--faint); }
+  .ikonlar img { display:block; margin:0 auto 8px; image-rendering:auto; }
+  .renkler { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:14px; }
+  .renk { border-radius:16px; overflow:hidden; border:1px solid var(--line); background:#fff; }
+  .renk .kutu { height:96px; }
+  .renk div.ic { padding:12px 14px 14px; font-size:12.5px; }
+  .renk b { display:block; color:var(--ink); font-size:14px; }
+  .renk code { font:600 12px ui-monospace, Menlo, Consolas, monospace; color:var(--ink); }
+  .tablo { width:100%; border-collapse:collapse; font-size:13.5px; background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .tablo th, .tablo td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .tablo th { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); background:#fafafa; }
+  .tablo tr:last-child td { border-bottom:0; }
+  .font-ornek { display:grid; gap:12px; }
+  .font-ornek .kart { padding:18px 20px; }
+  .bosluk-sar { container-type:inline-size; width:min(100%, 480px); }
+  .bosluk { position:relative; padding:8.84cqw; background:#fff; border:2px dashed #c9cdd8; border-radius:6px; }
+  .bosluk::before { content:""; position:absolute; inset:8.84cqw; outline:1px solid #f0b8a0; pointer-events:none; }
+  .bosluk img { display:block; width:100%; height:auto; }
+  .bosluk .x { position:absolute; font:600 12px/1 Inter, sans-serif; color:#c2410c; transform:translate(-50%, -50%); }
+  .bosluk-not { font-size:12.5px; color:var(--faint); margin:8px 0 0; }
+  .yapma .onizleme { min-height:150px; }
+  .yapma .bilgi h3::before { content:"✕ "; color:#be123c; }
+  .sosyal img { width:100%; display:block; }
+  pre { margin:0; padding:14px 16px; background:var(--ink); color:#e8ecf5; border-radius:12px; font:13px/1.6 ui-monospace, Menlo, Consolas, monospace; overflow:auto; }
+  footer { margin-top:64px; font-size:13px; color:var(--faint); }
+  @media (max-width: 640px) { h1 { font-size:30px; } .ust nav { display:none; } }
+</style>
+</head>
+<body>
+<header class="ust">
+  <img src="svg/logo-acik.svg" alt="Koçum.Net">
+  <span style="font:600 13px Inter, sans-serif; color:var(--faint)">Marka kiti · v1 · Ekim 2026</span>
+  <nav>
+    <a href="#logo">Logo</a><a href="#ikon">İkon</a><a href="#renk">Renk</a><a href="#yazi">Yazı</a><a href="#kural">Kurallar</a><a href="#sosyal">Sosyal</a><a href="#kod">Kodda</a>
+  </nav>
+</header>
+<main>
+  <h1>Sınava kadar <span class="marker">aklında.</span></h1>
+  <p class="giris">Koçum.Net'in logosu, renkleri ve kullanım kuralları. Logo bir yazı: <strong>koçum.net</strong>, ve "net" fosforlu kalemle çizilmiş. Sınavda önemli olan tek şey net; ders çalışan biri de önemli olanın üstünü çizer. Bütün dosyalar bu klasörde: <code>svg/</code>, <code>png/</code>, <code>sosyal/</code>.</p>
+
+  <h2 id="logo">Logo</h2>
+  <p class="alt">Varsayılan, açık zemindeki lacivert sürüm. Zemin koyuysa koyu sürüm: "koçum." beyaza döner, "net" her zaman sarı kalemin üstünde lacivert kalır. Tek renk sürümlerde "net" kalem şeklinden oyulur; baskı, damga, nakış ve lazer için.</p>
+  <div class="izgara">
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-acik.svg" alt="Açık zemin logosu"></div><div class="bilgi"><h3>Açık zemin · varsayılan</h3><p>Beyaz, kâğıt rengi ve açık fotoğraflar.</p><div class="indir"><a href="svg/logo-acik.svg" download>SVG</a><a href="png/logo-acik-256.png" download>PNG 256</a><a href="png/logo-acik-512.png" download>512</a><a href="png/logo-acik-1024.png" download>1024</a><a href="png/logo-acik-2048.png" download>2048</a></div></div></div>
+    <div class="kart"><div class="onizleme z-ink"><img src="svg/logo-koyu.svg" alt="Koyu zemin logosu"></div><div class="bilgi"><h3>Koyu zemin</h3><p>Lacivert, siyah, koyu fotoğraf. Sitenin altbilgisi bu.</p><div class="indir"><a href="svg/logo-koyu.svg" download>SVG</a><a href="png/logo-koyu-256.png" download>PNG 256</a><a href="png/logo-koyu-512.png" download>512</a><a href="png/logo-koyu-1024.png" download>1024</a><a href="png/logo-koyu-2048.png" download>2048</a></div></div></div>
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-otomatik.svg" alt="Uyarlanır logo"></div><div class="bilgi"><h3>Uyarlanır · açık/koyu</h3><p>Tek dosya: sistem koyu moddaysa "koçum." kendiliğinden beyaza döner. Web, GitHub, Notion. E-postada PNG kullan.</p><div class="indir"><a href="svg/logo-otomatik.svg" download>SVG</a></div></div></div>
+    <div class="kart"><div class="onizleme z-kagit"><img src="svg/logo-tek-lacivert.svg" alt="Tek renk lacivert logo"></div><div class="bilgi"><h3>Tek renk · lacivert</h3><p>Tek renk baskı, kaşe, kabartma, belge filigranı.</p><div class="indir"><a href="svg/logo-tek-lacivert.svg" download>SVG</a><a href="png/logo-tek-lacivert-512.png" download>PNG 512</a><a href="png/logo-tek-lacivert-1024.png" download>1024</a><a href="png/logo-tek-lacivert-2048.png" download>2048</a></div></div></div>
+    <div class="kart"><div class="onizleme z-ink"><img src="svg/logo-tek-beyaz.svg" alt="Tek renk beyaz logo"></div><div class="bilgi"><h3>Tek renk · beyaz</h3><p>Koyu zeminde tek renk: nakış, lazer kazıma, video filigranı.</p><div class="indir"><a href="svg/logo-tek-beyaz.svg" download>SVG</a><a href="png/logo-tek-beyaz-512.png" download>PNG 512</a><a href="png/logo-tek-beyaz-1024.png" download>1024</a><a href="png/logo-tek-beyaz-2048.png" download>2048</a></div></div></div>
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-slogan-acik.svg" alt="Sloganlı logo, açık"></div><div class="bilgi"><h3>Sloganlı · açık</h3><p>Afiş, broşür, sunum kapağı. Logo 160 px'ten küçükse slogansız kullan.</p><div class="indir"><a href="svg/logo-slogan-acik.svg" download>SVG</a><a href="png/logo-slogan-acik-512.png" download>PNG 512</a><a href="png/logo-slogan-acik-1024.png" download>1024</a><a href="png/logo-slogan-acik-2048.png" download>2048</a></div></div></div>
+    <div class="kart"><div class="onizleme z-ink"><img src="svg/logo-slogan-koyu.svg" alt="Sloganlı logo, koyu"></div><div class="bilgi"><h3>Sloganlı · koyu</h3><p>Koyu zeminde afiş ve sunum.</p><div class="indir"><a href="svg/logo-slogan-koyu.svg" download>SVG</a><a href="png/logo-slogan-koyu-512.png" download>PNG 512</a><a href="png/logo-slogan-koyu-1024.png" download>1024</a><a href="png/logo-slogan-koyu-2048.png" download>2048</a><a href="svg/logo-slogan-tek-lacivert.svg" download>Tek renk</a></div></div></div>
+  </div>
+
+  <h2 id="ikon">İkon</h2>
+  <p class="alt">Logonun sığmadığı kare alanlar için: sarı zeminde lacivert "k". Tarayıcı sekmesi, telefon ana ekranı, sosyal medya profil fotoğrafı. Koyu arayüzlerde lacivert sürüm.</p>
+  <div class="kart">
+    <div class="ikonlar">
+      <figure><img src="svg/ikon.svg" width="128" height="128" alt=""><span>128</span></figure>
+      <figure><img src="png/ikon-64.png" width="64" height="64" alt=""><span>64</span></figure>
+      <figure><img src="png/ikon-48.png" width="48" height="48" alt=""><span>48</span></figure>
+      <figure><img src="png/ikon-32.png" width="32" height="32" alt=""><span>32</span></figure>
+      <figure><img src="png/ikon-16.png" width="16" height="16" alt=""><span>16</span></figure>
+      <figure style="margin-left:24px"><img src="svg/ikon-lacivert.svg" width="64" height="64" alt=""><span>Lacivert</span></figure>
+      <figure><img src="svg/ikon-maskable.svg" width="64" height="64" alt="" style="border-radius:50%"><span>Android (maskable)</span></figure>
+      <figure><img src="png/apple-touch-icon-180.png" width="64" height="64" alt="" style="border-radius:14px"><span>iOS</span></figure>
+    </div>
+    <div class="bilgi"><div class="indir">
+      <a href="svg/ikon.svg" download>ikon.svg</a><a href="svg/ikon-lacivert.svg" download>ikon-lacivert.svg</a><a href="svg/ikon-kare.svg" download>ikon-kare.svg</a>
+      <a href="png/favicon.ico" download>favicon.ico (16/32/48)</a><a href="png/apple-touch-icon-180.png" download>apple-touch 180</a><a href="png/ikon-maskable-512.png" download>maskable 512</a>
+      <a href="png/ikon-192.png" download>PNG 192</a><a href="png/ikon-512.png" download>512</a><a href="png/ikon-1024.png" download>1024</a><a href="png/ikon-lacivert-512.png" download>lacivert 512</a>
+    </div></div>
+  </div>
+
+  <h2 id="renk">Renkler</h2>
+  <p class="alt">İki renk markayı taşır: lacivert ve fosforlu sarı. Sarı <strong>hiçbir zaman metin rengi değildir</strong>; beyaz zeminde okunmaz. Yalnızca vurgu: kalem şekli, metin seçimi, bir başlıkta tek kelime. Arayüzde bağlantı ve düğmeler mavi kalır.</p>
+  <div class="renkler">
+    <div class="renk"><div class="kutu" style="background:#14213d"></div><div class="ic"><b>Lacivert</b><code>#14213D</code> · rgb(20, 33, 61)<br>Logo yazısı, başlıklar, koyu zemin.</div></div>
+    <div class="renk"><div class="kutu" style="background:#ffd43b"></div><div class="ic"><b>Fosforlu sarı</b><code>#FFD43B</code> · rgb(255, 212, 59)<br>Yalnızca vurgu. Üstünde her zaman lacivert.</div></div>
+    <div class="renk"><div class="kutu" style="background:#fffdf6; border-bottom:1px solid var(--line)"></div><div class="ic"><b>Kâğıt</b><code>#FFFDF6</code> · rgb(255, 253, 246)<br>Sıcak zemin: afiş, paylaşım görseli.</div></div>
+    <div class="renk"><div class="kutu" style="background:#fff; border-bottom:1px solid var(--line)"></div><div class="ic"><b>Beyaz</b><code>#FFFFFF</code><br>Varsayılan zemin.</div></div>
+    <div class="renk"><div class="kutu" style="background:#1a5fb4"></div><div class="ic"><b>Arayüz mavisi</b><code>#1A5FB4</code> · rgb(26, 95, 180)<br>Bağlantı ve düğme (site, uygulama, panel).</div></div>
+  </div>
+  <table class="tablo" style="margin-top:14px">
+    <tr><th>Eşleşme</th><th>Kontrast</th><th>Kullanım</th></tr>
+    <tr><td>Lacivert yazı · beyaz zemin</td><td>16,0 : 1</td><td>Her yerde (WCAG AAA)</td></tr>
+    <tr><td>Lacivert yazı · sarı zemin</td><td>11,2 : 1</td><td>Vurgulanan kelime (AAA)</td></tr>
+    <tr><td>Sarı yazı · beyaz zemin</td><td>1,4 : 1</td><td><strong>Asla</strong></td></tr>
+  </table>
+
+  <h2 id="yazi">Yazı tipleri</h2>
+  <div class="font-ornek">
+    <div class="kart"><h3>Logo · Baloo 2 ExtraBold</h3><p style="margin:6px 0 0; font:800 44px/1.1 'Baloo 2', sans-serif; color:var(--ink)">koçum.net</p><p class="alt" style="margin:8px 0 0">Yalnızca logoda. Dosyalarda yazı çizgiye çevrildi; metinde, başlıkta kullanma.</p></div>
+    <div class="kart"><h3>Başlık · Poppins SemiBold / Bold</h3><p style="margin:6px 0 0; font:700 32px/1.2 Poppins, sans-serif; color:var(--ink)">Bu hafta sadece iki konu.</p></div>
+    <div class="kart"><h3>Gövde ve arayüz · Inter</h3><p style="margin:6px 0 0; font:400 16px/1.6 Inter, sans-serif; color:var(--soft)">20 dakikalık bir testle matematikte hangi konuda güçlü, hangisinde zayıf olduğunu gör. Sonunda rapor değil, bu hafta ne çalışacağın çıkar.</p></div>
+  </div>
+
+  <h2 id="kural">Boşluk, boyut, yapılmayacaklar</h2>
+  <p class="alt">Logonun her yanında en az <strong>"o" harfinin yüksekliği</strong> kadar boş alan bırak; başka yazı ya da görsel o alana girmesin. En küçük boyut: ekranda <strong>96 px</strong> genişlik, baskıda <strong>25 mm</strong>. Daha küçük alanlarda ikon kullan (en küçük 16 px).</p>
+  <div class="bosluk-sar">
+    <div class="bosluk">
+      <img src="svg/logo-acik.svg" alt="Logonun çevresindeki boş alan">
+      <span class="x" style="left:50%; top:4.42cqw">x</span><span class="x" style="left:50%; bottom:4.42cqw; transform:translate(-50%, 50%)">x</span>
+      <span class="x" style="left:4.42cqw; top:50%">x</span><span class="x" style="right:4.42cqw; top:50%; transform:translate(50%, -50%)">x</span>
+    </div>
+    <p class="bosluk-not">x = "o" harfinin yüksekliği (logo genişliğinin yaklaşık onda biri)</p>
+  </div>
+  <div class="izgara yapma" style="margin-top:20px">
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-acik.svg" alt="" style="transform:scaleX(1.4)"></div><div class="bilgi"><h3>Esnetme, sıkıştırma</h3><p>Oranı her zaman korunur.</p></div></div>
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-acik.svg" alt="" style="filter:hue-rotate(170deg)"></div><div class="bilgi"><h3>Renkleri değiştirme</h3><p>Kalem sarı, yazı lacivert; başka renk yok.</p></div></div>
+    <div class="kart"><div class="onizleme z-ink"><img src="svg/logo-acik.svg" alt=""></div><div class="bilgi"><h3>Açık sürümü koyu zeminde kullanma</h3><p>"koçum." kaybolur; koyu sürümü kullan.</p></div></div>
+    <div class="kart"><div class="onizleme z-sari"><img src="svg/logo-acik.svg" alt=""></div><div class="bilgi"><h3>Sarı zeminde kullanma</h3><p>Kalem görünmez olur; tek renk lacivert sürümü kullan.</p></div></div>
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-acik.svg" alt="" style="filter:drop-shadow(4px 6px 3px rgb(0 0 0 / .45))"></div><div class="bilgi"><h3>Gölge, kontur, efekt ekleme</h3><p>Logo düz kalır.</p></div></div>
+    <div class="kart"><div class="onizleme z-beyaz"><img src="svg/logo-acik.svg" alt="" style="transform:rotate(-12deg)"></div><div class="bilgi"><h3>Döndürme, eğme</h3><p>Kalemin kendi eğimi yeterli.</p></div></div>
+  </div>
+
+  <h2 id="sosyal">Sosyal medya</h2>
+  <p class="alt">Profil fotoğrafı daire kırpmaya dayanıklı. Site her sayfa için paylaşım görselini kendisi üretiyor (dile göre slogan); buradakiler sitenin dışındaki kullanımlar için.</p>
+  <div class="izgara sosyal">
+    <div class="kart"><img src="sosyal/profil-1080.png" alt=""><div class="bilgi"><h3>Profil fotoğrafı</h3><p>Instagram, WhatsApp, X, YouTube, LinkedIn.</p><div class="indir"><a href="sosyal/profil-1080.png" download>1080×1080</a><a href="sosyal/profil-400.png" download>400×400</a></div></div></div>
+    <div class="kart"><img src="sosyal/og-1200x630-acik.png" alt=""><div class="bilgi"><h3>Paylaşım görseli</h3><p>Bağlantı önizlemesi, duyuru.</p><div class="indir"><a href="sosyal/og-1200x630-acik.png" download>Açık</a><a href="sosyal/og-1200x630-koyu.png" download>Koyu</a></div></div></div>
+    <div class="kart"><img src="sosyal/og-checkup-1200x630.png" alt=""><div class="bilgi"><h3>Check-up paylaşım görseli</h3><p>checkup.kocum.net bağlantısının önizlemesi. Uygulamaya otomatik bağlı.</p><div class="indir"><a href="sosyal/og-checkup-1200x630.png" download>1200×630</a></div></div></div>
+    <div class="kart"><img src="sosyal/kapak-x-1500x500.png" alt=""><div class="bilgi"><h3>Kapak görseli</h3><p>X (Twitter) ve LinkedIn üst görseli.</p><div class="indir"><a href="sosyal/kapak-x-1500x500.png" download>X 1500×500</a><a href="sosyal/kapak-linkedin-1584x396.png" download>LinkedIn 1584×396</a></div></div></div>
+  </div>
+
+  <h2 id="kod">Kodda</h2>
+  <p class="alt">Üç projede (site, check-up, panel) logo bileşen olarak var ve yol verisini bu kitten alıyor; yazı tipine bağlı değil. E-postalar <code>eposta-logo.png</code>'yi kullanıyor (beyaz zeminli, 2× çözünürlük).</p>
+  <pre>// Site: components/LogoMark.tsx
+&lt;Wordmark /&gt;                     // açık zemin
+&lt;Wordmark tone="light" /&gt;        // koyu zemin
+&lt;LogoMark /&gt;                     // kare ikon
+
+// Check-up ve panel: components/ui/logo.tsx · components/brand/Logo.tsx
+&lt;Wordmark /&gt;  &lt;Wordmark compact /&gt;  &lt;Logo /&gt;</pre>
+  <p class="alt" style="margin-top:16px">Kit değişirse:</p>
+  <pre>cd design &amp;&amp; npm install &amp;&amp; npm run marka   # SVG, PNG, ICO, sosyal görseller
+cd .. &amp;&amp; node design/sync.mjs                 # ikonlar ve yol verisi üç projeye</pre>
+
+  <footer>Koçum.Net · marka kiti v1 · Logo yazı tipi Baloo 2 (SIL Open Font License).</footer>
+</main>
+</body>
+</html>

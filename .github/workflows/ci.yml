@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   design-tokens:
-    name: Tasarım belirteçleri eşit mi
+    name: Tasarım belirteçleri ve marka dosyaları eşit mi
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
