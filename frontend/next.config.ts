@@ -55,6 +55,12 @@ const nextConfig: NextConfig = {
      * Backend tarafı 10 MB; pay bırakıyoruz.
      */
     serverActions: { bodySizeLimit: "12mb" },
+    /**
+     * Hiçbir rotaya uymayan adresler (iki kök düzen var: [lang] ve admin;
+     * sıradan not-found bir düzen gerektirir). app/global-not-found.tsx
+     * düzenleri atlayıp doğrudan çizilir.
+     */
+    globalNotFound: true,
   },
   async headers() {
     return [

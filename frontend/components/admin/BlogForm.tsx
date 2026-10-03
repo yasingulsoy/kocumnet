@@ -124,9 +124,15 @@ export function BlogForm({ blog, readOnly }: { blog?: AdminBlog; readOnly?: bool
             </Link>
           ) : null}
           {blog ? (
-            <p className="mt-3 text-micro text-ink-faint">
-              Adres: <span className="font-mono">/{blog.slug}</span>. Başlık değişirse adres de değişir.
-            </p>
+            <div className="mt-4">
+              <Field
+                label="Adres (slug)"
+                error={state.fields?.slug}
+                hint={blog.is_published ? "Yayındaki yazının adresi başlık değişse de sabit kalır; buradan değiştirirsen eski bağlantı 404 verir." : "Taslakta adres başlığı izler; dilersen elle yaz."}
+              >
+                <input name="slug" defaultValue={blog.slug} pattern="[a-z0-9]+(-[a-z0-9]+)*" minLength={3} maxLength={120} readOnly={readOnly} className={cn(INPUT_CLASS, "font-mono text-caption")} />
+              </Field>
+            </div>
           ) : null}
         </Card>
 

@@ -177,7 +177,7 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           <div className="flex shrink-0 items-center gap-2">
             <Link
               href={localizedPath("contact", locale)}
-              className={cn(buttonClass({ size: "md" }), "hidden min-[1100px]:inline-flex")}
+              className={cn(buttonClass({ size: "md" }), "max-[1099px]:hidden")}
             >
               {dict.nav.contact}
             </Link>

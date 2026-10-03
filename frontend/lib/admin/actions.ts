@@ -159,8 +159,14 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
   if (Object.keys(fields).length) return { fields };
 
   const locale = metin(fd, "locale", 5) || "tr";
+  const slug = metin(fd, "slug", 120).toLowerCase();
+  if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return { fields: { slug: "Yalnızca küçük harf, rakam ve tire. Örnek: tyt-matematik-plani" } };
+  }
   const payload = {
     title,
+    // Yalnızca düzenlemede ve dolu ise gönderilir: yeni yazıda adres başlıktan üretilir.
+    ...(id && slug ? { slug } : {}),
     content,
     excerpt: metin(fd, "excerpt", 1000) || null,
     tags: metin(fd, "tags", 2000)

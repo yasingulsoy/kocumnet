@@ -27,6 +27,26 @@ NEXT_PUBLIC_BACKEND_URL=https://api.kocum.net
 | `NEXT_PUBLIC_SITE_URL` | Tüm canonical, hreflang, Open Graph, `sitemap.xml`, `llms.txt` ve JSON-LD adresleri **`http://localhost:3000`** olarak gömülür. Google localhost'u indeksler. |
 | `NEXT_PUBLIC_BACKEND_URL` | Blog yazıları çekilemez (liste boş kalır), blog görselleri yüklenmez, görüntülenme sayacı çalışmaz. |
 
+## Site yönetimi: `kocum.net/admin`
+
+Blog, iletişim mesajları ve personel yönetimi bu projede, `/admin` altında. Tarayıcı
+backend'le hiç konuşmaz: sayfalar ve server action'lar backend'e **sunucudan** gider
+(`lib/admin/backend.ts`), personel oturumu backend'in `admin_access_token` JWT'si olarak
+bu alan adına çerezlenir.
+
+| Değişken | Nerede | Neden |
+|----------|--------|-------|
+| `BACKEND_URL` | runtime | Sunucudan backend'e adres (yoksa `NEXT_PUBLIC_BACKEND_URL`). |
+| `AUTH_COOKIE_DOMAIN=.kocum.net` | runtime | Oturum çerezi `admin.kocum.net`'e de gitsin: iki panel arasında tek giriş. Backend'deki değerle aynı olmalı. |
+| `NEXT_PUBLIC_CHECKUP_ADMIN_URL` | build | Kenar çubuğundaki "Check-up paneli" bağlantısı (varsayılan `https://admin.kocum.net`). |
+
+Davet ve parola sıfırlama e-postaları `FRONTEND_URL/admin/sifre-belirle/…` ve
+`/admin/sifre-sifirla/…` adreslerine gider; backend'de `FRONTEND_URL` doğru olmalı ve
+`SMTP_URL` dolu olmalı (yoksa davet gönderilemez, panel geçici parola ister).
+
+`/admin` arama motoruna kapalı (robots noindex) ve `X-Frame-Options: DENY`.
+Server action gövde sınırı 12 MB (kapak görseli + gömülü görseller); backend 10 MB.
+
 ## Port
 
 `next start` `PORT` değişkenini okur, yoksa **3000**'e düşer. Dokploy'da reverse-proxy
@@ -37,7 +57,9 @@ hedefini bu portla eşleştir.
 Frontend tek başına yetmez; backend'de (`api.kocum.net`) şunlar olmalı:
 
 ```bash
-CORS_ORIGINS=https://kocum.net,https://admin.kocum.net   # yoksa tarayıcı istekleri engellenir
+CORS_ORIGINS=https://kocum.net,https://admin.kocum.net   # iletişim formu + check-up paneli girişi
+AUTH_COOKIE_DOMAIN=.kocum.net                              # tek giriş (kocum.net/admin ve admin.kocum.net)
+SMTP_URL=smtps://resend:re_...@smtp.resend.com:465         # davet, parola sıfırlama, iletişim bildirimi
 FRONTEND_URL=https://kocum.net
 BACKEND_URL=https://api.kocum.net
 NODE_ENV=production                                       # çerezler Secure olur, CSRF aktifleşir

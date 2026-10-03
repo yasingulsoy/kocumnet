@@ -58,8 +58,19 @@ export function proxy(request: NextRequest) {
   // Kök (Türkçe) yollar → içeriden /tr/<kanonik> olarak servis et
   const canonical = first === undefined ? "" : TR_SEGMENT_TO_CANONICAL.get(first);
 
-  // Tanımadığımız bir kök yol → dokunma; [lang] eşleşmesi başarısız olup 404 verir
-  if (canonical === undefined) return NextResponse.next();
+  /*
+   * Tanımadığımız kök yol → hiçbir rotaya uymayan bir adrese yeniden yaz.
+   * Dokunmasaydık /foo-bar, [lang]="foo-bar" olarak eşleşir, kök düzen
+   * notFound() atar ve Next üst sınır olmadığı için kendi siyah 404'ünü
+   * gösterirdi. Eşleşmeyen adres app/global-not-found.tsx'e düşer.
+   */
+  if (canonical === undefined) {
+    const url = request.nextUrl.clone();
+    // İKİ parça: tek parçalı her yol [lang] sayfasına eşleşir; iki parçalı
+    // bilinmeyen yol hiçbir rotaya uymaz ve doğrudan global 404'e düşer.
+    url.pathname = "/__bulunamadi/sayfa";
+    return NextResponse.rewrite(url);
+  }
 
   const rest = segments.slice(1).join("/");
   const url = request.nextUrl.clone();
