@@ -16,6 +16,7 @@ import {
   type ExamScopeValue,
   type GradeValue,
 } from "@/lib/exams";
+import { mailTercihAction, type AbonelikState } from "@/lib/actions/abonelik";
 import { Alert, Button, Field, INPUT_CLASS } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -272,5 +273,34 @@ export function DeleteAccount() {
         </form>
       </Dialog>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Haftalık posta
+// ─────────────────────────────────────────────────────────────
+
+const abonelikBaslangic: AbonelikState = {};
+
+export function MailTercihForm({ optOut }: { optOut: boolean }) {
+  const [state, formAction, pending] = useActionState(mailTercihAction, abonelikBaslangic);
+  const acik = state.ok ? !state.kapali : !optOut;
+
+  return (
+    <form action={formAction} className="flex flex-wrap items-center justify-between gap-3">
+      <label className="flex items-start gap-3">
+        <input type="checkbox" name="haftalik" defaultChecked={acik} className="mt-0.5 size-4 accent-brand" />
+        <span>
+          <span className="block text-sm font-medium text-ink">Haftalık koçluk postası</span>
+          <span className="block text-[13px] text-ink-soft">Her pazartesi o haftanın planı e-postana gelir. Parola ve hesap postaları bundan ayrı.</span>
+        </span>
+      </label>
+      <div className="flex items-center gap-3">
+        {state.ok ? <span className="text-[13px] text-ok">Kaydedildi.</span> : null}
+        <Button type="submit" variant="secondary" size="sm" disabled={pending}>
+          {pending ? <Loader2 className="animate-spin" /> : null} Kaydet
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, destroySession } from "@/lib/auth";
+import { sendWelcomeMail } from "@/lib/mailer";
+import { sinirAsildi, sinirSifirla } from "@/lib/rate-limit";
 
 export interface FormState {
   error?: string;
@@ -36,33 +38,6 @@ function fieldErrors(error: z.ZodError): Record<string, string> {
   return out;
 }
 
-/**
- * Basit deneme sınırlayıcı.
- *
- * ⚠️ Süreç belleğinde: tek konteynerde çalışırken yeterli, yatay ölçeklenince
- * her kopya kendi sayacını tutar. Çok kopyaya çıkılırsa Redis'e taşınmalı.
- */
-const attempts = new Map<string, { count: number; until: number }>();
-const MAX_ATTEMPTS = 8;
-const WINDOW_MS = 10 * 60_000;
-
-function tooManyAttempts(key: string): boolean {
-  const now = Date.now();
-  const rec = attempts.get(key);
-  if (!rec || rec.until < now) {
-    attempts.set(key, { count: 1, until: now + WINDOW_MS });
-    return false;
-  }
-  rec.count += 1;
-  return rec.count > MAX_ATTEMPTS;
-}
-
-async function clientKey(suffix: string) {
-  const h = await headers();
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  return `${ip}:${suffix}`;
-}
-
 /** Zamanlama saldırısına karşı sahte özet — gerçek bir özetle aynı maliyette. */
 const DUMMY_HASH =
   "scrypt$65536$8$1$AAAAAAAAAAAAAAAAAAAAAA==$" +
@@ -83,6 +58,11 @@ export async function registerAction(
 
   if (!parsed.success) return { fields: fieldErrors(parsed.error) };
 
+  // Saatte 10 kayıt/IP: her kayıt scrypt çalıştırır ve e-posta gönderir.
+  if (await sinirAsildi("kayit", 10, 60 * 60_000)) {
+    return { error: "Çok fazla deneme yapıldı. Lütfen bir saat sonra tekrar dene." };
+  }
+
   // Onay kutusu tarayıcıda "required" ama bu atlatılabilir; asıl denetim burada.
   if (formData.get("kvkk") !== "on") {
     return { error: "Devam etmek için aydınlatma metnini onaylaman gerekiyor." };
@@ -95,10 +75,23 @@ export async function registerAction(
     return { fields: { email: "Bu e-posta ile bir hesap zaten var." } };
   }
 
-  const user = await prisma.user.create({
-    data: { name, email, passwordHash: await hashPassword(password), grade },
-    select: { id: true },
-  });
+  let user: { id: string };
+  try {
+    user = await prisma.user.create({
+      data: { name, email, passwordHash: await hashPassword(password), grade },
+      select: { id: true },
+    });
+  } catch (e) {
+    // İki sekmeden aynı anda kayıt: benzersiz e-posta kısıtı yarışı kaybedene
+    // 500 yerine anlaşılır bir mesaj.
+    if ((e as { code?: string }).code === "P2002") {
+      return { fields: { email: "Bu e-posta ile bir hesap zaten var." } };
+    }
+    throw e;
+  }
+
+  // Hoş geldin postası akışı BEKLETMEZ: SMTP yavaşsa kayıt yavaşlamasın.
+  void sendWelcomeMail({ to: email, name });
 
   const h = await headers();
   await createSession(user.id, h.get("user-agent") ?? undefined);
@@ -117,7 +110,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
   const { email, password } = parsed.data;
 
-  if (tooManyAttempts(await clientKey(email))) {
+  if (await sinirAsildi(`giris:${email}`, 8, 10 * 60_000)) {
     return { error: "Çok fazla deneme yapıldı. Lütfen 10 dakika sonra tekrar deneyin." };
   }
 
@@ -138,6 +131,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await sinirSifirla(`giris:${email}`);
 
   const h = await headers();
   await createSession(user.id, h.get("user-agent") ?? undefined);

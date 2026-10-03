@@ -423,7 +423,10 @@ export function trNumber(n: number, digits = 2) {
 }
 
 export function trDate(d: Date, withYear = true) {
+  // Sunucu UTC'de çalışıyor; saat dilimi verilmezse gece 00:00-03:00 arası
+  // testler bir önceki güne yazılıyordu.
   return d.toLocaleDateString("tr-TR", {
+    timeZone: "Europe/Istanbul",
     day: "numeric",
     month: "long",
     ...(withYear ? { year: "numeric" } : {}),

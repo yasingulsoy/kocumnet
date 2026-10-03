@@ -12,7 +12,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { getCheckupReview } from "@/lib/checkup";
 import { errorPattern, dominantError, compareProgress } from "@/lib/diagnosis";
 import {
@@ -31,13 +31,14 @@ import { ScoreRing, TopicBar } from "@/components/ui/charts";
 import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
 import { Badge, Card, CardHeader, LinkButton, trNumber } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { PrintButton } from "@/components/PrintButton";
 import { AnswerReview } from "./AnswerReview";
 
 export const metadata: Metadata = { title: "Sonuç" };
 
 export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionId]">) {
   const { sessionId } = await params;
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
 
   const [result, review] = await Promise.all([
     prisma.checkupResult.findUnique({
@@ -139,12 +140,15 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
 
   return (
     <div className="animate-fade space-y-5 sm:space-y-6">
-      <Link
-        href="/gelisim"
-        className="inline-flex min-h-9 items-center gap-1.5 text-caption font-medium text-ink-soft transition hover:text-ink"
-      >
-        <ArrowLeft className="size-4" /> Gelişim
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/gelisim"
+          className="inline-flex min-h-9 items-center gap-1.5 text-caption font-medium text-ink-soft transition hover:text-ink print:hidden"
+        >
+          <ArrowLeft className="size-4" /> Gelişim
+        </Link>
+        <PrintButton />
+      </div>
 
       {/* ── Özet: telefonda yatay, halka küçük ───────────── */}
       <Card className="overflow-hidden">

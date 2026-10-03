@@ -13,7 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { loadCatalog } from "@/lib/catalog";
 import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
 import { aktifPlan } from "@/lib/plan";
@@ -42,7 +42,7 @@ export const metadata: Metadata = { title: "Ana sayfa" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/panel">) {
   // Düzen zaten girişi ve tanışmayı denetledi; burada kullanıcı kesin var.
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const now = new Date();
   const sp = await searchParams;
   const hata = typeof sp.hata === "string" ? sp.hata : null;

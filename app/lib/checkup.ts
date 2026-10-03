@@ -264,7 +264,7 @@ export async function startTopicRetest(
   });
   if (acik) return acik.id;
 
-  const secim = await selectQuestionsForTopic(topicId, paket.questionCount, userId);
+  const secim = await selectQuestionsForTopic(topicId, paket.questionCount, userId, examScope);
   if (secim.questions.length < paket.questionCount) {
     throw new CheckupError(
       `${konu.name} konusunda kontrol testi için yeterli soru yok (${secim.questions.length}/${paket.questionCount}).`

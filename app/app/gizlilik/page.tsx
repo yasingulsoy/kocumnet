@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/site";
 import { COLLECTED_DATA, NOT_COLLECTED, LAST_UPDATED } from "@/lib/legal";
 import { Card, Wordmark } from "@/components/ui";
 
@@ -76,8 +77,8 @@ export default function PrivacyPage() {
         KVKK 11. madde kapsamında; verilerinizin işlenip işlenmediğini öğrenme, düzeltilmesini
         veya silinmesini isteme, işlemeye itiraz etme haklarına sahipsiniz. Bu haklarınızı
         kullanmak için{" "}
-        <a href="mailto:info@kocum.net" className="font-semibold text-brand hover:underline">
-          info@kocum.net
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-brand hover:underline">
+          {SUPPORT_EMAIL}
         </a>{" "}
         adresine yazabilirsiniz.
       </p>

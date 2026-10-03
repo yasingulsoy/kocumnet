@@ -32,7 +32,7 @@ export const COLLECTED_DATA: DataItem[] = [
     required: true,
   },
   { field: "Sınıf bilgisi", purpose: "Uygun paket önerisi", required: false },
-  { field: "Hedef sınav (TYT/AYT)", purpose: "Uygun paket önerisi", required: false },
+  { field: "Hedef sınav (LGS, TYT, AYT, KPSS, DGS, ALES)", purpose: "Uygun paket önerisi", required: false },
   {
     field: "Test cevaplarınız ve süreleriniz",
     purpose: "Konu bazlı seviye haritası ve gelişim takibi",

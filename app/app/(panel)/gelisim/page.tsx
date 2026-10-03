@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ChartLine, ClipboardList, History, Target, TrendingUp } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { aggregateTopics, type ResultLike } from "@/lib/insights";
 import { EXAMS, daysUntilExam, examShort, isExamScope, type ExamScopeValue } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
@@ -43,7 +43,7 @@ function tahminiNet(sonuclar: Sonuc[], sinav: ExamScopeValue): number | null {
 }
 
 export default async function ProgressPage({ searchParams }: PageProps<"/gelisim">) {
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const { tur } = await searchParams;
 
   const ham = await prisma.checkupResult.findMany({

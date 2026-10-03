@@ -5,8 +5,10 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { createSession, currentSessionHash, destroySession, requireUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { sendPasswordChangedMail } from "@/lib/mailer";
+import { sinirAsildi } from "@/lib/rate-limit";
 
 export interface ProfileState {
   ok?: string;
@@ -61,6 +63,10 @@ export async function changePasswordAction(
 
   if (yeni.length < 8) return { fields: { next: "Yeni parola en az 8 karakter olmalı." } };
   if (yeni === mevcut) return { fields: { next: "Yeni parola eskisiyle aynı olamaz." } };
+  // Mevcut parolayı deneme alanı olarak kullanmak isteyene sınır.
+  if (await sinirAsildi("parola-degistir", 10, 10 * 60_000)) {
+    return { error: "Çok fazla deneme. 10 dakika sonra tekrar dene." };
+  }
 
   const kayit = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
@@ -84,6 +90,8 @@ export async function changePasswordAction(
   // dışarı atmak anlamsız.
   const h = await headers();
   await createSession(user.id, h.get("user-agent") ?? undefined);
+
+  void sendPasswordChangedMail({ to: user.email, name: user.name });
 
   return { ok: "Parolan değiştirildi. Diğer cihazlardaki oturumların kapatıldı." };
 }
@@ -121,4 +129,18 @@ export async function deleteAccountAction(
   await destroySession();
 
   redirect("/?hesap-silindi=1");
+}
+
+// ─────────────────────────────────────────────────────────────
+// Diğer cihazlardan çıkış
+// ─────────────────────────────────────────────────────────────
+
+/** Bu cihaz dışındaki tüm oturumları kapatır. "Hesabıma biri mi girdi?" sorusunun cevabı. */
+export async function logoutOthersAction() {
+  const user = await requireUser();
+  const bu = await currentSessionHash();
+  await prisma.authSession.deleteMany({
+    where: { userId: user.id, ...(bu ? { tokenHash: { not: bu } } : {}) },
+  });
+  revalidatePath("/profil");
 }

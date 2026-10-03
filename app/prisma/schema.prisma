@@ -407,6 +407,15 @@ model User {
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
 
+  /// Haftalık koçluk postasını (pazartesi planı) kapattı mı. Hizmet
+  /// postaları (parola, kayıt) bundan etkilenmez.
+  mailOptOut   Boolean   @default(false)
+  /// Postadaki "aboneliği kapat" bağlantısının anahtarı. Giriş gerektirmez;
+  /// tahmin edilemez (UUID). Veritabanı üretir ki eski kayıtlar da dolu olsun.
+  mailToken    String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Son haftalık posta ne zaman gitti — cron aynı haftada ikinci kez yollamasın.
+  lastDigestAt DateTime?
+
   authSessions        AuthSession[]
   resetTokens         PasswordResetToken[]
   checkupSessions     CheckupSession[]
@@ -589,6 +598,8 @@ model CheckupSession {
   @@index([packageId])
   @@index([focusTopicId])
   @@index([levelRunId, stageLevel])
+  /// Haftalık test sayımı ve plan üretimi: kullanıcı + durum + tarih.
+  @@index([userId, status, submittedAt])
 }
 
 /// Oturuma seçilen soru + sıra. Cevaptan ayrı tablo: soru listesi oturum
@@ -737,6 +748,8 @@ model LevelRun {
 
   @@index([userId, startedAt])
   @@index([status])
+  /// aktifKosu(): kullanıcının süren koşusu.
+  @@index([userId, status])
 }
 
 enum PlanStatus {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardList, Layers, Lock, Timer } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { aktifKosu } from "@/lib/level-run";
 import { ayarGetir, type Seviye } from "@/lib/levels";
 import { EXAMS, examShort, isExamScope } from "@/lib/exams";
@@ -13,7 +13,7 @@ import { checkPackageAccess } from "@/lib/entitlements";
 export const metadata: Metadata = { title: "Seviyeli check-up" };
 
 export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyeli">) {
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const sp = await searchParams;
   const hata = typeof sp.hata === "string" ? sp.hata : null;
 

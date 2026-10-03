@@ -77,3 +77,35 @@ dialog[open] {
     font-size: max(1em, var(--math-min));
   }
 }
+
+/* ── Yazdırma (sonuç → PDF) ─────────────────────────────────── */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  /* Kartlar gölgesiz, sayfa sınırında bölünmesin. */
+  .shadow-card,
+  .shadow-raised,
+  .shadow-pop {
+    box-shadow: none !important;
+  }
+
+  .rounded-2xl {
+    break-inside: avoid;
+  }
+
+  /* Kapalı ayrıntı kutuları da basılsın: konu haritasının tamamı görünür. */
+  details > *:not(summary) {
+    display: block !important;
+  }
+
+  details > summary {
+    list-style: none;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+}

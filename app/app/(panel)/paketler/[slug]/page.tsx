@@ -14,8 +14,9 @@ import {
   Scale,
   Timer,
 } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/site";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { checkPackageAccess } from "@/lib/entitlements";
 import { Badge, Card, trDate, trNumber } from "@/components/ui";
 import { StartButton } from "./StartButton";
@@ -37,7 +38,7 @@ function cezaMetni(oran: number) {
 
 export default async function PackageDetailPage({ params }: PageProps<"/paketler/[slug]">) {
   const { slug } = await params;
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const now = new Date();
 
   const pkg = await prisma.package.findUnique({
@@ -209,10 +210,10 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
                   burada açılacak.
                 </p>
                 <a
-                  href="mailto:info@kocum.net"
+                  href={`mailto:${SUPPORT_EMAIL}`}
                   className="mt-5 flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-wash text-sm font-semibold text-brand transition hover:bg-brand-wash-strong"
                 >
-                  <Mail className="size-4" /> info@kocum.net
+                  <Mail className="size-4" /> {SUPPORT_EMAIL}
                 </a>
               </>
             )}

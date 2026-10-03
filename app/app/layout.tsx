@@ -26,6 +26,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3100"),
+  applicationName: "Koçum.Net Check-up",
   title: {
     default: "Matematik Check-up · Koçum.Net",
     template: "%s · Koçum.Net Check-up",

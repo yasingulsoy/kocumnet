@@ -1,7 +1,9 @@
 # Check-up soru giriş şablonu (v3)
 
 Bu dosya **içerik hazırlayıcı için** yazılmıştır. Buradaki biçime uyan bir
-markdown dosyası, içe aktarma betiğiyle doğrudan veritabanına girer.
+markdown dosyası, içe aktarma betiğiyle doğrudan veritabanına girer:
+`npm run import:questions -- dosya.md` (önce yalnızca denetler ve rapor verir;
+`--uygula` ile kaydeder). Örnek: `scripts/fixtures/ornek-import.md`.
 
 Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS · ALES.
 

@@ -19,7 +19,7 @@ import { BottomNav, SidebarNav } from "./nav";
  */
 export function StudentShell({ user, children }: { user: SessionUser; children: ReactNode }) {
   return (
-    <div className="min-h-screen lg:ps-[264px]">
+    <div className="min-h-screen lg:ps-[264px] print:ps-0">
       {/* Klavyeyle gezen öğrenci her sayfada menüyü baştan geçmek zorunda
           kalmasın. Odaklanmadan görünmez. */}
       <a
@@ -29,7 +29,7 @@ export function StudentShell({ user, children }: { user: SessionUser; children: 
         İçeriğe geç
       </a>
       {/* Masaüstü kenar çubuğu */}
-      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[264px] flex-col border-e border-line bg-surface lg:flex">
+      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[264px] flex-col border-e border-line bg-surface lg:flex print:hidden">
         <div className="flex h-16 items-center px-5">
           <Link href="/panel" aria-label="Ana sayfa">
             <Wordmark />
@@ -72,7 +72,7 @@ export function StudentShell({ user, children }: { user: SessionUser; children: 
       </aside>
 
       {/* Mobil üst çubuk */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
         <Link
           href="/panel"
           aria-label="Ana sayfa"
@@ -91,7 +91,7 @@ export function StudentShell({ user, children }: { user: SessionUser; children: 
 
       <main
         id="icerik"
-        className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pb-12 lg:pt-10"
+        className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pb-12 lg:pt-10 print:max-w-none print:p-0"
       >
         {children}
       </main>

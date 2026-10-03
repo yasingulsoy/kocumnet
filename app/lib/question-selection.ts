@@ -53,6 +53,12 @@ interface PickArgs {
   /** null ise tekrar engeli uygulanmaz. */
   userId: string | null;
   exposureCutoff: Date;
+  /**
+   * Sınav kapsamı. Soru `examScopes` boşsa her sınavda çıkar; doluysa yalnızca
+   * listelediği sınavlarda. Eskiden hiç bakılmıyordu: "yalnızca AYT" diye
+   * işaretlenmiş bir türev sorusu LGS testine düşebiliyordu.
+   */
+  examScope: string | null;
 }
 
 /**
@@ -67,8 +73,13 @@ async function pick({
   excludeIds,
   userId,
   exposureCutoff,
+  examScope,
 }: PickArgs): Promise<SelectedQuestion[]> {
   if (limit <= 0) return [];
+
+  const scopeMatches = examScope
+    ? Prisma.sql`AND (cardinality(q."examScopes") = 0 OR ${examScope}::"ExamScope" = ANY(q."examScopes"))`
+    : Prisma.empty;
 
   const notInChosen = excludeIds.length
     ? Prisma.sql`AND q.id NOT IN (${Prisma.join(excludeIds)})`
@@ -90,6 +101,7 @@ async function pick({
     WHERE q."topicId" = ${topicId}
       AND q.status = 'PUBLISHED'
       AND q.difficulty BETWEEN ${minDifficulty} AND ${maxDifficulty}
+      ${scopeMatches}
       ${notInChosen}
       ${notRecentlySeen}
     ORDER BY random()
@@ -108,11 +120,15 @@ export async function selectQuestionsForPackage(
   packageId: string,
   userId: string | null
 ): Promise<SelectionResult> {
-  const packageTopics = await prisma.packageTopic.findMany({
-    where: { packageId },
-    orderBy: { sortOrder: "asc" },
-    select: { topicId: true, questionCount: true },
-  });
+  const [paket, packageTopics] = await Promise.all([
+    prisma.package.findUnique({ where: { id: packageId }, select: { examScope: true } }),
+    prisma.packageTopic.findMany({
+      where: { packageId },
+      orderBy: { sortOrder: "asc" },
+      select: { topicId: true, questionCount: true },
+    }),
+  ]);
+  const examScope: string | null = paket?.examScope ?? null;
 
   const exposureCutoff = new Date(Date.now() - EXPOSURE_WINDOW_DAYS * 86_400_000);
   const chosen: SelectedQuestion[] = [];
@@ -133,6 +149,7 @@ export async function selectQuestionsForPackage(
         excludeIds: chosen.concat(topicPicked).map((q) => q.id),
         userId,
         exposureCutoff,
+        examScope,
       });
       topicPicked.push(...rows);
     }
@@ -148,6 +165,7 @@ export async function selectQuestionsForPackage(
         excludeIds: chosen.concat(topicPicked).map((q) => q.id),
         userId,
         exposureCutoff,
+        examScope,
       });
       topicPicked.push(...rows);
     }
@@ -164,6 +182,7 @@ export async function selectQuestionsForPackage(
         excludeIds: chosen.concat(topicPicked).map((q) => q.id),
         userId: null,
         exposureCutoff,
+        examScope,
       });
       relaxedExposureCount += rows.length;
       topicPicked.push(...rows);
@@ -190,7 +209,9 @@ export async function selectQuestionsForPackage(
 export async function selectQuestionsForTopic(
   topicId: string,
   count: number,
-  userId: string | null
+  userId: string | null,
+  /** Öğrencinin hedef sınavı — sınava özgü işaretli sorular başka sınava gitmesin. */
+  examScope: string | null = null
 ): Promise<SelectionResult> {
   const exposureCutoff = new Date(Date.now() - EXPOSURE_WINDOW_DAYS * 86_400_000);
   const secilen: SelectedQuestion[] = [];
@@ -205,6 +226,7 @@ export async function selectQuestionsForTopic(
       excludeIds: secilen.map((q) => q.id),
       userId,
       exposureCutoff,
+      examScope,
     });
     secilen.push(...rows);
   }
@@ -219,6 +241,7 @@ export async function selectQuestionsForTopic(
       excludeIds: secilen.map((q) => q.id),
       userId,
       exposureCutoff,
+      examScope,
     });
     secilen.push(...rows);
   }
@@ -233,6 +256,7 @@ export async function selectQuestionsForTopic(
       excludeIds: secilen.map((q) => q.id),
       userId: null,
       exposureCutoff,
+      examScope,
     });
     relaxedExposureCount += rows.length;
     secilen.push(...rows);

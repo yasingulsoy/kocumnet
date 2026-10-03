@@ -30,7 +30,35 @@ Zorunlu olanlar:
 | `NEXT_PUBLIC_SITE_URL` | Ürün önerilerinin gittiği pazarlama sitesi |
 
 `SMTP_URL` boşsa **parola sıfırlama kapalıdır** ve kullanıcıya bu açıkça söylenir
-(sessizce başarısız olmaz). Yayına çıkmadan önce doldurulmalı.
+(sessizce başarısız olmaz). Yayına çıkmadan önce doldurulmalı. Gönderilen postalar:
+hoş geldin (kayıt), parola sıfırlama, "parolan değişti" — hepsi markalı HTML şablonla
+(`lib/mailer.ts`). Geliştirmede `SMTP_URL=log://console` postayı günlüğe yazar.
+
+`CRON_SECRET`: `/api/cron` bakım ucunu korur. Dışarıdan 15 dakikada bir çağrılır: süresi
+dolan testleri puanlar, eski oturum/jetonları siler ve pazartesi 07:00 (TR) sonrası
+**haftalık koçluk postasını** gönderir (`lib/digest.ts`; SMTP_URL yoksa atlanır). Yoksa uç kapalı (503) ve yarım
+bırakılan testler hiç puanlanmaz. Dokploy "Schedule" (ya da sunucuda cron):
+
+```
+*/15 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://checkup.kocum.net/api/cron
+```
+
+Sağlık yoklaması: `GET /api/health` veritabanına dokunur (`{"ok":true,"db":"up"}`); Dokploy
+health check olarak bunu kullan.
+
+## 2b. Soru içe aktarma
+
+İçerik ekibinin `SORU-SABLONU.md` biçimindeki dosyası:
+
+```bash
+npm run import:questions -- dosya.md                 # yalnızca denetle, rapor ver
+npm run import:questions -- dosya.md --uygula        # taslak olarak kaydet
+npm run import:questions -- dosya.md --uygula --yayinla --personel "ad@kocum.net (#3)"
+npm run import:questions -- --geri-al <partiKimligi> # çözülmemiş soruları geri al
+```
+
+Görseller markdown'ın yanındaki `gorseller/` dizininden okunur ve veritabanına yazılır.
+Örnek dosya: `scripts/fixtures/ornek-import.md` (üçüncü soru bilerek hatalı).
 
 ## 3. İlk kurulumda bir kez
 

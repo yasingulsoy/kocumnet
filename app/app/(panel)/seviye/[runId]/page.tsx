@@ -10,7 +10,7 @@ import {
   Timer,
   TriangleAlert,
 } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { seviyeKarnesi, seviyeOzeti, sonrakiAdim } from "@/lib/level-report";
 import { examShort } from "@/lib/exams";
 import { seviyeBaslatAction, telafiBaslatAction } from "@/lib/actions/levels";
@@ -29,7 +29,7 @@ export default async function SeviyePage({
   const sp = await searchParams;
   const hata = typeof sp.hata === "string" ? sp.hata : null;
 
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const [karne, adim] = await Promise.all([
     seviyeKarnesi(runId, user.id),
     sonrakiAdim(runId, user.id),

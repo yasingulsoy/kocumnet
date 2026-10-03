@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -33,6 +33,9 @@ export function Dialog({
   className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Sınav ekranı aynı anda üç dialog bağlıyor; sabit "dialog-title" kimliği
+  // üçünde de aynıydı ve ekran okuyucu yanlış başlığı okuyordu.
+  const baslikId = useId();
 
   useEffect(() => {
     const d = ref.current;
@@ -51,7 +54,7 @@ export function Dialog({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      aria-labelledby="dialog-title"
+      aria-labelledby={baslikId}
       className={cn(
         "m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-line bg-surface p-0 text-ink shadow-pop",
         variant === "sheet" &&
@@ -62,7 +65,7 @@ export function Dialog({
       <div className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 id="dialog-title" className="font-display text-lg font-semibold text-ink">
+            <h2 id={baslikId} className="font-display text-lg font-semibold text-ink">
               {title}
             </h2>
             {description ? <div className="mt-1 text-sm text-ink-soft">{description}</div> : null}

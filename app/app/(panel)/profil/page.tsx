@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { KeyRound, LogOut, ShieldCheck, Target, Ticket, TriangleAlert, User } from "lucide-react";
+import { KeyRound, LogOut, Mail, ShieldCheck, Target, Ticket, TriangleAlert, User } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { logoutAction } from "@/lib/actions/auth";
 import { Avatar, Badge, Button, Card, CardHeader, PageHeader, trDate } from "@/components/ui";
-import { DeleteAccount, HedefForm, PasswordForm, ProfileForm } from "./forms";
+import { DeleteAccount, HedefForm, MailTercihForm, PasswordForm, ProfileForm } from "./forms";
+import { SessionsCard } from "./SessionsCard";
 
 export const metadata: Metadata = { title: "Profil" };
 
 export default async function ProfilePage() {
-  const oturum = (await getCurrentUser())!;
+  const oturum = await requirePageUser();
   const now = new Date();
 
   const [user, haklar, testSayisi] = await Promise.all([
@@ -22,6 +23,7 @@ export default async function ProfilePage() {
         targetExam: true,
         targetNet: true,
         weeklyTestGoal: true,
+        mailOptOut: true,
         createdAt: true,
       },
     }),
@@ -103,6 +105,15 @@ export default async function ProfilePage() {
           </p>
         )}
       </Card>
+
+      <Card className="p-5 sm:p-6">
+        <CardHeader icon={<Mail />} title="E-posta" description="Koçun sana ne zaman yazsın" />
+        <div className="mt-5">
+          <MailTercihForm optOut={user.mailOptOut} />
+        </div>
+      </Card>
+
+      <SessionsCard userId={oturum.id} />
 
       <Card className="p-5 sm:p-6">
         <CardHeader

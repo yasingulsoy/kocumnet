@@ -247,7 +247,6 @@ type SeedPackage = {
 const MIN_PER_TOPIC = 3;
 
 /** Tanışma testi: yeni öğrencinin boş panosundaki tek çağrı. Kısa olmak zorunda. */
-const TANISMA_SORU = 12;
 
 const PACKAGES: SeedPackage[] = [
   // ── LGS ───────────────────────────────────────────────────────

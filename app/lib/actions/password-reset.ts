@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { isMailConfigured, sendMail } from "@/lib/mailer";
+import { appUrl, isMailConfigured, sendPasswordResetMail } from "@/lib/mailer";
+import { sinirAsildi } from "@/lib/rate-limit";
 
 export interface ResetState {
   error?: string;
@@ -18,10 +19,6 @@ const TOKEN_TTL_MS = 60 * 60_000;
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function siteUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3100";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -38,6 +35,12 @@ export async function requestResetAction(
     .safeParse(formData.get("email"));
 
   if (!parsed.success) return { fields: { email: "Geçerli bir e-posta yazın." } };
+
+  // Saatte 5 istek: her istek scrypt çalıştırmıyor ama e-posta gönderiyor;
+  // bir adrese sıfırlama bombardımanı yapılmasın.
+  if (await sinirAsildi(`sifirlama:${parsed.data}`, 5, 60 * 60_000)) {
+    return { error: "Çok fazla istek. Bir saat sonra tekrar dene." };
+  }
 
   if (!isMailConfigured() && process.env.NODE_ENV === "production") {
     // Dürüst mesaj: "gönderdik" deyip hiçbir şey göndermemek, kullanıcıyı
@@ -73,15 +76,14 @@ export async function requestResetAction(
       },
     });
 
-    await sendMail({
+    // Gönderim hatası KULLANICIYA YANSIMAZ: "hata" yalnızca kayıtlı adreslerde
+    // çıksaydı, form bir "bu e-posta kayıtlı mı" sorgusuna dönüşürdü. Hata
+    // sunucu günlüğüne düşer (sendMail fırlatmaz); operasyon oradan görür.
+    await sendPasswordResetMail({
       to: parsed.data,
-      subject: "Koçum.Net Check-up — parola sıfırlama",
-      text:
-        `Merhaba ${user.name},\n\n` +
-        `Parolanı sıfırlamak için bu bağlantıya tıkla:\n` +
-        `${siteUrl()}/sifre-sifirla/${token}\n\n` +
-        `Bağlantı 1 saat geçerli ve yalnızca bir kez kullanılabilir.\n` +
-        `Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.\n`,
+      name: user.name,
+      link: `${appUrl()}/sifre-sifirla/${token}`,
+      dakika: TOKEN_TTL_MS / 60_000,
     });
   }
 

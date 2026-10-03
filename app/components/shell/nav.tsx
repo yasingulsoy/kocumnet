@@ -63,7 +63,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Ana menü"
-      className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden"
+      className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden print:hidden"
     >
       <div className="mx-auto grid max-w-md grid-cols-4">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import type { ExamScope, Grade, Role } from "@/lib/generated/prisma/enums";
 
@@ -114,6 +115,27 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     targetNet: session.user.targetNet === null ? null : Number(session.user.targetNet),
   };
 });
+
+/**
+ * Sayfalar için: oturum yoksa GİRİŞE YÖNLENDİRİR (fırlatmaz).
+ *
+ * Eskiden panel sayfaları `(await getCurrentUser())!` yazıyordu ve düzenin
+ * yönlendirmesine güveniyordu. Next sayfayı düzenle PARALEL çizer: oturumu
+ * dolan öğrenci istemci tarafında sayfa değiştirince düzen yeniden çalışmaz,
+ * sayfa null kullanıcıyla çöker ve hata ekranı görürdü — giriş değil.
+ */
+export async function requirePageUser(): Promise<SessionUser> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/giris");
+  if (!user.onboardedAt) redirect("/tanisma");
+  return user;
+}
+
+/** Geçerli isteğin oturum özeti (tokenHash) — profil "bu cihaz" rozeti için. */
+export async function currentSessionHash(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? hashToken(token) : null;
+}
 
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();

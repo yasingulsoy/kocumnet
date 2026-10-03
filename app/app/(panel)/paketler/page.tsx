@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ClipboardList, Layers } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { availableExamScopes, groupCatalog, loadCatalog } from "@/lib/catalog";
 import { EXAMS, isExamScope } from "@/lib/exams";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 export const metadata: Metadata = { title: "Testler" };
 
 export default async function CatalogPage({ searchParams }: PageProps<"/paketler">) {
-  const user = (await getCurrentUser())!;
+  const user = await requirePageUser();
   const sp = await searchParams;
 
   /*
