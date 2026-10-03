@@ -1,0 +1,84 @@
+name: CI
+
+# Her push ve PR'da dört proje: tip denetimi, lint, üretim derlemesi.
+# Veritabanı gerekmez: `next build` yalnızca `prisma generate` çalıştırır,
+# site derlemesi backend'e ulaşamayınca boş liste ile devam eder.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  design-tokens:
+    name: Tasarım belirteçleri eşit mi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node design/sync.mjs --check
+
+  next:
+    name: ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [frontend, app, admin]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Derleme için yer tutucu; gerçek değerler Dokploy'da.
+      NEXT_PUBLIC_SITE_URL: https://kocum.net
+      NEXT_PUBLIC_BACKEND_URL: https://api.kocum.net
+      NEXT_PUBLIC_APP_URL: https://checkup.kocum.net
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      CHECKUP_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+      - run: npm ci
+      - name: Şema kopyası güncel mi (yalnızca admin)
+        if: matrix.project == 'admin'
+        run: npm run checkup:check
+      - run: npx tsc --noEmit
+      - run: npx eslint .
+      - run: npm run build
+
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Sözdizimi denetimi
+        run: for f in server.js routes/*.js middleware/*.js models/*.js utils/*.js config/*.js scripts/*.js; do node --check "$f"; done
+      - name: Mail şablonu çalışıyor mu
+        env:
+          JWT_SECRET: ci-only-secret-value-that-is-long-enough-123456
+          DB_HOST: localhost
+          DB_NAME: ci
+          DB_USER: ci
+          DB_PASSWORD: ci
+          FRONTEND_URL: https://kocum.net
+          BACKEND_URL: https://api.kocum.net
+          NODE_ENV: development
+        run: node -e "const m=require('./utils/mailer.js'); const r=m.renderMail({baslik:'CI',metin:['ok']}); if(!r.html.includes('CI')) process.exit(1); console.log('şablon ok')"
