@@ -9,6 +9,7 @@ import {
   type QuestionFormState,
 } from "@/lib/checkup/actions/questions";
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
+import { QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "@/lib/checkup/format";
 import { ContentPreview } from "./ContentPreview";
 import { ImageUploader } from "./ImageUploader";
 import {
@@ -33,6 +34,13 @@ export interface TopicOption {
   scope: string;
 }
 
+export interface ObjectiveOption {
+  id: string;
+  topicId: string;
+  code: string;
+  name: string;
+}
+
 export interface QuestionInitial {
   id: string;
   topicId: string;
@@ -45,6 +53,8 @@ export interface QuestionInitial {
   targetTimeSeconds: number;
   status: string;
   sourceRef: string;
+  level: string;
+  objectiveId: string;
   version: number;
   shownCount: number;
 }
@@ -61,6 +71,8 @@ const BOS: QuestionInitial = {
   targetTimeSeconds: 75,
   status: "DRAFT",
   sourceRef: "",
+  level: "",
+  objectiveId: "",
   version: 1,
   shownCount: 0,
 };
@@ -73,10 +85,13 @@ const CODE = "rounded bg-surface-sunk px-1 py-0.5 text-micro " + MONO;
 
 export function QuestionForm({
   topics,
+  objectives = [],
   question,
   canEdit,
 }: {
   topics: TopicOption[];
+  /** Kazanımlar — konuya göre süzülür. */
+  objectives?: ObjectiveOption[];
   question?: QuestionInitial;
   /** Görüntüleyici rolü formu görür ama kaydedemez (sunucu da reddeder). */
   canEdit: boolean;
@@ -117,6 +132,9 @@ export function QuestionForm({
   const [difficulty, setDifficulty] = useState(String(mevcut.difficulty));
   const [targetTime, setTargetTime] = useState(String(mevcut.targetTimeSeconds));
   const [sourceRef, setSourceRef] = useState(mevcut.sourceRef);
+  const [level, setLevel] = useState(mevcut.level);
+  const [objectiveId, setObjectiveId] = useState(mevcut.objectiveId);
+  const konununKazanimlari = objectives.filter((o) => o.topicId === topicId);
   const [errorTypes, setErrorTypes] = useState<string[]>(() =>
     Array.from({ length: 5 }, (_, i) => mevcut.errorTypes[i] ?? "")
   );
@@ -136,8 +154,10 @@ export function QuestionForm({
     setSelect("Konu", topicId);
     setSelect("Durum", status);
     setSelect("Zorluk", difficulty);
+    setSelect("Seviye", level);
+    setSelect("Kazanım", objectiveId);
     errorTypes.forEach((value, i) => setSelect(LABELS[i] + " şıkkının hata tipi", value));
-  }, [state, topicId, status, difficulty, errorTypes]);
+  }, [state, topicId, status, difficulty, level, objectiveId, errorTypes]);
 
   const setChoice = (i: number, value: string) =>
     setChoices((prev) => prev.map((c, j) => (j === i ? value : c)));
@@ -155,6 +175,8 @@ export function QuestionForm({
       <input type="hidden" name="topicId" value={topicId} />
       <input type="hidden" name="status" value={status} />
       <input type="hidden" name="difficulty" value={difficulty} />
+      <input type="hidden" name="level" value={level} />
+      <input type="hidden" name="objectiveId" value={objectiveId} />
 
       <div className="space-y-4">
         {state.error ? <Notice>{state.error}</Notice> : null}
@@ -370,7 +392,11 @@ export function QuestionForm({
                   aria-label="Konu"
                   required
                   value={topicId}
-                  onChange={(e) => setTopicId(e.target.value)}
+                  onChange={(e) => {
+                    setTopicId(e.target.value);
+                    // Kazanım konuya bağlı: konu değişince eskisi anlamsız.
+                    setObjectiveId("");
+                  }}
                   className={SELECT_CLASS}
                 >
                   <option value="">Seç…</option>
@@ -397,6 +423,48 @@ export function QuestionForm({
                   <option value="REVIEW">İncelemede</option>
                   <option value="PUBLISHED">Yayında</option>
                   <option value="ARCHIVED">Arşiv</option>
+                </select>
+              </Field>
+
+              <Field
+                label="Seviye"
+                error={state.fields?.level}
+                hint="Seviyeli check-up için. Boş bırakılırsa yalnızca klasik paketlerde çıkar."
+              >
+                <select aria-label="Seviye" value={level} onChange={(e) => setLevel(e.target.value)} className={SELECT_CLASS}>
+                  <option value="">Seviyesiz</option>
+                  {QUESTION_LEVELS.map((l) => (
+                    <option key={l} value={l}>
+                      {QUESTION_LEVEL_LABEL[l]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field
+                label="Kazanım"
+                error={state.fields?.objectiveId}
+                hint={
+                  !topicId
+                    ? "Önce konu seç."
+                    : konununKazanimlari.length === 0
+                      ? "Bu konuda kazanım yok — Kazanımlar sayfasından ekle."
+                      : "Seviye 1 her kazanımdan bir soru sorar; seviyeli soruda zorunlu."
+                }
+              >
+                <select
+                  aria-label="Kazanım"
+                  value={objectiveId}
+                  onChange={(e) => setObjectiveId(e.target.value)}
+                  disabled={!topicId || konununKazanimlari.length === 0}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Kazanımsız</option>
+                  {konununKazanimlari.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.code} · {o.name}
+                    </option>
+                  ))}
                 </select>
               </Field>
 

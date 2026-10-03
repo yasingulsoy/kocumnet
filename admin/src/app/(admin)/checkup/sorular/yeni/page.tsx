@@ -13,11 +13,18 @@ export default async function NewQuestionPage() {
 
   // Sorular yalnızca yaprak konulara bağlanır: üst konuya bağlanan soru
   // hiçbir pakette seçilemez (seçim tam eşleşme yapıyor).
-  const topics = await db.topic.findMany({
-    where: { children: { none: {} } },
-    orderBy: [{ examScope: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, examScope: true },
-  });
+  const [topics, objectives] = await Promise.all([
+    db.topic.findMany({
+      where: { children: { none: {} } },
+      orderBy: [{ examScope: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, examScope: true },
+    }),
+    db.objective.findMany({
+      where: { status: { not: "ARCHIVED" } },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+      select: { id: true, topicId: true, code: true, name: true },
+    }),
+  ]);
 
   return (
     <>
@@ -32,6 +39,7 @@ export default async function NewQuestionPage() {
       <QuestionForm
         canEdit
         topics={topics.map((t) => ({ id: t.id, name: t.name, scope: t.examScope }))}
+        objectives={objectives}
       />
     </>
   );

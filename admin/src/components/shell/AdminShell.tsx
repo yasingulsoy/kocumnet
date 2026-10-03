@@ -7,16 +7,18 @@ import clsx from "clsx";
 import {
   ArrowUpRight,
   Database,
+  Layers,
   LayoutDashboard,
   ListChecks,
   LogOut,
   Menu,
   Package,
+  Target,
   Users,
   X,
 } from "lucide-react";
 import { logoutRequest } from "@/lib/api";
-import { ROLE_LABEL, type Staff } from "@/lib/checkup/staff";
+import { ROLE_LABEL, type Staff } from "@/lib/checkup/roles";
 import { Logo, Wordmark } from "@/components/brand/Logo";
 
 /**
@@ -33,8 +35,10 @@ import { Logo, Wordmark } from "@/components/brand/Logo";
 const NAV = [
   { href: "/checkup", label: "Genel bakış", icon: LayoutDashboard, exact: true },
   { href: "/checkup/sorular", label: "Sorular", icon: ListChecks },
+  { href: "/checkup/kazanimlar", label: "Kazanımlar", icon: Target },
   { href: "/checkup/havuz", label: "Havuz durumu", icon: Database },
   { href: "/checkup/paketler", label: "Paketler", icon: Package },
+  { href: "/checkup/seviyeli", label: "Seviyeli koşular", icon: Layers },
   { href: "/checkup/ogrenciler", label: "Öğrenciler", icon: Users },
 ] as const;
 

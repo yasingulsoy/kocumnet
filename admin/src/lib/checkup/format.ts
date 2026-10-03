@@ -32,6 +32,14 @@ export const GRADE_LABEL: Record<string, string> = {
   GRADUATE: "Mezun",
 };
 
+/** Soru seviyesi (seviyeli check-up). Boş = seviyesiz, yalnızca klasik paketlerde. */
+export const QUESTION_LEVEL_LABEL: Record<string, string> = {
+  L1_TEMEL: "Seviye 1 — Temel",
+  L2_ORTA: "Seviye 2 — Orta",
+  L3_ANALIZ: "Seviye 3 — Analiz",
+};
+export const QUESTION_LEVELS = ["L1_TEMEL", "L2_ORTA", "L3_ANALIZ"] as const;
+
 export const LEVEL_LABEL: Record<string, string> = {
   STRONG: "Güçlü",
   MEDIUM: "Orta",

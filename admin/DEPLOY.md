@@ -1,8 +1,13 @@
 # Admin Panel Deployment (Dokploy / Nixpacks)
 
-Panel iki sistemi yönetir: **site** (blog, personel — Express backend'in API'si üzerinden)
-ve **Matematik Check-up** (soru havuzu, öğrenciler, erişim hakları — doğrudan
-`kocumnet_checkup` veritabanından). Check-up tarafının ayrıntıları: [CHECKUP.md](CHECKUP.md).
+Panel **yalnızca Matematik Check-up**'ı yönetir (soru havuzu, kazanımlar, paketler,
+öğrenciler, seviyeli koşular — doğrudan `kocumnet_checkup` veritabanından).
+Blog, iletişim mesajları ve personel hesapları 3 Ekim 2026'dan beri **kocum.net/admin**'de
+(frontend projesi). Giriş yine backend'in personel hesaplarıyla; `AUTH_COOKIE_DOMAIN=.kocum.net`
+ile iki panel arasında tek giriş. Ayrıntılar: [CHECKUP.md](CHECKUP.md).
+
+Tasarım belirteçleri `src/app/tokens.css` — kök dizindeki `design/tokens.css`'in kopyası;
+elle düzenlenmez (`node design/sync.mjs`).
 
 ## Build Environment Variables
 
@@ -28,6 +33,7 @@ Build sırasında aşağıdaki değişken **mutlaka** tanımlanmalıdır. Aksi h
 |----------|----------|
 | `CHECKUP_DATABASE_URL` | `kocumnet_checkup` bağlantısı — check-up uygulamasının (`app/`) `DATABASE_URL`'i ile **aynı** veritabanı |
 | `BACKEND_URL` | Sunucudan backend'e erişim adresi (personel oturumu her istekte buradan doğrulanır). Boşsa `NEXT_PUBLIC_BACKEND_URL` kullanılır |
+| `NEXT_PUBLIC_SITE_URL` | kocum.net adresi — kenar çubuğundaki "Site yönetimi" bağlantısı ve giriş ekranındaki "Parolamı unuttum" (`/admin/sifremi-unuttum`) buradan kurulur |
 
 ## ⚠️ Backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` ZORUNLU
 
@@ -37,8 +43,8 @@ tarafında** doğruluyor (panelin istemci tarafı giriş denetimi, sunucuda çiz
 `admin_access_token` çerezini görmesi gerekir.
 
 Tarayıcı çerezi `api.kocum.net`'ten alıyor. Backend ortamında `AUTH_COOKIE_DOMAIN`
-boşsa çerez yalnızca `api.kocum.net`'e gider; blog ekranları çalışmaya devam eder ama
-Check-up ekranları **"Oturumun bu sunucuya ulaşmadı"** gösterir. Backend servisine:
+boşsa çerez yalnızca `api.kocum.net`'e gider ve panel **"Oturumun bu sunucuya ulaşmadı"**
+gösterir. Backend servisine:
 
 ```
 AUTH_COOKIE_DOMAIN=.kocum.net

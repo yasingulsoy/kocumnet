@@ -1,8 +1,8 @@
 # Check-up yönetimi
 
 Matematik Check-up'ın (öğrenci uygulaması: kök dizindeki `app/`) yönetim ekranları.
-Panelin geri kalanı backend API'sinden beslenirken bu bölüm **doğrudan
-`kocumnet_checkup` veritabanına** Prisma ile bağlanır.
+Panel bu bölümden ibaret: **doğrudan `kocumnet_checkup` veritabanına** Prisma ile
+bağlanır; backend yalnızca giriş ve oturum doğrulaması için kullanılır.
 
 | Ekran | Adres | Kim görür |
 |---|---|---|
@@ -12,6 +12,8 @@ Panelin geri kalanı backend API'sinden beslenirken bu bölüm **doğrudan
 | Havuz durumu — paket × konu doldurulabilirlik, zorluk bantları | `/checkup/havuz` | tüm personel |
 | Öğrenciler + öğrenci detayı (test geçmişi, konu haritası, erişim hakları) | `/checkup/ogrenciler` | yönetici, müdür |
 | Paketler — yayın durumu, ücretli/ücretsiz | `/checkup/paketler` | değiştirme: yönetici, müdür |
+| Kazanımlar — seviyeli check-up'ın öğrenme çıktıları; sınav başına hazırlık sayacı (50 kazanım × ≥2 L1 sorusu) | `/checkup/kazanimlar` | yazma: yönetici, müdür, editör |
+| Seviyeli koşular — kim hangi seviyede, kapıda duranlar, telafi bekleyenler | `/checkup/seviyeli` | tüm personel (öğrenci adları yönetici/müdür) |
 
 Roller backend'in `utils/roles.js` gruplarıyla aynı (`CONTENT_ROLES`, `USER_MANAGE_ROLES`).
 Öğrenci kişisel verisini soru yazan editörün görmesi gerekmiyor — KVKK gereği en az kişiye açık.
@@ -21,13 +23,15 @@ Roller backend'in `utils/roles.js` gruplarıyla aynı (`CONTENT_ROLES`, `USER_MA
 ```
 src/lib/checkup/
   db.ts            Prisma client (CHECKUP_DATABASE_URL, driver adapter)
-  staff.ts         Sunucu tarafı personel doğrulaması + roller
+  roles.ts         Roller ve etiketler — istemci bileşenleri de okur (sunucu API'si yok)
+  staff.ts         Sunucu tarafı personel doğrulaması (server-only)
   pool.ts          Havuz sağlığı (paket × konu)
   format.ts        Etiketler, tarih/sayı biçimleri (Türkiye saati)
-  actions/         Server action'lar: sorular, şekil, erişim hakkı, paket
+  actions/         Server action'lar: sorular (seviye + kazanım alanlı), kazanımlar, şekil, erişim hakkı, paket
   shared/          ⚠️ app/lib'den KOPYA — elle düzenlemeyin (aşağıya bakın)
   generated/       Prisma client (gitignore'da, üretilir)
-src/components/checkup/   Ekran bileşenleri (TailAdmin görünümü, koyu tema)
+src/components/checkup/   Ekran bileşenleri (ortak tasarım belirteçleri: src/app/tokens.css)
+src/components/shell/     Panel çerçevesi (kenar çubuğu, mobil çekmece)
 src/app/(admin)/checkup/  Sayfalar
 src/app/api/checkup-media/[id]   Soru görselleri (yalnızca personele)
 prisma/checkup.prisma     ⚠️ app/prisma/schema.prisma'nın KOPYASI
@@ -36,11 +40,10 @@ scripts/checkup-sync.mjs  Kopyaları eşitler / denetler
 
 ## Kimlik doğrulama — neden sunucu tarafında
 
-`(admin)/layout.tsx` bir istemci bileşeni ve oturumu yalnızca tarayıcıda denetliyor.
-Blog ekranları verisini tarayıcıdan backend'e sorduğu için bu yetiyordu. Check-up
-ekranları ise veriyi **sunucuda** çiziyor: sunucu denetlemezse öğrenci listesi,
-çerezi olmayan birine giden yanıtın içinde durur — istemci düzeni onu yalnızca
-ekrana basmamış olur.
+`(admin)/layout.tsx` artık sunucu bileşeni: oturumu sunucuda doğrular, yoksa
+`/signin`'e yönlendirir. Ama Next sayfayı düzenle paralel çizebildiği için düzen
+seviyesindeki denetim tek başına yetmez — veri **sunucuda** çiziliyor ve sunucu
+denetlemezse öğrenci listesi, çerezi olmayan birine giden yanıtın içinde durur.
 
 Bu yüzden **her sayfa ve her server action** `checkStaff()` / `staffForAction()`
 çağırır; düzen seviyesinde tek denetim yetmez. Doğrulama backend'e sorulur

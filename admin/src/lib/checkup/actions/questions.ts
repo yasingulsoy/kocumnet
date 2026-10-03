@@ -36,6 +36,9 @@ const schema = z.object({
     .max(600, "Hedef süre en fazla 600 saniye."),
   status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]),
   sourceRef: z.string().trim().max(200, "Kaynak en fazla 200 karakter.").optional(),
+  /** Seviyeli check-up: boş = seviyesiz (yalnızca klasik paketler). */
+  level: z.enum(["", "L1_TEMEL", "L2_ORTA", "L3_ANALIZ"]).default(""),
+  objectiveId: z.string().default(""),
   correctIndex: z.coerce.number().int().min(0).max(4),
   choices: z.array(z.string().trim()).min(4, "En az 4 şık gerekli.").max(5),
   errorTypes: z.array(z.string().optional()),
@@ -66,6 +69,8 @@ function readForm(formData: FormData) {
     targetTimeSeconds: formData.get("targetTimeSeconds"),
     status: String(formData.get("status") ?? "DRAFT"),
     sourceRef: String(formData.get("sourceRef") ?? "") || undefined,
+    level: String(formData.get("level") ?? ""),
+    objectiveId: String(formData.get("objectiveId") ?? ""),
     correctIndex: formData.get("correctIndex"),
     choices,
     errorTypes,
@@ -155,6 +160,22 @@ function isDuplicate(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
 
+/**
+ * Kazanım seçildiyse konusuyla aynı konuda olmalı: başka konunun kazanımına
+ * bağlanan soru seviye 1'de yanlış konunun altında ölçülür. Seviye verildiyse
+ * kazanım ZORUNLU (seviye 1 seçimi kazanım üzerinden gider).
+ */
+async function levelFieldsError(input: { level: string; objectiveId: string; topicId: string }): Promise<Record<string, string> | null> {
+  if (input.level && !input.objectiveId) {
+    return { objectiveId: "Seviyeli soru için kazanım seç." };
+  }
+  if (!input.objectiveId) return null;
+  const o = await db.objective.findUnique({ where: { id: input.objectiveId }, select: { topicId: true } });
+  if (!o) return { objectiveId: "Kazanım bulunamadı." };
+  if (o.topicId !== input.topicId) return { objectiveId: "Kazanım, seçilen konuya ait değil." };
+  return null;
+}
+
 async function topicIsLeaf(topicId: string): Promise<boolean> {
   // Soru yalnızca yaprak konuya bağlanır: üst konuya bağlanan soru hiçbir
   // pakette seçilemez (seçim tam eşleşme yapıyor). Form zaten yalnızca
@@ -168,6 +189,7 @@ async function topicIsLeaf(topicId: string): Promise<boolean> {
 
 function revalidateQuestionScreens() {
   revalidatePath("/checkup");
+  revalidatePath("/checkup/kazanimlar");
   revalidatePath("/checkup/havuz");
   revalidatePath("/checkup/sorular");
 }
@@ -190,6 +212,8 @@ export async function createQuestionAction(
   if (!(await topicIsLeaf(parsed.data.topicId))) {
     return { fields: { topicId: "Geçersiz konu." } };
   }
+  const seviyeHatasi = await levelFieldsError(parsed.data);
+  if (seviyeHatasi) return { fields: seviyeHatasi };
 
   const damga = staffStamp(auth.staff);
   try {
@@ -204,6 +228,8 @@ export async function createQuestionAction(
         targetTimeSeconds: parsed.data.targetTimeSeconds,
         status: parsed.data.status,
         sourceRef: parsed.data.sourceRef,
+        level: parsed.data.level || null,
+        objectiveId: parsed.data.objectiveId || null,
         createdByStaff: damga,
         updatedByStaff: damga,
         choices: { create: choiceRows(built.data.drafts, built.data.errorTypes) },
@@ -241,6 +267,8 @@ export async function updateQuestionAction(
   if (!(await topicIsLeaf(parsed.data.topicId))) {
     return { fields: { topicId: "Geçersiz konu." } };
   }
+  const seviyeHatasi = await levelFieldsError(parsed.data);
+  if (seviyeHatasi) return { fields: seviyeHatasi };
 
   const mevcut = await db.question.findUnique({
     where: { id },
@@ -318,6 +346,8 @@ export async function updateQuestionAction(
           targetTimeSeconds: parsed.data.targetTimeSeconds,
           status: parsed.data.status,
           sourceRef: parsed.data.sourceRef ?? null,
+          level: parsed.data.level || null,
+          objectiveId: parsed.data.objectiveId || null,
           updatedByStaff: staffStamp(auth.staff),
           version: anahtarDegisti ? mevcut.version + 1 : mevcut.version,
         },

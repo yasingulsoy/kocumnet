@@ -24,7 +24,7 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
 
   const { id } = await params;
 
-  const [question, topics] = await Promise.all([
+  const [question, topics, objectives] = await Promise.all([
     db.question.findUnique({
       where: { id },
       select: {
@@ -36,6 +36,8 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
         targetTimeSeconds: true,
         status: true,
         sourceRef: true,
+        level: true,
+        objectiveId: true,
         version: true,
         shownCount: true,
         correctCount: true,
@@ -53,6 +55,11 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
       where: { children: { none: {} } },
       orderBy: [{ examScope: "asc" }, { name: "asc" }],
       select: { id: true, name: true, examScope: true },
+    }),
+    db.objective.findMany({
+      where: { status: { not: "ARCHIVED" } },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+      select: { id: true, topicId: true, code: true, name: true },
     }),
   ]);
 
@@ -86,6 +93,8 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
     targetTimeSeconds: question.targetTimeSeconds,
     status: question.status,
     sourceRef: question.sourceRef ?? "",
+    level: question.level ?? "",
+    objectiveId: question.objectiveId ?? "",
     version: question.version,
     shownCount: question.shownCount,
   };
@@ -135,6 +144,7 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
       <QuestionForm
         canEdit={yazabilir}
         topics={topics.map((t) => ({ id: t.id, name: t.name, scope: t.examScope }))}
+        objectives={objectives}
         question={initial}
       />
     </>
