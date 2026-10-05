@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, staffForAction } from "@/lib/checkup/staff";
 import { isQuestionStatus } from "@/lib/checkup/format";
+import { loadPackageHealth } from "@/lib/checkup/pool";
 
 type Result = { ok: boolean; error?: string };
 
@@ -18,6 +19,12 @@ function revalidatePackageScreens() {
  *
  * Havuzu yetmeyen paket yayına ALINMAZ: öğrenci kataloğda görür, "Başla"ya
  * basar ve "yeterli soru yok" hatası alır — bu, hiç görmemesinden kötü.
+ *
+ * Denetim paketin TÜRÜNE göre (lib/checkup/pool.ts): katalog paketinde konu
+ * dağılımı, konu tekrar testinde kontrol testine yeten konu, seviyeli
+ * pakette seviye hazırlığı. Eskiden her pakete konu dağılımı soruluyordu;
+ * dağılımı olmayan tekrar testi ve seviyeli paketler bir kez taslağa
+ * çekilince panelden bir daha yayına alınamıyordu.
  */
 export async function setPackageStatusAction(id: string, status: string): Promise<Result> {
   const auth = await staffForAction(MANAGE_ROLES);
@@ -26,38 +33,17 @@ export async function setPackageStatusAction(id: string, status: string): Promis
     return { ok: false, error: "Geçersiz istek." };
   }
 
-  const paket = await db.package.findUnique({
-    where: { id },
-    select: {
-      topics: { select: { questionCount: true, topicId: true, topic: { select: { name: true } } } },
-    },
-  });
-  if (!paket) return { ok: false, error: "Paket bulunamadı." };
-
   if (status === "PUBLISHED") {
-    if (paket.topics.length === 0) {
-      return { ok: false, error: "Pakette konu tanımlı değil; yayına alınamaz." };
-    }
-    const sayimlar = await db.question.groupBy({
-      by: ["topicId"],
-      where: { status: "PUBLISHED", topicId: { in: paket.topics.map((t) => t.topicId) } },
-      _count: { _all: true },
-    });
-    const var_ = new Map(sayimlar.map((s) => [s.topicId, s._count._all]));
-    const eksik = paket.topics.filter((t) => (var_.get(t.topicId) ?? 0) < t.questionCount);
-    if (eksik.length) {
-      const ilk = eksik[0];
-      return {
-        ok: false,
-        error:
-          `Yayına alınamaz: "${ilk.topic.name}" konusunda ${var_.get(ilk.topicId) ?? 0} yayında ` +
-          `soru var, paket ${ilk.questionCount} istiyor` +
-          (eksik.length > 1 ? ` (ve ${eksik.length - 1} konu daha).` : "."),
-      };
+    const paket = (await loadPackageHealth()).find((p) => p.id === id);
+    if (!paket) return { ok: false, error: "Paket bulunamadı." };
+    if (paket.state === "blocked") {
+      return { ok: false, error: "Yayına alınamaz: " + paket.summary };
     }
   }
 
-  await db.package.update({ where: { id }, data: { status } });
+  const sonuc = await db.package.updateMany({ where: { id }, data: { status } });
+  if (sonuc.count === 0) return { ok: false, error: "Paket bulunamadı." };
+
   revalidatePackageScreens();
   return { ok: true };
 }

@@ -23,6 +23,8 @@ export function LoginForm() {
           autoComplete="email"
           required
           autoFocus
+          // Yanlış parolada e-posta silinmesin (React 19 formu sıfırlıyor).
+          defaultValue={state.values?.email}
           className={INPUT_CLASS}
           placeholder="ornek@eposta.com"
         />

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_OG } from "@/lib/i18n/config";
+import { isLocale } from "@/lib/i18n/config";
+import { sayfaMetadata } from "@/lib/seo";
 import { languageAlternates, localizedPath } from "@/lib/routes";
 import { PRODUCTS, PRODUCT_CATEGORIES, type ProductCategory } from "@/lib/products";
 import { Check } from "lucide-react";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
+import { SayfaYoluJsonLd } from "@/components/JsonLd";
 import { Badge, Card, Container, LinkButton, Section, SectionHead } from "@/components/ui";
 
 export async function generateMetadata({
@@ -18,22 +20,13 @@ export async function generateMetadata({
   if (!isLocale(lang)) return {};
   const t = await getDictionary(lang);
 
-  return {
+  return sayfaMetadata({
+    lang,
     title: t.products.title,
     description: t.products.metaDescription,
-    alternates: {
-      canonical: localizedPath("products", lang),
-      languages: languageAlternates("products"),
-    },
-    openGraph: {
-      title: `${t.products.title} | Koçum.Net`,
-      description: t.products.metaDescription,
-      url: localizedPath("products", lang),
-      type: "website",
-      locale: LOCALE_OG[lang],
-      siteName: "Koçum.Net",
-    },
-  };
+    path: localizedPath("products", lang),
+    languages: languageAlternates("products"),
+  });
 }
 
 const CAT_LABEL_KEY: Record<ProductCategory, "catProblem" | "catMatematik" | "catTurkce"> = {
@@ -52,6 +45,7 @@ export default async function ProductsPage({ params }: { params: Promise<{ lang:
 
   return (
     <main>
+      <SayfaYoluJsonLd lang={lang} dict={t} sayfa="products" />
       <PageHero eyebrow={p.eyebrow} title={p.title} description={p.heroSubtitle}>
         <ul className="flex flex-wrap gap-x-6 gap-y-2">
           {features.map((f) => (
@@ -84,8 +78,13 @@ export default async function ProductsPage({ params }: { params: Promise<{ lang:
                 <StaggerGroup className="mt-8 grid gap-6 md:grid-cols-2">
                   {items.map((prod) => (
                     <StaggerItem key={prod.id}>
-                      {/* Ana sayfadaki yayın kartları buraya çapayla geliyor. */}
-                      <Card id={prod.id} interactive className="flex h-full scroll-mt-24 flex-col p-6">
+                      {/*
+                        Ana sayfadaki yayın kartları buraya çapayla geliyor; üst
+                        boşluğu globals.css'teki scroll-padding-top veriyor.
+                        Kart tıklanmıyor: "interactive" (havada kalkma) yanlış
+                        bir "tıkla" ipucu veriyordu, kaldırıldı.
+                      */}
+                      <Card id={prod.id} className="flex h-full flex-col p-6">
                         <div className="flex flex-wrap gap-1.5">
                           {prod.exams.map((exam) => (
                             <Badge key={exam} tone="brand">

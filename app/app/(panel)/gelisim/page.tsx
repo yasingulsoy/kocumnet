@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ChartLine, ClipboardList, History, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, ChartLine, ClipboardList, History, Play, Target, TrendingUp } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
+import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
 import { aggregateTopics, type ResultLike } from "@/lib/insights";
 import { EXAMS, daysUntilExam, examShort, isExamScope, type ExamScopeValue } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
@@ -21,7 +22,13 @@ import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = { title: "Gelişim" };
 
-type Sonuc = ResultLike & { sessionId: string; packageName: string; scope: string };
+type Sonuc = ResultLike & {
+  sessionId: string;
+  packageName: string;
+  scope: string;
+  /** 5 soruluk konu kontrol testi — tek zayıf konuyu ölçer, genel seviyeyi değil. */
+  kontrol: boolean;
+};
 
 /**
  * Tahmini sınav neti.
@@ -59,11 +66,33 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
       computedAt: true,
       topicBreakdown: true,
       examScope: true,
-      session: { select: { package: { select: { name: true, examScope: true } } } },
+      session: {
+        select: {
+          kind: true,
+          focusTopic: { select: { name: true } },
+          package: { select: { name: true, examScope: true } },
+        },
+      },
     },
   });
 
   if (ham.length === 0) {
+    /*
+     * Tek ve somut bir sonraki adım: yarım test varsa o, yoksa panodaki
+     * "ilk adım"la AYNI öneri. Eskiden düz "bir test seç" bağlantısı vardı ve
+     * yeni öğrenciyi 6-7 paketlik listeyle baş başa bırakıyordu.
+     */
+    const simdi = new Date();
+    const [yarim, katalog] = await Promise.all([
+      prisma.checkupSession.findFirst({
+        where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: simdi } },
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      }),
+      loadCatalog(user.id, simdi, { scope: user.targetExam }),
+    ]);
+    const ilk = siradakiPaketler(katalog, 1)[0];
+
     return (
       <div className="animate-rise space-y-5">
         <PageHeader title="Gelişim" description="Çözdüğün testler burada birikir." />
@@ -71,11 +100,27 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           <EmptyState
             icon={<ChartLine />}
             title="Henüz bir sonucun yok"
-            description="İlk check-up'ını bitirdiğinde başarı grafiğin ve konu haritan burada oluşmaya başlar."
+            description={
+              yarim
+                ? "Yarım kalan testini bitirdiğinde başarı grafiğin ve konu haritan burada oluşmaya başlar."
+                : ilk
+                  ? `İlk check-up'ını bitirdiğinde başarı grafiğin ve konu haritan burada oluşur. Önerimiz: ${ilk.name} (${ilk.questionCount} soru, ${ilk.durationMinutes} dk).`
+                  : "İlk check-up'ını bitirdiğinde başarı grafiğin ve konu haritan burada oluşmaya başlar."
+            }
             action={
-              <LinkButton href="/paketler">
-                Bir test seç <ArrowRight />
-              </LinkButton>
+              yarim ? (
+                <LinkButton href={`/checkup/${yarim.id}`}>
+                  <Play /> Yarım kalan testine dön
+                </LinkButton>
+              ) : ilk ? (
+                <LinkButton href={`/paketler/${ilk.slug}`}>
+                  Teste göz at <ArrowRight />
+                </LinkButton>
+              ) : (
+                <LinkButton href="/paketler">
+                  Testlere göz at <ArrowRight />
+                </LinkButton>
+              )
             }
           />
         </Card>
@@ -85,7 +130,11 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
 
   const tumu: Sonuc[] = ham.map((r) => ({
     sessionId: r.sessionId,
-    packageName: r.session.package.name,
+    kontrol: r.session.kind === "TOPIC_RETEST",
+    packageName:
+      r.session.kind === "TOPIC_RETEST" && r.session.focusTopic
+        ? `${r.session.focusTopic.name} kontrol testi`
+        : r.session.package.name,
     scope: r.examScope ?? r.session.package.examScope,
     correctCount: r.correctCount,
     wrongCount: r.wrongCount,
@@ -114,6 +163,15 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
 
   const sonuclar = secili ? tumu.filter((r) => r.scope === secili) : tumu;
 
+  /*
+   * Eğilim ve tahmini net yalnızca ÖLÇÜMLERDEN: 5 soruluk kontrol testi tek
+   * bir zayıf konuyu yeniden ölçüyor. Çizgiye girince plandaki kontrol
+   * testini çözen öğrencinin grafiği ve tahmini neti sebepsiz düşüyordu
+   * (koçluk modeli: kontrol testi ölçüm değil, doğrulama). Konu haritası ve
+   * test listesi ise hepsini kullanıyor.
+   */
+  const olcumler = sonuclar.filter((r) => !r.kontrol);
+
   const oran = (r: ResultLike) => {
     const t = r.correctCount + r.wrongCount + r.blankCount;
     return t === 0 ? 0 : r.correctCount / t;
@@ -121,7 +179,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
 
   // Paketler farklı uzunlukta: netleri değil başarı oranını çiziyoruz, yoksa
   // 15 soruluk testin düşük neti "geriledin" gibi görünürdü.
-  const noktalar = sonuclar.map((r) => ({
+  const noktalar = olcumler.map((r) => ({
     label: r.computedAt.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
     value: oran(r) * 100,
     title:
@@ -134,11 +192,11 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
     return a.ratio - b.ratio;
   });
 
-  const sonOran = oran(sonuclar[sonuclar.length - 1]);
-  const ilkOran = oran(sonuclar[0]);
+  const sonOran = olcumler.length > 0 ? oran(olcumler[olcumler.length - 1]) : 0;
+  const ilkOran = olcumler.length > 0 ? oran(olcumler[0]) : 0;
   const fark = Math.round((sonOran - ilkOran) * 100);
 
-  const tahmin = secili ? tahminiNet(sonuclar, secili) : null;
+  const tahmin = secili ? tahminiNet(olcumler, secili) : null;
   const hedef = user.targetNet ?? (secili ? EXAMS[secili].defaultTargetNet : null);
   const kalanGun = secili ? daysUntilExam(secili, new Date()) : null;
 
@@ -241,12 +299,12 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           icon={<ChartLine />}
           title="Başarı oranın"
           description={
-            sonuclar.length < 2
-              ? "Grafik ikinci testinden sonra anlam kazanır."
-              : "Her nokta bir test — üstüne gelince ayrıntısı görünür"
+            olcumler.length < 2
+              ? "Grafik ikinci check-up'ından sonra anlam kazanır."
+              : "Her nokta bir check-up; 5 soruluk kontrol testleri çizgiye girmez."
           }
           action={
-            sonuclar.length >= 2 ? (
+            olcumler.length >= 2 ? (
               <span
                 className={cn(
                   "tabular flex items-center gap-1 text-caption font-semibold",
@@ -261,13 +319,20 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           }
         />
         <div className="mt-4">
-          {sonuclar.length < 2 ? (
+          {olcumler.length === 0 ? (
+            <p className="rounded-xl bg-surface-sunk p-4 text-caption text-ink-soft">
+              Bu sınavda henüz bir check-up ölçümün yok. Kontrol testlerin aşağıdaki listede.
+            </p>
+          ) : olcumler.length < 2 ? (
             <p className="rounded-xl bg-surface-sunk p-4 text-caption text-ink-soft">
               Şimdilik tek bir nokta var: %{Math.round(sonOran * 100)}. İkinci testini çözdüğünde
               eğilimini göreceksin.
             </p>
           ) : (
-            <TrendChart points={noktalar} />
+            <>
+              <TrendChart points={noktalar} compact className="sm:hidden" />
+              <TrendChart points={noktalar} className="max-sm:hidden" />
+            </>
           )}
         </div>
       </Card>

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { SITE_BRAND } from "@/lib/site-brand";
+import { CHECKUP_URL } from "@/lib/site";
 import { Wordmark } from "./LogoMark";
 import { InstagramIcon } from "./icons";
 import type { Locale } from "@/lib/i18n/config";
@@ -18,6 +20,11 @@ const SERVICE_ANCHORS = [
   { id: "beslenme-danismanligi", key: "beslenmeTitle" },
 ] as const;
 
+/*
+ * Koyu zeminde (brand-deep) küçük başlıklar ve e-posta bağlantısı eskiden
+ * brand-bright idi: 3,7:1, küçük metin için AA sınırının (4,5:1) altında.
+ * Başlıklar artık brand-wash-strong (10:1), bağlantı beyaz + alt çizgi.
+ */
 export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const year = new Date().getFullYear();
   const servicesHref = localizedPath("services", locale);
@@ -48,7 +55,7 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </div>
 
           <nav aria-label={dict.footer.quickLinks}>
-            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-wash-strong">
               {dict.footer.quickLinks}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -62,11 +69,25 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                   </Link>
                 </li>
               ))}
+              {CHECKUP_URL ? (
+                <li>
+                  <a
+                    href={CHECKUP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-white/85 transition hover:text-white hover:underline"
+                  >
+                    {dict.nav.checkup}
+                    <ArrowUpRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
+                    <span className="sr-only"> ({dict.nav.opensInNewTab})</span>
+                  </a>
+                </li>
+              ) : null}
             </ul>
           </nav>
 
           <nav aria-label={dict.footer.servicesTitle}>
-            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-wash-strong">
               {dict.footer.servicesTitle}
             </h2>
             <ul className="mt-5 space-y-3 text-sm">
@@ -84,13 +105,16 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </nav>
 
           <div>
-            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-bright">
+            <h2 className="text-micro font-semibold uppercase tracking-[0.18em] text-brand-wash-strong">
               {dict.footer.contactTitle}
             </h2>
             <address className="mt-5 space-y-4 text-sm not-italic leading-relaxed text-white/85">
               <p>
                 <span className="block text-white/60">{dict.contact.email}</span>
-                <a href={`mailto:${SITE_BRAND.email}`} className="text-brand-bright hover:underline">
+                <a
+                  href={`mailto:${SITE_BRAND.email}`}
+                  className="font-medium text-white underline decoration-white/30 underline-offset-4 transition hover:decoration-white"
+                >
                   {SITE_BRAND.email}
                 </a>
               </p>

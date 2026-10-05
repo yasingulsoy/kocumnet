@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { staffDurumu } from "@/lib/admin/auth";
+import { guvenliSonraki, staffDurumu } from "@/lib/admin/auth";
 import { Notice } from "@/components/admin/ui";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Giriş" };
 
 export default async function GirisPage({ searchParams }: PageProps<"/admin/giris">) {
-  const d = await staffDurumu();
-  if (d.kind === "ok") redirect("/admin");
-
   const sp = await searchParams;
-  const next = typeof sp.next === "string" ? sp.next : undefined;
+  // Yalnızca panelin kendi adresleri: dışarıya yönlendirme yok.
+  const next = guvenliSonraki(sp.next) ?? undefined;
+
+  const d = await staffDurumu();
+  if (d.kind === "ok") redirect(next ?? "/admin");
 
   return (
     <>
@@ -26,6 +27,9 @@ export default async function GirisPage({ searchParams }: PageProps<"/admin/giri
         ) : null}
         {sp.parola === "1" ? <Notice tone="ok">Parolan kaydedildi. Şimdi giriş yapabilirsin.</Notice> : null}
         {sp.cikis === "1" ? <Notice tone="info">Çıkış yapıldı.</Notice> : null}
+        {next && next !== "/admin" && sp.parola !== "1" ? (
+          <Notice tone="info">Bu sayfa için giriş yapman gerekiyor; sonra kaldığın yere döneceksin.</Notice>
+        ) : null}
         <LoginForm next={next} />
       </div>
     </>

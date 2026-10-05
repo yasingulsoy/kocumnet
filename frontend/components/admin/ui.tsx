@@ -228,6 +228,17 @@ export function relative(v: string | Date | null | undefined) {
   return trDate(v);
 }
 
+/** Bitişe kalan süre: "2 gün kaldı", "5 saat kaldı"; geçmişse null. */
+export function remaining(v: string | Date | null | undefined) {
+  if (!v) return null;
+  const ms = new Date(v).getTime() - Date.now();
+  if (ms <= 0) return null;
+  const saat = Math.floor(ms / 3_600_000);
+  if (saat < 1) return "1 saatten az kaldı";
+  if (saat < 24) return `${saat} saat kaldı`;
+  return `${Math.floor(saat / 24)} gün kaldı`;
+}
+
 /** Bir sayfanın tamamını kaplayan "yetkin yok" kutusu. */
 export function Forbidden({ roles }: { roles: string }) {
   return (

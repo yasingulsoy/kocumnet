@@ -3,8 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
   Brain,
+  CalendarCheck,
+  CalendarDays,
   ChevronDown,
   CircleCheck,
   RotateCcw,
@@ -17,8 +20,10 @@ import { getCheckupReview } from "@/lib/checkup";
 import { errorPattern, dominantError, compareProgress } from "@/lib/diagnosis";
 import {
   bosStratejisi,
+  haftaBasi,
   hataTavsiyesi,
   karar,
+  kontrolKarari,
   oncelikSirasi,
   tekrarTavsiyesi,
   HAFTALIK_SORU,
@@ -32,7 +37,8 @@ import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
 import { Badge, Card, CardHeader, LinkButton, trNumber } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { PrintButton } from "@/components/PrintButton";
-import { AnswerReview } from "./AnswerReview";
+import { MathContent } from "@/components/MathContent";
+import { AnswerReview, type ReviewItemView } from "./AnswerReview";
 
 export const metadata: Metadata = { title: "Sonuç" };
 
@@ -60,6 +66,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             relaxedExposureCount: true,
             kind: true,
             penaltyRatio: true,
+            focusTopicId: true,
             focusTopic: { select: { name: true } },
             package: { select: { name: true, slug: true, examScope: true } },
           },
@@ -81,7 +88,13 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const cezaVar = hasPenalty(sinav);
   const retest = result.session.kind === "TOPIC_RETEST";
 
-  const [onceki, konuBilgileri] = await Promise.all([
+  const odakKonu = retest ? result.session.focusTopicId : null;
+
+  // Bu haftanın sonucuysa haftalık planla bağı: plan bu sonuçtan mı çıktı?
+  const buHafta = haftaBasi(new Date());
+  const buHaftaninSonucu = !retest && result.computedAt >= buHafta;
+
+  const [onceki, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani] = await Promise.all([
     prisma.checkupResult.findFirst({
       where: {
         session: { userId: user.id, package: { slug: result.session.package.slug } },
@@ -94,7 +107,50 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       where: { id: { in: breakdown.topics.map((t) => t.topicId) } },
       select: { id: true, examWeights: true, recommendedProductIds: true },
     }),
+    // Kontrol testi: bu konunun bir önceki ölçümü ("çalışman işe yaradı mı").
+    odakKonu
+      ? prisma.checkupResult.findMany({
+          where: { session: { userId: user.id }, computedAt: { lt: result.computedAt } },
+          orderBy: { computedAt: "desc" },
+          take: 30,
+          select: { topicBreakdown: true },
+        })
+      : Promise.resolve([]),
+    // Kontrol testi: plandaki hangi işi kapattı (döngü burada kapanıyor).
+    retest
+      ? prisma.planItem.findFirst({
+          where: { verifiedBySessionId: sessionId, plan: { userId: user.id } },
+          select: {
+            plan: { select: { items: { select: { kind: true, doneAt: true, verifiedBySessionId: true } } } },
+          },
+        })
+      : Promise.resolve(null),
+    buHaftaninSonucu
+      ? prisma.studyPlan.findUnique({
+          where: { userId_weekStart: { userId: user.id, weekStart: buHafta } },
+          select: { sourceSessionId: true },
+        })
+      : Promise.resolve(null),
   ]);
+
+  const oncekiOran = (() => {
+    for (const r of eskiSonuclar) {
+      const t = (r.topicBreakdown as unknown as TopicBreakdown).topics.find(
+        (x) => x.topicId === odakKonu && x.asked > 0
+      );
+      if (t) return t.ratio;
+    }
+    return null;
+  })();
+
+  const planDurumu = kapananIs
+    ? {
+        toplam: kapananIs.plan.items.length,
+        biten: kapananIs.plan.items.filter((i) =>
+          i.kind === "RETEST" ? i.verifiedBySessionId !== null : i.doneAt !== null
+        ).length,
+      }
+    : null;
 
   const agirliklar = new Map<string, number>();
   for (const k of konuBilgileri) {
@@ -117,7 +173,11 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
     .filter((t) => t.level === "STRONG")
     .sort((a, b) => b.ratio - a.ratio);
 
-  const sonuc = karar(oran, oncelikler, guclular, result.blankCount, toplam);
+  // Kontrol testi tek konuyu doğruluyor: paket kararı orada yanlış konuşuyordu.
+  const odakSatiri = retest ? breakdown.topics.find((t) => t.topicId === odakKonu) : undefined;
+  const sonuc = odakSatiri
+    ? kontrolKarari(odakSatiri, oncekiOran)
+    : karar(oran, oncelikler, guclular, result.blankCount, toplam);
   const bosNotu = bosStratejisi(
     result.blankCount,
     toplam,
@@ -137,6 +197,31 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const baslik = retest
     ? `${result.session.focusTopic?.name ?? "Konu"} kontrol testi`
     : result.session.package.name;
+
+  /*
+   * İnceleme içeriği BURADA, sunucuda çiziliyor; istemci bileşenine yalnızca
+   * hazır düğümler gidiyor (sınav ekranındaki desenin aynısı). KaTeX JS'i
+   * tarayıcıya inmiyor.
+   */
+  const inceleme: ReviewItemView[] | null = review
+    ? review.map((item) => ({
+        order: item.order,
+        topicName: item.topicName,
+        stem: <MathContent content={item.stem} />,
+        solution: item.solution ? <MathContent content={item.solution} /> : null,
+        choices: item.choices.map((c) => ({
+          id: c.id,
+          label: c.label,
+          isCorrect: c.isCorrect,
+          errorType: c.errorType,
+          content: <MathContent content={c.content} compact />,
+        })),
+        selectedChoiceId: item.selectedChoiceId,
+        isCorrect: item.isCorrect,
+        timeSpentMs: item.timeSpentMs,
+        targetTimeSeconds: item.targetTimeSeconds,
+      }))
+    : null;
 
   return (
     <div className="animate-fade space-y-5 sm:space-y-6">
@@ -236,8 +321,43 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         ) : null}
       </Card>
 
+      {/* ── Kontrol testi: plan döngüsü burada kapanıyor ── */}
+      {retest ? (
+        <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6 print:hidden">
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-xl",
+              planDurumu ? "bg-ok-wash text-ok" : "bg-surface-sunk text-ink-soft"
+            )}
+          >
+            {planDurumu ? <CalendarCheck className="size-4" /> : <CalendarDays className="size-4" />}
+          </span>
+          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">
+            {planDurumu ? (
+              <>
+                <strong className="font-semibold text-ink">Planındaki kontrol testi kapandı.</strong>{" "}
+                <span className="tabular">
+                  Bu hafta {planDurumu.biten}/{planDurumu.toplam} iş tamam.
+                </span>
+              </>
+            ) : (
+              "Bu konu bu haftaki planında yoktu; sonucun konu haritana eklendi."
+            )}
+          </p>
+          <LinkButton
+            href="/panel"
+            variant={planDurumu ? "primary" : "secondary"}
+            className="max-sm:w-full"
+          >
+            {planDurumu ? "Planına dön" : "Ana sayfa"} <ArrowRight />
+          </LinkButton>
+        </Card>
+      ) : null}
+
       {/* ── Şimdi ne çalışmalısın (öncelik sırası) ──────── */}
-      {oncelikler.length > 0 ? (
+      {/* Kontrol testinde yok: tek konuluk sonuçtan "bu hafta sadece bunlar"
+          demek, haftanın mevcut planıyla çelişiyordu. */}
+      {oncelikler.length > 0 && !retest ? (
         <Card className="border-brand/25 shadow-raised">
           <CardHeader
             className="p-4 sm:p-6"
@@ -288,9 +408,23 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
               </li>
             ))}
           </ol>
-          <p className="border-t border-line px-4 py-3 text-caption text-ink-soft sm:px-6">
-            Diğer konulara bu hafta bakma. Bunları bitirdiğinde plan kendini güncelleyecek.
-          </p>
+          {/* Eskiden "bunları bitirdiğinde plan kendini güncelleyecek" yazıyordu;
+              plan haftada bir, o haftanın ilk check-up'ından çıkıyor. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-4 py-3 sm:px-6">
+            <p className="min-w-0 flex-1 text-caption text-ink-soft">
+              Diğer konulara bu hafta bakma.
+              {haftaninPlani
+                ? haftaninPlani.sourceSessionId === sessionId
+                  ? " Bu konular haftalık planına eklendi."
+                  : " Bu haftanın planı önceki check-up'ından; yeni plan gelecek haftanın ilk check-up'ıyla çıkar."
+                : ""}
+            </p>
+            {haftaninPlani ? (
+              <LinkButton href="/panel" variant="soft" size="sm" className="print:hidden">
+                Planı gör <ArrowRight />
+              </LinkButton>
+            ) : null}
+          </div>
         </Card>
       ) : null}
 
@@ -308,7 +442,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       ) : null}
 
       {/* ── Önceki denemeye göre ────────────────────────── */}
-      {ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
+      {!retest && ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
         <Card className="p-4 sm:p-6">
           <h2 className="text-body font-semibold text-ink">Geçen denemene göre</h2>
           <ul className="mt-3 space-y-2">
@@ -378,15 +512,19 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       </Card>
 
       {/* ── Sonraki ölçüm ───────────────────────────────── */}
-      <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft">
-          <RotateCcw className="size-4" />
-        </span>
-        <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">{tekrarNotu}</p>
-        <LinkButton href="/paketler" variant="secondary" className="max-sm:w-full">
-          Testler
-        </LinkButton>
-      </Card>
+      {/* Kontrol testinde yok: katalogda görünmeyen "kontrol testi paketini
+          10 gün sonra tekrar çöz" diyordu. */}
+      {!retest ? (
+        <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft">
+            <RotateCcw className="size-4" />
+          </span>
+          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">{tekrarNotu}</p>
+          <LinkButton href="/paketler" variant="secondary" className="max-sm:w-full">
+            Testler
+          </LinkButton>
+        </Card>
+      ) : null}
 
       {/* ── Kaynak (en sonda, araç olarak) ──────────────── */}
       {urunler.length > 0 ? (
@@ -420,7 +558,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       ) : null}
 
       {/* ── Cevap incelemesi ────────────────────────────── */}
-      {review ? (
+      {inceleme ? (
         <Card>
           <CardHeader
             className="p-4 sm:p-6"
@@ -432,7 +570,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
               </span>
             }
           />
-          <AnswerReview items={review} />
+          <AnswerReview items={inceleme} />
         </Card>
       ) : null}
     </div>

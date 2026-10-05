@@ -4,6 +4,7 @@ import { Inter, Poppins } from "next/font/google";
 import { JsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { RevealObserver } from "@/components/RevealObserver";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import {
   LOCALES,
@@ -141,14 +142,16 @@ export default async function RootLayout({
     >
       <body className="flex min-h-screen flex-col bg-bg font-sans text-ink-soft">
         {/*
-          Güvenlik ağı: framer-motion, animasyonların başlangıç durumunu
-          (opacity:0) sunucu HTML'ine gömer. JavaScript yüklenmezse bu stil
-          kalıcı olur ve site bomboş görünürdü. JS yoksa hepsini görünür yap.
+          Güvenlik ağı: satır içi opacity:0 ile gelen bir öğe JavaScript
+          yüklenmezse kalıcı olarak görünmez kalırdı (framer-motion döneminde
+          bütün site böyleydi). Kaydırma animasyonları artık CSS ve JS'siz hiç
+          gizlenmiyor (components/Reveal.tsx); blok yine de kalıyor — SİLME.
         */}
         <noscript>
           <style>{`[style*="opacity:0"]{opacity:1!important;transform:none!important}`}</style>
         </noscript>
-        <JsonLd locale={locale} />
+        <JsonLd locale={locale} dict={dict} />
+        <RevealObserver />
         <a href="#icerik" className="skip-link">
           {dict.meta.skipToContent}
         </a>

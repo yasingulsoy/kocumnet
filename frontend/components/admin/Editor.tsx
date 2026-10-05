@@ -126,7 +126,14 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
     if (!f) return;
     if (!f.type.startsWith("image/")) return;
     const alt = window.prompt("Görsel açıklaması (erişilebilirlik için kısa bir cümle)", "") ?? "";
-    const src = await kucult(f);
+    let src: string;
+    try {
+      src = await kucult(f);
+    } catch {
+      // Ör. HEIC bazı tarayıcılarda açılmıyor; sessizce hiçbir şey olmamasın.
+      window.alert("Bu görsel açılamadı. JPEG, PNG ya da WebP olarak kaydedip yeniden dene.");
+      return;
+    }
     editor.chain().focus().setImage({ src, alt }).run();
   }
 
@@ -186,15 +193,40 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
   );
 }
 
+/** Kelime sayısı ve okuma süresi (sitedeki hesapla aynı: 200 kelime/dk). */
+function Sayac({ editor }: { editor: TiptapEditor }) {
+  const kelime = useEditorState({
+    editor,
+    selector: ({ editor: e }) => e.state.doc.textContent.split(/\s+/).filter(Boolean).length,
+  });
+  return (
+    <div className="tabular flex justify-end border-t border-line bg-surface-sunk px-3 py-1.5 text-micro text-ink-faint" aria-live="off">
+      {kelime.toLocaleString("tr-TR")} kelime · ~{Math.max(1, Math.ceil(kelime / 200))} dk okuma
+    </div>
+  );
+}
+
 export function Editor({
   name,
   initialHtml,
   invalid,
+  editable = true,
+  onChange,
+  onReady,
+  labelledBy,
 }: {
   /** Gizli alanın adı — form gönderiminde HTML bu adla gider. */
   name: string;
   initialHtml: string;
   invalid?: boolean;
+  /** false: salt okunur (görüntüleyici rolü). */
+  editable?: boolean;
+  /** İçerik her değiştiğinde (kaydedilmemiş değişiklik izi). */
+  onChange?: () => void;
+  /** Editör hazır olunca: dışarıdan içerik yüklemek için (yerel yedeği geri yükleme). */
+  onReady?: (editor: TiptapEditor) => void;
+  /** Ekran okuyucu için alanın etiketi (görünür "İçerik" başlığının id'si). */
+  labelledBy?: string;
 }) {
   const [html, setHtml] = useState(initialHtml);
 
@@ -210,14 +242,22 @@ export function Editor({
       Placeholder.configure({ placeholder: "Yazmaya başla… Başlıklar için H2/H3, görsel için araç çubuğunu kullan." }),
     ],
     content: initialHtml,
+    editable,
     editorProps: {
       attributes: {
         class:
           "tiptap prose prose-sm max-w-none min-h-[380px] px-4 py-3 text-ink focus:outline-none sm:prose-base " +
           "prose-headings:font-display prose-headings:text-ink prose-a:text-brand prose-img:rounded-xl",
+        role: "textbox",
+        "aria-multiline": "true",
+        ...(labelledBy ? { "aria-labelledby": labelledBy } : {}),
       },
     },
-    onUpdate: ({ editor: e }) => setHtml(e.getHTML()),
+    onCreate: ({ editor: e }) => onReady?.(e),
+    onUpdate: ({ editor: e }) => {
+      setHtml(e.getHTML());
+      onChange?.();
+    },
   });
 
   return (
@@ -227,8 +267,9 @@ export function Editor({
         invalid ? "border-bad" : "border-line-strong"
       )}
     >
-      {editor ? <Toolbar editor={editor} /> : <div className="h-11 border-b border-line bg-surface-sunk" />}
+      {!editable ? null : editor ? <Toolbar editor={editor} /> : <div className="h-11 border-b border-line bg-surface-sunk" />}
       <EditorContent editor={editor} />
+      {editor ? <Sayac editor={editor} /> : null}
       <input type="hidden" name={name} value={html} />
     </div>
   );

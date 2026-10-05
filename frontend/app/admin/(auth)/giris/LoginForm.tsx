@@ -1,20 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { loginAction } from "@/lib/admin/actions";
-import type { FormState } from "@/lib/admin/types";
 import { Button, Field, INPUT_CLASS, Notice } from "@/components/admin/ui";
-
-const initial: FormState = {};
+import { useFormAction } from "@/components/admin/useFormAction";
 
 export function LoginForm({ next }: { next?: string }) {
-  const [state, action, pending] = useActionState(loginAction, initial);
+  // Yanlış parolada e-posta alanı silinmesin (useFormAction).
+  const { state, pending, formProps } = useFormAction(loginAction);
   const [goster, setGoster] = useState(false);
 
   return (
-    <form action={action} className="space-y-5">
+    <form {...formProps} className="space-y-5">
       {next ? <input type="hidden" name="next" value={next} /> : null}
       {state.error ? <Notice>{state.error}</Notice> : null}
 

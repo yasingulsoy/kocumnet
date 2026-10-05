@@ -14,6 +14,9 @@ import { cn } from "@/lib/cn";
  *
  * `sheet`: mobilde alttan açılan tabaka, geniş ekranda ortada kutu —
  * soru listesi gibi başparmakla kullanılan içerik için.
+ *
+ * `dismissable={false}`: kapatma düğmesi yok, Escape ve arka plan tıklaması
+ * kapatmaz (ör. "süre doldu" — öğrenci teste geri dönememeli).
  */
 export function Dialog({
   open,
@@ -23,6 +26,7 @@ export function Dialog({
   children,
   variant = "center",
   className,
+  dismissable = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,6 +35,7 @@ export function Dialog({
   children: ReactNode;
   variant?: "center" | "sheet";
   className?: string;
+  dismissable?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   // Sınav ekranı aynı anda üç dialog bağlıyor; sabit "dialog-title" kimliği
@@ -48,11 +53,23 @@ export function Dialog({
     <dialog
       ref={ref}
       // Escape ve form[method=dialog] buradan geçer; durumu dışarıyla eşitle.
-      onClose={onClose}
+      // Kapatılamayan diyalog yine de kapandıysa (Chrome art arda iki Escape'te
+      // cancel'ı engellenemez sayıyor) açık kalması gerekiyorsa geri aç.
+      onClose={() => {
+        if (!dismissable && open) {
+          ref.current?.showModal();
+          return;
+        }
+        onClose();
+      }}
+      // Kapatılamayan diyalogda Escape'i yut (cancel olayı close'dan önce gelir).
+      onCancel={(e) => {
+        if (!dismissable) e.preventDefault();
+      }}
       // Arka plana tıklayınca kapat: tıklanan öğe dialog'un kendisiyse
       // içeriğin dışına tıklanmıştır.
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissable && e.target === e.currentTarget) onClose();
       }}
       aria-labelledby={baslikId}
       className={cn(
@@ -70,14 +87,16 @@ export function Dialog({
             </h2>
             {description ? <div className="mt-1 text-sm text-ink-soft">{description}</div> : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Kapat"
-            className="-me-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-hover hover:text-ink"
-          >
-            <X className="size-4" />
-          </button>
+          {dismissable ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Kapat"
+              className="-me-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-hover hover:text-ink"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
         <div className="mt-5">{children}</div>
       </div>

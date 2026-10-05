@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   ArrowUpRight,
+  ChartColumn,
   Database,
   Layers,
   LayoutDashboard,
@@ -14,11 +15,13 @@ import {
   Menu,
   Package,
   Target,
+  UserRoundX,
   Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { logoutRequest } from "@/lib/api";
-import { ROLE_LABEL, type Staff } from "@/lib/checkup/roles";
+import { MANAGE_ROLES, ROLE_LABEL, type Staff, type StaffRole } from "@/lib/checkup/roles";
 import { Wordmark } from "@/components/brand/Logo";
 
 /**
@@ -32,28 +35,50 @@ import { Wordmark } from "@/components/brand/Logo";
  * halka gösteriyordu.
  */
 
-const NAV = [
-  { href: "/checkup", label: "Genel bakış", icon: LayoutDashboard, exact: true },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  /** Yalnızca bu roller görür. Yoksa tüm personel. */
+  roles?: readonly StaffRole[];
+}
+
+const NAV: NavItem[] = [
+  { href: "/checkup", label: "Genel bakış", icon: LayoutDashboard },
   { href: "/checkup/sorular", label: "Sorular", icon: ListChecks },
+  { href: "/checkup/sorular/analiz", label: "Madde analizi", icon: ChartColumn },
   { href: "/checkup/kazanimlar", label: "Kazanımlar", icon: Target },
   { href: "/checkup/havuz", label: "Havuz durumu", icon: Database },
   { href: "/checkup/paketler", label: "Paketler", icon: Package },
   { href: "/checkup/seviyeli", label: "Seviyeli koşular", icon: Layers },
-  { href: "/checkup/ogrenciler", label: "Öğrenciler", icon: Users },
-] as const;
+  // Öğrenci kişisel verisi: editör ve görüntüleyici sayfayı açamıyor (sunucu
+  // reddediyor); menüde görmesi yalnızca "yetkin yok" kutusuna götürüyordu.
+  { href: "/checkup/ogrenciler", label: "Öğrenciler", icon: Users, roles: MANAGE_ROLES },
+  { href: "/checkup/ogrenciler/riskli", label: "Riskli öğrenciler", icon: UserRoundX, roles: MANAGE_ROLES },
+];
 
 const SITE_ADMIN_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://kocum.net").replace(/\/$/, "") + "/admin";
 
-function aktif(pathname: string, href: string, exact?: boolean) {
-  if (exact) return pathname === href;
-  return pathname === href || pathname.startsWith(href + "/");
+/**
+ * Etkin menü öğesi: adresle eşleşen EN UZUN bağlantı. "/checkup/sorular/analiz"
+ * açıkken hem "Sorular" hem "Madde analizi" yanmasın.
+ */
+function etkinHref(pathname: string, items: NavItem[]): string | null {
+  let en: string | null = null;
+  for (const { href } of items) {
+    const eslesir = pathname === href || pathname.startsWith(href + "/");
+    if (eslesir && (!en || href.length > en.length)) en = href;
+  }
+  return en;
 }
 
-function Nav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function Nav({ pathname, role, onNavigate }: { pathname: string; role: StaffRole; onNavigate?: () => void }) {
+  const items = NAV.filter((i) => !i.roles || i.roles.includes(role));
+  const etkin = etkinHref(pathname, items);
   return (
     <nav aria-label="Ana menü" className="space-y-1">
-      {NAV.map(({ href, label, icon: Icon, ...rest }) => {
-        const on = aktif(pathname, href, "exact" in rest ? rest.exact : false);
+      {items.map(({ href, label, icon: Icon }) => {
+        const on = href === etkin;
         return (
           <Link
             key={href}
@@ -120,17 +145,31 @@ function StaffCard({ staff }: { staff: Staff }) {
 export function AdminShell({ staff, children }: { staff: Staff; children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const [acik, setAcik] = useState(false);
+  const menuDugmesi = useRef<HTMLButtonElement>(null);
+  const kapatDugmesi = useRef<HTMLButtonElement>(null);
 
   /*
    * Çekmece bağlantıya tıklanınca kapanır (onNavigate). Adres değişimini
    * efektte izleyip setState çağırmak React Compiler kuralına takılıyor ve
    * fazladan bir çizim turu demek; onNavigate aynı işi tıklama anında yapar.
-   * Gövde kaydırması çekmece açıkken kilitli.
+   *
+   * Açıkken: gövde kaydırması kilitli, odak çekmecede, Escape kapatır.
+   * Kapanınca odak menü düğmesine döner — klavye ve ekran okuyucu
+   * kullanıcısı sayfanın başına fırlamasın.
    */
   useEffect(() => {
-    document.body.style.overflow = acik ? "hidden" : "";
+    if (!acik) return;
+    document.body.style.overflow = "hidden";
+    const geriOdak = menuDugmesi.current;
+    kapatDugmesi.current?.focus();
+    const tus = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAcik(false);
+    };
+    window.addEventListener("keydown", tus);
     return () => {
+      window.removeEventListener("keydown", tus);
       document.body.style.overflow = "";
+      geriOdak?.focus({ preventScroll: true });
     };
   }, [acik]);
 
@@ -151,7 +190,7 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
           </Link>
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-4">
-          <Nav pathname={pathname} />
+          <Nav pathname={pathname} role={staff.role} />
         </div>
         <div className="border-t border-line p-3">
           <a
@@ -169,11 +208,12 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
         <Link href="/checkup" aria-label="Genel bakış" className="flex items-center gap-2">
           <Wordmark compact />
-          <span className="rounded-md bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+          <span className="rounded-md bg-surface-sunk px-1.5 py-0.5 text-micro font-semibold uppercase tracking-wider text-ink-soft">
             panel
           </span>
         </Link>
         <button
+          ref={menuDugmesi}
           type="button"
           onClick={() => setAcik(true)}
           aria-label="Menüyü aç"
@@ -190,10 +230,14 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
         id="mobil-menu"
         className={clsx("fixed inset-0 z-50 lg:hidden", acik ? "pointer-events-auto" : "pointer-events-none")}
         aria-hidden={!acik}
+        // Kapalı çekmecedeki bağlantılar Tab ile odaklanmasın (görünmez odak tuzağı).
+        inert={!acik}
       >
         <button
           type="button"
-          aria-label="Menüyü kapat"
+          aria-hidden
+          // Yalnızca fareyle/dokunarak kapatmak için; klavyede X düğmesi ve Escape var.
+          tabIndex={-1}
           onClick={() => setAcik(false)}
           className={clsx(
             "absolute inset-0 bg-brand-deep/40 backdrop-blur-[2px] transition-opacity duration-200",
@@ -201,6 +245,9 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
           )}
         />
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menü"
           className={clsx(
             "absolute inset-y-0 start-0 flex w-[280px] max-w-[85vw] flex-col bg-surface shadow-pop transition-transform duration-300 ease-out",
             acik ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full"
@@ -209,6 +256,7 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
           <div className="flex h-14 items-center justify-between border-b border-line px-4">
             <Wordmark compact />
             <button
+              ref={kapatDugmesi}
               type="button"
               onClick={() => setAcik(false)}
               aria-label="Menüyü kapat"
@@ -218,7 +266,7 @@ export function AdminShell({ staff, children }: { staff: Staff; children: ReactN
             </button>
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-4">
-            <Nav pathname={pathname} onNavigate={() => setAcik(false)} />
+            <Nav pathname={pathname} role={staff.role} onNavigate={() => setAcik(false)} />
           </div>
           <div className="border-t border-line p-3">
             <a

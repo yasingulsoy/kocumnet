@@ -1,25 +1,47 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { jsonLd } from "@/lib/jsonld";
 import { fetchBlogBySlug, fetchBlogs, getImageUrl, BACKEND_URL } from "@/lib/api";
 import { getSiteUrl } from "@/lib/site";
+import { siteOgImage } from "@/lib/seo";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_HREFLANG, LOCALE_OG } from "@/lib/i18n/config";
+import { isLocale, LOCALE_HREFLANG, LOCALE_OG, type Locale } from "@/lib/i18n/config";
 import { blogPath, localizedPath } from "@/lib/routes";
-import Image from "next/image";
 import { FacebookIcon, LinkedInIcon, WhatsAppIcon, XIcon } from "@/components/icons";
 import { PageHero } from "@/components/PageHero";
+import { BlogCard } from "@/components/BlogCard";
+import { BlogToc } from "@/components/BlogToc";
 import { BlogViewCounter } from "@/components/BlogViewCounter";
-import { authorName as yazarAdi, formatDate, postDate, readingMinutes } from "@/lib/blog";
+import { BreadcrumbJsonLd } from "@/components/JsonLd";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { Container, LinkButton, Section } from "@/components/ui";
+import {
+  authorName as yazarAdi,
+  coverAlt,
+  formatDate,
+  postDate,
+  readingMinutes,
+  relatedPosts,
+  type BlogPost,
+} from "@/lib/blog";
+import { blogIceriginiHazirla, ICINDEKILER_ALT_SINIR } from "@/lib/blog-content";
 
 interface Props {
   params: Promise<{ lang: string; slug: string }>;
 }
 
-/** İçerikteki relatif /uploads/... yollarını backend'e çözer. */
-function processContent(html: string, backendUrl: string): string {
-  return html.replace(/src="(\/uploads\/[^"]+)"/g, `src="${backendUrl}$1"`);
+/**
+ * Yazının kendi dili. Slug bütün dillerde tekil (backend: unique), yani her
+ * yazının TEK doğru adresi var. Eskiden /en/blog/<türkçe-yazı> da açılıyordu:
+ * Türkçe metin İngilizce arayüzle, yanlış `lang` ile ve kendine işaret eden
+ * kanonik adresle — aynı yazı üç adreste, Arapça yazı kökte soldan sağa.
+ */
+function yaziDili(blog: BlogPost, istenen: Locale): Locale {
+  const dil = blog.locale ?? "";
+  return isLocale(dil) ? dil : istenen;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -32,10 +54,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: t.blog.notFound };
   }
 
+  const dil = yaziDili(blog, lang);
   const title = blog.meta_title || blog.title;
   const description = blog.meta_description || blog.excerpt || "";
-  const imageUrl = blog.image ? getImageUrl(blog.image) : null;
-  const path = blogPath(slug, lang);
+  const kapak = getImageUrl(blog.image);
+  // Kapaksız yazı paylaşılınca görselsiz çıkmasın: sitenin paylaşım görseli.
+  const gorsel = kapak
+    ? { url: kapak, width: 1200, height: 630, alt: coverAlt(blog, blog.title) }
+    : siteOgImage(dil);
+  const path = blogPath(slug, dil);
 
   return {
     title,
@@ -46,17 +73,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       url: path,
       type: "article",
-      locale: LOCALE_OG[lang],
+      locale: LOCALE_OG[dil],
       siteName: "Koçum.Net",
-      publishedTime: blog.published_at || blog.created_at,
+      publishedTime: postDate(blog),
       modifiedTime: blog.updated_at ?? undefined,
-      ...(imageUrl ? { images: [{ url: imageUrl, width: 1200, height: 630 }] } : {}),
+      ...(blog.tags?.length ? { tags: blog.tags } : {}),
+      images: [gorsel],
     },
     twitter: {
       card: "summary_large_image",
       title: `${title} | Koçum.Net`,
       description,
-      ...(imageUrl ? { images: [imageUrl] } : {}),
+      images: [gorsel.url],
     },
     robots: { index: true, follow: true },
   };
@@ -69,55 +97,81 @@ export default async function BlogDetailPage({ params }: Props) {
   const blog = await fetchBlogBySlug(slug);
   if (!blog) notFound();
 
+  const dil = yaziDili(blog, lang);
+  if (dil !== lang) permanentRedirect(blogPath(slug, dil));
+
   const t = await getDictionary(lang);
   const siteUrl = getSiteUrl();
   const imageUrl = getImageUrl(blog.image);
   const readingTime = readingMinutes(blog);
-  // İçeriği boş bir yazı da gelebilir (taslaktan yayına alınmış, gövdesi
-  // silinmiş). Eskiden burada .replace() çağrılıyordu ve sayfa 500 veriyordu.
-  const processedContent = blog.content ? processContent(blog.content, BACKEND_URL) : "";
-  const authorName = yazarAdi(blog) ?? "Koçum.Net";
+  const { html, icindekiler } = blogIceriginiHazirla(blog.content, BACKEND_URL);
+  const yazar = yazarAdi(blog);
+  const authorName = yazar ?? "Koçum.Net";
 
   const pageUrl = `${siteUrl}${blogPath(slug, lang)}`;
 
-  const relatedResult = await fetchBlogs({ limit: 4, locale: lang });
-  const relatedBlogs = (relatedResult?.data || [])
-    .filter((b) => b.id !== blog.id)
-    .slice(0, 3);
+  // Aynı etiketi taşıyanlar önce; aday havuzu son 12 yazı (içeriksiz liste).
+  const adaylar = (await fetchBlogs({ limit: 12, locale: lang }))?.data ?? [];
+  const relatedBlogs = relatedPosts(blog, adaylar, 3);
 
   const blogPostingSchema = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: blog.title,
     description: blog.meta_description || blog.excerpt || "",
-    image: imageUrl || undefined,
-    datePublished: blog.published_at || blog.created_at,
-    dateModified: blog.updated_at,
-    author: { "@type": "Person", name: authorName },
+    image: imageUrl ?? `${siteUrl}${siteOgImage(lang).url}`,
+    datePublished: postDate(blog),
+    // null bırakılırsa doğrulayıcı "geçersiz tarih" der; yoksa hiç yazma.
+    ...(blog.updated_at ? { dateModified: blog.updated_at } : {}),
+    author: yazar
+      ? { "@type": "Person", name: yazar }
+      : { "@type": "Organization", name: "Koçum.Net", url: siteUrl },
     publisher: {
       "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
       name: "Koçum.Net",
       url: siteUrl,
+      logo: { "@type": "ImageObject", url: `${siteUrl}/icons/icon-512.png` },
     },
     mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
-    wordCount: (blog.content ?? "").replace(/<[^>]*>/g, "").split(/\s+/).filter(Boolean).length,
+    wordCount: (blog.content ?? "").replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length,
     inLanguage: LOCALE_HREFLANG[lang],
+    ...(blog.tags?.length ? { keywords: blog.tags.join(", ") } : {}),
   };
 
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: t.blog.breadcrumbHome, item: `${siteUrl}${localizedPath("home", lang)}` },
-      { "@type": "ListItem", position: 2, name: t.blog.title, item: `${siteUrl}${localizedPath("blog", lang)}` },
-      { "@type": "ListItem", position: 3, name: blog.title, item: pageUrl },
-    ],
-  };
+  const paylasim = [
+    {
+      ad: "X",
+      href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(pageUrl)}&text=${encodeURIComponent(blog.title)}`,
+      Ikon: XIcon,
+    },
+    {
+      ad: "Facebook",
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}`,
+      Ikon: FacebookIcon,
+    },
+    {
+      ad: "LinkedIn",
+      href: `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(pageUrl)}&title=${encodeURIComponent(blog.title)}`,
+      Ikon: LinkedInIcon,
+    },
+    {
+      ad: "WhatsApp",
+      href: `https://wa.me/?text=${encodeURIComponent(`${blog.title} - ${pageUrl}`)}`,
+      Ikon: WhatsAppIcon,
+    },
+  ];
 
   return (
-    <main className="bg-white text-ink-soft antialiased">
+    <main>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(blogPostingSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
+      <BreadcrumbJsonLd
+        items={[
+          { name: t.blog.breadcrumbHome, path: localizedPath("home", lang) },
+          { name: t.blog.title, path: localizedPath("blog", lang) },
+          { name: blog.title, path: blogPath(slug, lang) },
+        ]}
+      />
 
       {/*
         Blog detayında koyu hero KALIYOR (tone="deep"): yazının kendisi uzun
@@ -129,39 +183,51 @@ export default async function BlogDetailPage({ params }: Props) {
         title={blog.title}
         description={blog.excerpt ?? undefined}
         breadcrumb={
-          <nav className="flex items-center gap-2 text-caption text-white/60" aria-label="Breadcrumb">
-            <Link href={localizedPath("home", lang)} className="transition hover:text-white/90">
-              {t.blog.breadcrumbHome}
-            </Link>
-            <span aria-hidden>/</span>
-            <Link href={localizedPath("blog", lang)} className="transition hover:text-white/90">
-              {t.blog.title}
-            </Link>
-            <span aria-hidden>/</span>
-            <span className="max-w-[200px] truncate text-white/40">{blog.title}</span>
+          <nav aria-label={t.blog.breadcrumbLabel}>
+            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-white/70">
+              <li className="flex items-center gap-2">
+                <Link href={localizedPath("home", lang)} className="transition hover:text-white">
+                  {t.blog.breadcrumbHome}
+                </Link>
+                <span aria-hidden>/</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Link href={localizedPath("blog", lang)} className="transition hover:text-white">
+                  {t.blog.title}
+                </Link>
+                <span aria-hidden>/</span>
+              </li>
+              {/* Eskiden text-white/40: koyu zeminde 3,4:1, okunmuyordu. */}
+              <li aria-current="page" className="max-w-[16rem] truncate text-white/85">
+                {blog.title}
+              </li>
+            </ol>
           </nav>
         }
       >
         <div className="space-y-6">
           {blog.tags && blog.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {blog.tags.map((tag: string) => (
-                <span
+            <ul className="flex flex-wrap gap-2">
+              {blog.tags.map((tag) => (
+                <li
                   key={tag}
                   className="rounded-full bg-white/15 px-3 py-1 text-micro font-semibold uppercase tracking-wider text-white"
                 >
                   {tag}
-                </span>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-4 text-caption text-white/60">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-white/70">
             <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-full bg-white/20 text-caption font-bold text-white">
+              <span
+                aria-hidden
+                className="flex size-9 items-center justify-center rounded-full bg-white/20 text-caption font-bold text-white"
+              >
                 {authorName.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-white/80">{authorName}</span>
+              </span>
+              <span className="text-white/85">{authorName}</span>
             </div>
             <span className="size-1 rounded-full bg-white/30" aria-hidden />
             <time dateTime={postDate(blog)}>{formatDate(postDate(blog), lang)}</time>
@@ -175,146 +241,139 @@ export default async function BlogDetailPage({ params }: Props) {
         </div>
       </PageHero>
 
-      {/* İçerik */}
-      <section className="mx-auto max-w-4xl px-4 py-12 sm:py-16 lg:px-8">
-        {imageUrl && (
-          <div className="relative -mt-20 mb-12 overflow-hidden rounded-2xl shadow-2xl">
+      {imageUrl ? (
+        <div className="mx-auto w-full max-w-4xl px-5 sm:px-6">
+          <div className="relative -mt-12 overflow-hidden rounded-2xl shadow-pop sm:-mt-16">
             <Image
               src={imageUrl}
-              alt={blog.title}
+              alt={coverAlt(blog, blog.title)}
               width={1280}
               height={720}
-              priority
-              className="h-full w-full object-cover"
-              sizes="(min-width: 1024px) 896px, 100vw"
+              preload
+              className="h-auto w-full object-cover"
+              sizes="(min-width: 896px) 848px, 100vw"
             />
           </div>
-        )}
+        </div>
+      ) : null}
 
-        <article
-          className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-ink prose-p:text-ink-soft prose-p:leading-relaxed prose-a:text-brand prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-img:shadow-lg prose-strong:text-ink prose-blockquote:border-s-brand prose-blockquote:text-ink-soft"
-          dangerouslySetInnerHTML={{ __html: processedContent }}
-        />
+      {/*
+        Okuma sütunu ~75 karakter: eskiden max-w-4xl + prose-lg ile satır
+        yaklaşık 100 karakterdi, göz satır başını kaybediyordu.
 
-        {/* Paylaş */}
-        <div className="mt-12 border-t border-line pt-8">
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-brand">
-            {t.blog.share}
-          </p>
-          <div className="flex gap-3">
-            <a
-              href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(pageUrl)}&text=${encodeURIComponent(blog.title)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1DA1F2]/10 text-[#1DA1F2] transition hover:bg-[#1DA1F2] hover:text-white"
-              aria-label="X / Twitter"
-            >
-              <XIcon className="size-4" />
-            </a>
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1877F2]/10 text-[#1877F2] transition hover:bg-[#1877F2] hover:text-white"
-              aria-label="Facebook"
-            >
-              <FacebookIcon className="size-4" />
-            </a>
-            <a
-              href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(pageUrl)}&title=${encodeURIComponent(blog.title)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A66C2]/10 text-[#0A66C2] transition hover:bg-[#0A66C2] hover:text-white"
-              aria-label="LinkedIn"
-            >
-              <LinkedInIcon className="size-4" />
-            </a>
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(`${blog.title} - ${pageUrl}`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366]/10 text-[#25D366] transition hover:bg-[#25D366] hover:text-white"
-              aria-label="WhatsApp"
-            >
-              <WhatsAppIcon className="size-4" />
-            </a>
+        Geniş ekranda (xl) üç sütun: [boş | yazı | içindekiler]. Yazı ortada,
+        kapak görselinin altında kalır; içindekiler sağ (Arapçada sol) boşlukta
+        yapışkan durur. Daha dar ekranda yazının başında açılır kutu.
+      */}
+      <div className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-6 sm:py-16 xl:grid xl:max-w-none xl:grid-cols-[minmax(0,1fr)_minmax(0,42rem)_minmax(0,1fr)] xl:gap-x-12 xl:px-8">
+        {icindekiler.length >= ICINDEKILER_ALT_SINIR ? (
+          <aside className="hidden xl:col-start-3 xl:row-start-1 xl:block">
+            <div className="sticky top-36 max-h-[calc(100vh-10rem)] max-w-60 overflow-y-auto pb-4">
+              <BlogToc items={icindekiler} label={t.blog.toc} />
+            </div>
+          </aside>
+        ) : null}
+
+        <div className="min-w-0 xl:col-start-2 xl:row-start-1">
+          {icindekiler.length >= ICINDEKILER_ALT_SINIR ? (
+            <nav aria-label={t.blog.toc} className="mb-10 rounded-2xl border border-line bg-surface-sunk xl:hidden">
+              <details open className="group">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-5 py-4 text-micro font-semibold uppercase tracking-[0.18em] text-brand [&::-webkit-details-marker]:hidden">
+                  {t.blog.toc}
+                  <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+                </summary>
+                <ol className="space-y-2 border-t border-line px-5 py-4 text-body">
+                  {icindekiler.map((oge) => (
+                    <li key={oge.id} className={oge.seviye === 3 ? "ps-4 text-caption" : undefined}>
+                      <a
+                        href={`#${oge.id}`}
+                        className="text-ink-soft underline-offset-4 transition hover:text-brand hover:underline"
+                      >
+                        {oge.metin}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </nav>
+          ) : null}
+
+          <article
+            className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-ink prose-p:text-ink-soft prose-p:leading-relaxed prose-a:text-brand prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-strong:text-ink prose-blockquote:border-s-brand prose-blockquote:text-ink-soft"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+
+          {/* Paylaş */}
+          <div className="mt-12 border-t border-line pt-8">
+            <p id="paylas-baslik" className="text-micro font-semibold uppercase tracking-[0.18em] text-brand">
+              {t.blog.share}
+            </p>
+            <div role="group" aria-labelledby="paylas-baslik" className="mt-4 flex flex-wrap gap-3">
+              {paylasim.map(({ ad, href, Ikon }) => (
+                <a
+                  key={ad}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={ad}
+                  title={ad}
+                  className="flex size-10 items-center justify-center rounded-full bg-surface-sunk text-ink-soft ring-1 ring-inset ring-line transition hover:bg-brand-wash hover:text-brand hover:ring-brand/20"
+                >
+                  <Ikon className="size-4" />
+                </a>
+              ))}
+              <CopyLinkButton url={pageUrl} label={t.blog.copyLink} copiedLabel={t.blog.linkCopied} />
+            </div>
+          </div>
+
+          {/* Yazar kutusu */}
+          <div className="mt-12 rounded-2xl border border-line bg-surface-sunk p-6 sm:p-8">
+            <div className="flex items-start gap-5">
+              <span
+                aria-hidden
+                className="font-display flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-h4 font-semibold text-white shadow-raised"
+              >
+                {authorName.charAt(0).toUpperCase()}
+              </span>
+              <div>
+                <p className="text-micro font-semibold uppercase tracking-[0.18em] text-brand">{t.blog.author}</p>
+                <p className="font-display mt-1 text-h4 font-semibold text-ink">{authorName}</p>
+                <p className="mt-2 text-caption text-ink-soft">{t.blog.authorBio}</p>
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Yazar kutusu */}
-        <div className="mt-12 rounded-2xl border border-line bg-surface-sunk p-8">
-          <div className="flex items-start gap-5">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-xl font-bold text-white shadow-raised">
-              {authorName.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand">{t.blog.author}</p>
-              <h2 className="mt-1 text-lg font-bold text-ink">{authorName}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">{t.blog.authorBio}</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      </div>
 
       {/* İlgili yazılar */}
-      {relatedBlogs.length > 0 && (
-        <section className="border-t border-line bg-surface-sunk py-16 sm:py-20">
-          <div className="mx-auto max-w-6xl px-4 lg:px-8">
-            <h2 className="text-center font-display text-3xl font-bold tracking-tight text-ink">
+      {relatedBlogs.length > 0 ? (
+        <Section tone="sunk" className="border-t border-line">
+          <Container>
+            <h2 className="font-display text-center text-h2 font-semibold tracking-tight text-ink">
               {t.blog.relatedPosts}
             </h2>
-            <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {relatedBlogs.map((related) => (
-                <article
+                <BlogCard
                   key={related.id}
-                  className="group overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
-                >
-                  <Link
-                    href={blogPath(related.slug, lang)}
-                    className="relative block aspect-[16/10] overflow-hidden bg-surface-sunk"
-                  >
-                    {related.image ? (
-                      <Image
-                          src={getImageUrl(related.image)!}
-                          alt={related.title}
-                          fill
-                          className="object-cover"
-                          sizes="(min-width: 1024px) 300px, 50vw"
-                        />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-brand-wash">
-                        <svg className="h-10 w-10 text-brand/30" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                        </svg>
-                      </div>
-                    )}
-                  </Link>
-                  <div className="p-6">
-                    <time className="text-xs text-ink-faint" dateTime={related.published_at || related.created_at}>
-                      {formatDate(postDate(related), lang)}
-                    </time>
-                    <h3 className="mt-2 font-bold text-ink transition-colors group-hover:text-brand">
-                      <Link href={blogPath(related.slug, lang)}>{related.title}</Link>
-                    </h3>
-                  </div>
-                </article>
+                  post={related}
+                  lang={lang}
+                  labels={{ readingTime: t.blog.readingTime, readMore: t.blog.readMore }}
+                  headingLevel="h3"
+                  compact
+                />
               ))}
             </div>
-          </div>
-        </section>
-      )}
+          </Container>
+        </Section>
+      ) : null}
 
-      <section className="py-12 text-center">
-        <Link
-          href={localizedPath("blog", lang)}
-          className="inline-flex items-center gap-2 rounded-full bg-brand px-8 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-brand-hover hover:shadow-xl"
-        >
-          <svg className="h-4 w-4 rtl:rotate-180" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
+      <div className="flex justify-center px-5 py-12">
+        <LinkButton href={localizedPath("blog", lang)} variant="secondary">
+          <ArrowLeft className="rtl:rotate-180" />
           {t.blog.backToBlog}
-        </Link>
-      </section>
+        </LinkButton>
+      </div>
     </main>
   );
 }

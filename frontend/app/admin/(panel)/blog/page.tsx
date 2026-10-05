@@ -16,17 +16,25 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
 const BLOG_YOLU: Record<string, string> = { tr: "/blog", en: "/en/blog", ar: "/ar/blog" };
 
 export default async function BlogListPage({ searchParams }: PageProps<"/admin/blog">) {
-  const { staff } = await requireStaff();
+  const { staff } = await requireStaff(undefined, "/admin/blog");
   const yazar = CONTENT_ROLES.includes(staff.role);
 
   const sp = await searchParams;
   const ara = typeof sp.ara === "string" ? sp.ara.trim().slice(0, 100) : "";
   const durum = sp.durum === "published" || sp.durum === "draft" ? sp.durum : "";
   const dil = typeof sp.dil === "string" && ["tr", "en", "ar"].includes(sp.dil) ? sp.dil : "";
+  // "Dün düzenlediğim yazı nerede?" — son düzenlenen önce.
+  const sirala = sp.sirala === "duzenleme" ? "duzenleme" : "";
   const sayfa = Math.max(1, Number(sp.sayfa) || 1);
 
-  const sonuc = await listBlogs({ page: sayfa, search: ara || undefined, locale: dil || undefined, durum: durum || undefined });
-  const href = (p: number) => qs("/admin/blog", { ara, durum, dil, sayfa: p > 1 ? p : undefined });
+  const sonuc = await listBlogs({
+    page: sayfa,
+    search: ara || undefined,
+    locale: dil || undefined,
+    durum: durum || undefined,
+    sirala: sirala ? "updated" : undefined,
+  });
+  const href = (p: number) => qs("/admin/blog", { ara, durum, dil, sirala, sayfa: p > 1 ? p : undefined });
 
   return (
     <>
@@ -55,8 +63,12 @@ export default async function BlogListPage({ searchParams }: PageProps<"/admin/b
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
+          <select name="sirala" defaultValue={sirala} className={SELECT_CLASS + " h-10 w-auto text-caption"} aria-label="Sıralama">
+            <option value="">Son eklenen</option>
+            <option value="duzenleme">Son düzenlenen</option>
+          </select>
           <button type="submit" className={buttonClass({ variant: "secondary", size: "sm" })}>Süz</button>
-          {ara || durum || dil ? (
+          {ara || durum || dil || sirala ? (
             <Link href="/admin/blog" className="text-caption text-ink-faint hover:text-ink">Temizle</Link>
           ) : null}
         </form>
@@ -88,13 +100,17 @@ export default async function BlogListPage({ searchParams }: PageProps<"/admin/b
                         </Link>
                         {url ? (
                           <a href={url} target="_blank" rel="noopener" className="ms-2 text-micro text-ink-faint hover:text-brand">sitede ↗</a>
-                        ) : null}
+                        ) : (
+                          <Link href={`/admin/blog/${b.id}/onizleme`} className="ms-2 text-micro text-ink-faint hover:text-brand">önizle</Link>
+                        )}
                         <p className="mt-0.5 truncate text-micro text-ink-faint">{b.excerpt ?? "Özet yok"}</p>
                       </td>
                       <td><Pill>{DIL[b.locale] ?? b.locale}</Pill></td>
                       <td><Pill tone={b.is_published ? "ok" : "warn"}>{b.is_published ? "Yayında" : "Taslak"}</Pill></td>
                       <td className="whitespace-nowrap">{authorName(b) ?? "—"}</td>
-                      <td className="whitespace-nowrap">{trDate(b.published_at ?? b.created_at)}</td>
+                      <td className="whitespace-nowrap" title={sirala ? "Son düzenleme" : undefined}>
+                        {trDate(sirala ? (b.updated_at ?? b.created_at) : (b.published_at ?? b.created_at))}
+                      </td>
                       <td className="tabular text-end">{b.view_count ?? 0}</td>
                       {yazar ? (
                         <td className="text-end">

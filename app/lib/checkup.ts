@@ -5,6 +5,8 @@ import { selectQuestionsForPackage, selectQuestionsForTopic } from "@/lib/questi
 import { scoreCheckup, type ScoredAnswer, type CheckupScore } from "@/lib/scoring";
 import { checkPackageAccess } from "@/lib/entitlements";
 import { planOlustur, retestIsiniKapat } from "@/lib/plan";
+import { konuSinavdaMi } from "@/lib/exam-scope";
+import { examShort } from "@/lib/exams";
 
 /**
  * Check-up akışı: başlat → cevapla → bitir.
@@ -14,12 +16,33 @@ import { planOlustur, retestIsiniKapat } from "@/lib/plan";
  * asla yaymıyoruz (`...question` YAZMA). scripts/leak-test.mts bunu denetler.
  */
 
+/**
+ * Hatanın türü — mesaj öğrenciye gider, kod istemcinin ne yapacağını söyler.
+ * KAPANDI ve SURE_DOLDU kalıcıdır: aynı isteği tekrar denemek işe yaramaz,
+ * sınav ekranı tekrar denemeyi bırakıp testi bitirmeye geçer.
+ */
+export type CheckupErrorCode = "GECERSIZ" | "KAPANDI" | "SURE_DOLDU";
+
 export class CheckupError extends Error {
-  constructor(message: string) {
+  code: CheckupErrorCode;
+  constructor(message: string, code: CheckupErrorCode = "GECERSIZ") {
     super(message);
     this.name = "CheckupError";
+    this.code = code;
   }
 }
+
+/**
+ * Süre bittikten sonra cevap kaydı için tolerans.
+ *
+ * İstemcinin sayacı sayfa TARAYICIDA açıldığında başlıyor; sunucunun saati ise
+ * sayfayı çizdiği anda. Aradaki fark (indirme + hidrasyon, yavaş telefonda
+ * birkaç saniye) kadar istemci sayacı geç biter. Son saniyede işaretlenen
+ * cevap sunucuya "süre doldu"dan sonra varıyor ve öğrencinin ekranda seçili
+ * gördüğü cevap boş sayılıyordu. Tolerans yalnızca kayıt için: süre bitince
+ * istemci zaten testi kendisi bitiriyor.
+ */
+export const KAYIT_TOLERANSI_MS = 15_000;
 
 // ─────────────────────────────────────────────────────────────
 // Öğrenciye giden şekiller
@@ -47,6 +70,8 @@ export interface StudentSession {
   packageName: string;
   packageSlug: string;
   status: "IN_PROGRESS" | "SUBMITTED" | "EXPIRED" | "ABANDONED";
+  /** Seviyeli check-up aşamasıysa bağlı olduğu deneme — bitince oraya dönülür. */
+  levelRunId: string | null;
   durationMinutes: number;
   startedAt: Date;
   expiresAt: Date;
@@ -69,6 +94,7 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
     where: { slug: packageSlug },
     select: {
       id: true,
+      kind: true,
       status: true,
       questionCount: true,
       durationMinutes: true,
@@ -79,6 +105,18 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
 
   if (!pkg) throw new CheckupError("Paket bulunamadı.");
   if (pkg.status !== "PUBLISHED") throw new CheckupError("Bu paket şu anda yayında değil.");
+  /*
+   * Seviyeli check-up ve konu tekrar paketlerinin konu dağılımı yok: bu
+   * akışla başlatılınca SIFIR soruluk oturum açılıyor, sınav ekranı
+   * çöküyordu. Onların kendi giriş yolları var (lib/level-run.ts,
+   * startTopicRetest). test:leak denetliyor.
+   */
+  if (pkg.kind === "LEVEL") {
+    throw new CheckupError("Seviyeli check-up kendi sayfasından başlar.");
+  }
+  if (pkg.kind === "RETEST") {
+    throw new CheckupError("Kontrol testi planındaki konudan başlar.");
+  }
 
   // Erişim denetimi SERVİS katmanında: arayüzde kilit rozeti göstermek yetmez,
   // adres çubuğuna paket slug'ı yazan biri testi başlatabilirdi.
@@ -116,6 +154,10 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
   const selection = await selectQuestionsForPackage(pkg.id, userId);
 
   // Eksik soruyla test başlatmak öğrenciye yanlış sonuç vermektir (PLAN §5).
+  // Dağılımı boş bir paket de sessizce sıfır soruluk test açmasın.
+  if (selection.questions.length === 0) {
+    throw new CheckupError("Bu pakette henüz soru yok. Lütfen daha sonra deneyin.");
+  }
   if (selection.shortfalls.length > 0) {
     const detail = selection.shortfalls
       .map((s) => `${s.got}/${s.requested}`)
@@ -205,9 +247,21 @@ export async function startTopicRetest(
 
   const konu = await prisma.topic.findUnique({
     where: { id: topicId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, examScope: true, examScopes: true },
   });
   if (!konu) throw new CheckupError("Konu bulunamadı.");
+
+  /*
+   * Konu öğrencinin sınavında olmalı (tanım lib/exam-scope.ts). Hedefini
+   * TYT'den LGS'ye çeviren öğrenci, TYT'de ölçtüğü bir konunun kontrol
+   * testini LGS paketiyle açabiliyordu ve kapsamı boş TYT soruları LGS
+   * kontrol testine doluyordu. test:leak denetliyor.
+   */
+  if (!konuSinavdaMi(konu, examScope)) {
+    throw new CheckupError(
+      `${konu.name}, ${examShort(examScope)} konuları arasında değil. Kontrol testi yalnızca sınavındaki konularda açılır.`
+    );
+  }
 
   const now = new Date();
 
@@ -336,6 +390,7 @@ export async function getStudentSession(
       durationMinutes: true,
       startedAt: true,
       expiresAt: true,
+      levelRunId: true,
       package: { select: { name: true, slug: true } },
       items: {
         orderBy: { sortOrder: "asc" },
@@ -370,6 +425,7 @@ export async function getStudentSession(
     packageName: session.package.name,
     packageSlug: session.package.slug,
     status: session.status,
+    levelRunId: session.levelRunId,
     durationMinutes: session.durationMinutes,
     startedAt: session.startedAt,
     expiresAt: session.expiresAt,
@@ -387,6 +443,56 @@ export async function getStudentSession(
       })),
       selectedChoiceId: item.answer?.choiceId ?? null,
     })),
+  };
+}
+
+/**
+ * Sınav ekranının sunucuyla eşitlenmesi için hafif okuma: durum, kalan süre
+ * ve öğrencinin KENDİ işaretleri.
+ *
+ * Neden gerekli: Next geri/ileri gezinmede sayfanın eski çıktısını
+ * önbellekten geri getiriyor. "Çık" deyip panoya giden ve geri tuşuyla dönen
+ * öğrencinin ekranı ilk açılıştaki kalan süreyi ve işaretleri gösteriyordu —
+ * sayaç fazla süre gösteriyor, sonradan işaretlenen cevaplar boş görünüyordu.
+ *
+ * ⚠️ Cevap anahtarı YOK: yalnızca seçilen şıkkın kimliği. leak-test denetler.
+ */
+export interface SessionState {
+  status: StudentSession["status"];
+  remainingMs: number;
+  /** Bitmiş testte öğrencinin gideceği yer. */
+  target: string;
+  selections: Record<string, string | null>;
+}
+
+export async function getSessionState(sessionId: string, userId: string): Promise<SessionState> {
+  const session = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      userId: true,
+      status: true,
+      expiresAt: true,
+      levelRunId: true,
+      result: { select: { id: true } },
+      items: { select: { questionId: true, answer: { select: { choiceId: true } } } },
+    },
+  });
+  if (!session || session.userId !== userId) throw new CheckupError("Oturum bulunamadı.");
+
+  // Sonucu yazılamamış kapalı oturum (EXPIRED) için sonuç sayfası 404 olurdu.
+  const target = session.levelRunId
+    ? `/seviye/${session.levelRunId}`
+    : session.result
+      ? `/sonuc/${sessionId}`
+      : "/panel";
+
+  return {
+    status: session.status,
+    remainingMs: Math.max(0, session.expiresAt.getTime() - Date.now()),
+    target,
+    selections: Object.fromEntries(
+      session.items.map((i) => [i.questionId, i.answer?.choiceId ?? null])
+    ),
   };
 }
 
@@ -417,8 +523,10 @@ export async function saveAnswer(args: {
   });
 
   if (!item) throw new CheckupError("Soru bu oturuma ait değil.");
-  if (item.session.status !== "IN_PROGRESS") throw new CheckupError("Bu test kapandı.");
-  if (item.session.expiresAt < new Date()) throw new CheckupError("Süre doldu.");
+  if (item.session.status !== "IN_PROGRESS") throw new CheckupError("Bu test kapandı.", "KAPANDI");
+  if (item.session.expiresAt.getTime() + KAYIT_TOLERANSI_MS < Date.now()) {
+    throw new CheckupError("Süre doldu.", "SURE_DOLDU");
+  }
 
   let isCorrect: boolean | null = null;
   if (choiceId) {
@@ -557,7 +665,7 @@ export async function submitCheckup(
   if (session.status !== "IN_PROGRESS") {
     const existing = await prisma.checkupResult.findUnique({ where: { sessionId } });
     if (existing) return resultToScore(existing);
-    throw new CheckupError("Bu test kapandı.");
+    throw new CheckupError("Bu test kapandı.", "KAPANDI");
   }
 
   const scored: ScoredAnswer[] = session.items.map((item) => ({
@@ -797,10 +905,13 @@ export async function getCheckupReview(
   }));
 }
 
-/** Süresi dolmuş ama bitirilmemiş oturumları kapatır ve sonuçlarını üretir. */
+/**
+ * Süresi dolmuş ama bitirilmemiş oturumları kapatır ve sonuçlarını üretir.
+ * Kayıt toleransı içindeki oturumlara dokunmaz: yoldaki son cevap yazılabilsin.
+ */
 export async function expireStaleSessions(): Promise<number> {
   const stale = await prisma.checkupSession.findMany({
-    where: { status: "IN_PROGRESS", expiresAt: { lt: new Date() } },
+    where: { status: "IN_PROGRESS", expiresAt: { lt: new Date(Date.now() - KAYIT_TOLERANSI_MS) } },
     select: { id: true, userId: true },
   });
 

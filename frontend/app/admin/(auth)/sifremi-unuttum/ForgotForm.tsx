@@ -1,15 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { forgotAction } from "@/lib/admin/actions";
-import type { FormState } from "@/lib/admin/types";
 import { Button, Field, INPUT_CLASS, Notice } from "@/components/admin/ui";
-
-const initial: FormState = {};
+import { useFormAction } from "@/components/admin/useFormAction";
 
 export function ForgotForm() {
-  const [state, action, pending] = useActionState(forgotAction, initial);
+  const { state, pending, formProps } = useFormAction(forgotAction);
 
   if (state.ok) {
     return (
@@ -20,7 +17,7 @@ export function ForgotForm() {
   }
 
   return (
-    <form action={action} className="space-y-5">
+    <form {...formProps} className="space-y-5">
       {state.error ? <Notice>{state.error}</Notice> : null}
       <Field label="E-posta" error={state.fields?.email}>
         <input name="email" type="email" autoComplete="email" required autoFocus className={INPUT_CLASS} placeholder="ad@kocum.net" />

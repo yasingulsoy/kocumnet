@@ -3,8 +3,16 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
-import { startCheckup, saveAnswer, submitCheckup, CheckupError } from "@/lib/checkup";
+import { AuthError, requireUser } from "@/lib/auth";
+import {
+  startCheckup,
+  saveAnswer,
+  submitCheckup,
+  getSessionState,
+  CheckupError,
+  type CheckupErrorCode,
+  type SessionState,
+} from "@/lib/checkup";
 import { asamaDegerlendir } from "@/lib/level-run";
 import { prisma } from "@/lib/db";
 
@@ -45,17 +53,61 @@ const answerSchema = z.object({
 
 export type AnswerInput = z.infer<typeof answerSchema>;
 
+/**
+ * Sınav ekranının hatayı nasıl karşılayacağı. OTURUM: giriş düşmüş (ör.
+ * öğrenci başka cihazdan "diğerlerinden çıkış" dedi) — tekrar denemek boşuna,
+ * yeniden giriş gerekir. Fırlatılan hata yerine kod döndürüyoruz: üretimde
+ * Next fırlatılan hatanın mesajını istemciye göndermiyor, ağ kopmasından
+ * ayırt edilemiyordu ve ekran sonsuza kadar "tekrar deniyor"du.
+ */
+export type SinavHataKodu = CheckupErrorCode | "OTURUM";
+
+const OTURUM_MESAJI = "Oturumun kapanmış. Tekrar giriş yap; kaydedilen cevapların duruyor.";
+
 /** Şık işaretler / işareti kaldırır. Doğruluk sunucuda hesaplanır. */
-export async function saveAnswerAction(input: AnswerInput): Promise<{ ok: boolean; error?: string }> {
-  const user = await requireUser();
+export async function saveAnswerAction(
+  input: AnswerInput
+): Promise<{ ok: boolean; error?: string; kod?: SinavHataKodu }> {
+  let userId: string;
+  try {
+    userId = (await requireUser()).id;
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, error: OTURUM_MESAJI, kod: "OTURUM" };
+    throw e;
+  }
   const parsed = answerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Geçersiz istek." };
+  if (!parsed.success) return { ok: false, error: "Geçersiz istek.", kod: "GECERSIZ" };
 
   try {
-    await saveAnswer({ ...parsed.data, userId: user.id });
+    await saveAnswer({ ...parsed.data, userId });
     return { ok: true };
   } catch (e) {
-    if (e instanceof CheckupError) return { ok: false, error: e.message };
+    if (e instanceof CheckupError) return { ok: false, error: e.message, kod: e.code };
+    throw e;
+  }
+}
+
+/**
+ * Sınav ekranını sunucuyla eşitler: durum, kalan süre, öğrencinin işaretleri.
+ * Ekran açılınca ve sekmeye geri dönülünce çağrılır (bkz. getSessionState).
+ */
+export async function sinavDurumuAction(
+  sessionId: string
+): Promise<({ ok: true } & SessionState) | { ok: false; kod: SinavHataKodu }> {
+  let userId: string;
+  try {
+    userId = (await requireUser()).id;
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, kod: "OTURUM" };
+    throw e;
+  }
+  if (typeof sessionId !== "string" || sessionId.length === 0 || sessionId.length > 64) {
+    return { ok: false, kod: "GECERSIZ" };
+  }
+  try {
+    return { ok: true, ...(await getSessionState(sessionId, userId)) };
+  } catch (e) {
+    if (e instanceof CheckupError) return { ok: false, kod: e.code };
     throw e;
   }
 }
@@ -69,8 +121,14 @@ const timesSchema = z
 export async function submitCheckupAction(
   sessionId: string,
   times?: Record<string, number>
-): Promise<{ error: string } | never> {
-  const user = await requireUser();
+): Promise<{ error: string; kod?: SinavHataKodu } | never> {
+  let user: Awaited<ReturnType<typeof requireUser>>;
+  try {
+    user = await requireUser();
+  } catch (e) {
+    if (e instanceof AuthError) return { error: OTURUM_MESAJI, kod: "OTURUM" };
+    throw e;
+  }
 
   // Süre haritası bozuksa testi bitirmeyi engellemez: yoksayıp devam ederiz.
   const sureler = times ? (timesSchema.safeParse(times).data ?? undefined) : undefined;
@@ -78,7 +136,7 @@ export async function submitCheckupAction(
   try {
     await submitCheckup(sessionId, user.id, sureler);
   } catch (e) {
-    if (e instanceof CheckupError) return { error: e.message };
+    if (e instanceof CheckupError) return { error: e.message, kod: e.code };
     throw e;
   }
 

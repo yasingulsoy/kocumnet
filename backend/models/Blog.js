@@ -30,6 +30,14 @@ const Blog = sequelize.define(
       type: DataTypes.STRING(500),
       allowNull: true,
     },
+    /**
+     * Kapak görselinin alt metni (ekran okuyucu, arama motoru, görsel
+     * yüklenemezse görünen metin). Boşsa site başlığı kullanır. En fazla 200.
+     */
+    image_alt: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+    },
     tags: {
       type: DataTypes.ARRAY(DataTypes.STRING),
       allowNull: true,

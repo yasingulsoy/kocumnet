@@ -68,6 +68,15 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    /**
+     * "Bütün cihazlardan çıkış": bu andan önce imzalanmış jetonlar da
+     * geçersiz. Parolayı değiştirmeden oturumları kapatmak için (kayıp
+     * telefon, ortak bilgisayar). İki panelin de oturumu düşer.
+     */
+    sessions_revoked_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: 'users',

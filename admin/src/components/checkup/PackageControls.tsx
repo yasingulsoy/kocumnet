@@ -7,8 +7,29 @@ import { setPackageFreeAction, setPackageStatusAction } from "@/lib/checkup/acti
 import { QUESTION_STATUS_LABEL, QUESTION_STATUSES } from "@/lib/checkup/format";
 import { SMALL_SELECT_CLASS } from "./ui";
 
+/**
+ * Gizli sistem paketleri yayından kalkınca ne bozulur — onaydan önce söylenir.
+ * İkisi de katalogda tek satır gibi görünüyor ama öğrenci akışının parçası.
+ */
+const YAYINDAN_KALKINCA: Record<string, string> = {
+  RETEST:
+    "Bu sınavın öğrencileri çalışma planlarındaki kontrol testlerini başlatamaz (plan adımı kapanmaz).",
+  LEVEL:
+    "Seviyeli check-up katalogdan kalkar; yarım koşusu olan öğrenciler bir sonraki seviyeyi açamaz.",
+};
+
 /** Paketin yayın durumu. Sunucu reddederse (havuz yetersiz) eski değere döner. */
-export function PackageStatusSelect({ id, status, name }: { id: string; status: string; name: string }) {
+export function PackageStatusSelect({
+  id,
+  status,
+  name,
+  kind = "STANDARD",
+}: {
+  id: string;
+  status: string;
+  name: string;
+  kind?: string;
+}) {
   const [value, setValue] = useState(status);
   const [pending, start] = useTransition();
 
@@ -20,6 +41,16 @@ export function PackageStatusSelect({ id, status, name }: { id: string; status: 
       onChange={(e) => {
         const onceki = value;
         const sonraki = e.target.value;
+        const uyari = YAYINDAN_KALKINCA[kind];
+        if (
+          onceki === "PUBLISHED" &&
+          sonraki !== "PUBLISHED" &&
+          uyari &&
+          !window.confirm(`"${name}" yayından kaldırılsın mı?\n\n${uyari}`)
+        ) {
+          // Denetimli select: değer değişmediği için ekranda eskisi kalır.
+          return;
+        }
         setValue(sonraki);
         start(async () => {
           const res = await setPackageStatusAction(id, sonraki);
@@ -82,7 +113,8 @@ export function PackageFreeToggle({ id, isFree, name }: { id: string; isFree: bo
       <span
         className={clsx(
           "relative h-5 w-9 rounded-full transition",
-          value ? "bg-line" : "bg-brand"
+          // Kapalı hâlde de zeminden ayırt edilsin (WCAG 1.4.11: denetim ≥ 3:1).
+          value ? "bg-ink-muted" : "bg-brand"
         )}
       >
         <span

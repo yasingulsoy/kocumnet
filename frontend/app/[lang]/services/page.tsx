@@ -4,9 +4,11 @@ import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
+import { SayfaYoluJsonLd } from "@/components/JsonLd";
 import { Card, Container, Eyebrow, LinkButton, Section, SectionHead, cn } from "@/components/ui";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_OG } from "@/lib/i18n/config";
+import { isLocale } from "@/lib/i18n/config";
+import { sayfaMetadata } from "@/lib/seo";
 import { languageAlternates, localizedPath } from "@/lib/routes";
 import { SERVICES } from "@/lib/services";
 
@@ -19,22 +21,13 @@ export async function generateMetadata({
   if (!isLocale(lang)) return {};
   const t = await getDictionary(lang);
 
-  return {
+  return sayfaMetadata({
+    lang,
     title: t.services.title,
     description: t.services.metaDescription,
-    alternates: {
-      canonical: localizedPath("services", lang),
-      languages: languageAlternates("services"),
-    },
-    openGraph: {
-      title: `${t.services.title} | Koçum.Net`,
-      description: t.services.metaDescription,
-      url: localizedPath("services", lang),
-      type: "website",
-      locale: LOCALE_OG[lang],
-      siteName: "Koçum.Net",
-    },
-  };
+    path: localizedPath("services", lang),
+    languages: languageAlternates("services"),
+  });
 }
 
 export default async function ServicesPage({ params }: { params: Promise<{ lang: string }> }) {
@@ -102,7 +95,10 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
 
   return (
     <main>
-      <PageHero eyebrow={t.nav.services} title={s.title} description={s.heroSubtitle}>
+      <SayfaYoluJsonLd lang={lang} dict={t} sayfa="services" />
+      {/* Üst etiket "Ne yapıyoruz": eskiden menü adıydı ve başlığın aynısıydı
+          (Hizmetlerimiz / Hizmetlerimiz), üç dilde de. */}
+      <PageHero eyebrow={t.home.servicesEyebrow} title={s.title} description={s.heroSubtitle}>
         {/* Çapa rayı: altı hizmet telefonda tek satıra sığmaz, kaydırılır. */}
         <nav aria-label={s.title} className="scroll-x -mx-5 flex gap-2 px-5 sm:mx-0 sm:px-0">
           {SERVICES.map((item) => (
@@ -224,7 +220,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ lang:
             <SectionHead center title={s.ctaTitle} description={s.ctaDesc} />
             <div className="mt-8 flex justify-center">
               <LinkButton href={localizedPath("contact", lang)} size="lg">
-                {s.ctaButton} <ArrowRight />
+                {s.ctaButton} <ArrowRight className="rtl:rotate-180" />
               </LinkButton>
             </div>
           </Reveal>

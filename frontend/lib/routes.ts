@@ -36,6 +36,33 @@ export function blogPath(slug: string, locale: Locale): string {
   return localizedPath("blog", locale, slug);
 }
 
+/** Blog listesi sayfa parametresi: Türkçe adreste "sayfa", diğerlerinde "page". */
+export const PAGE_PARAM: Record<Locale, string> = { tr: "sayfa", en: "page", ar: "page" };
+
+/**
+ * Blog listesinin N. sayfası. Birinci sayfa parametresiz (kanonik adres tek):
+ * blogListPath("tr", 1) -> "/blog", blogListPath("tr", 2) -> "/blog?sayfa=2",
+ * blogListPath("en", 3) -> "/en/blog?page=3".
+ */
+export function blogListPath(locale: Locale, page = 1): string {
+  const base = localizedPath("blog", locale);
+  return page > 1 ? `${base}?${PAGE_PARAM[locale]}=${page}` : base;
+}
+
+/**
+ * Adresteki sayfa numarası. Bu dilin parametresi yoksa öbürünü de kabul eder
+ * (elle yazılmış /blog?page=2 çalışsın). Geçersiz ya da 1'den küçük değer
+ * birinci sayfadır — kanonik adres zaten parametresiz /blog'u gösterir.
+ */
+export function readPageParam(
+  searchParams: Record<string, string | string[] | undefined>,
+  locale: Locale
+): number {
+  const ham = searchParams[PAGE_PARAM[locale]] ?? searchParams.page ?? searchParams.sayfa;
+  const deger = Array.isArray(ham) ? ham[0] : ham;
+  return deger && /^[1-9][0-9]{0,4}$/.test(deger) ? Number(deger) : 1;
+}
+
 /**
  * hreflang alternates — metadata.alternates.languages için.
  * suffix: blog slug'ı gibi dinamik kuyruk (opsiyonel).

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
+  ArrowLeft,
   ArrowRight,
   CircleCheck,
   ClipboardList,
@@ -15,7 +17,8 @@ import { seviyeKarnesi, seviyeOzeti, sonrakiAdim } from "@/lib/level-report";
 import { examShort } from "@/lib/exams";
 import { seviyeBaslatAction, telafiBaslatAction } from "@/lib/actions/levels";
 import { ScoreRing } from "@/components/ui/charts";
-import { Alert, Badge, Button, Card, CardHeader, LinkButton } from "@/components/ui";
+import { Alert, Badge, Card, CardHeader, LinkButton } from "@/components/ui";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { SeviyeSeridi } from "@/components/SeviyeSeridi";
 import { cn } from "@/lib/cn";
 
@@ -46,6 +49,20 @@ export default async function SeviyePage({
 
   return (
     <div className="animate-fade space-y-5 sm:space-y-6">
+      {/* Sayfanın başlığı yoktu: telefonda ekran doğrudan seviye şeridiyle
+          açılıyor, ekran okuyucu ilk başlık olarak bir kartın içini okuyordu. */}
+      <div>
+        <Link
+          href="/paketler"
+          className="inline-flex min-h-9 items-center gap-1.5 text-caption font-medium text-ink-soft transition hover:text-ink"
+        >
+          <ArrowLeft className="size-4" /> Testler
+        </Link>
+        <h1 className="font-display mt-1 text-h2 font-bold tracking-tight text-ink">
+          {sinav} seviyeli check-up
+        </h1>
+      </div>
+
       {hata ? <Alert>{hata}</Alert> : null}
 
       {/* ── Durum şeridi ─────────────────────────────────── */}
@@ -67,7 +84,7 @@ export default async function SeviyePage({
                 Temel kazanımlarını teyit ediyoruz
               </h2>
               <p className="mt-2 text-body leading-relaxed text-ink-soft">
-                Seviye 1&apos;de {karne.seviye1Birlesik ? Math.round(karne.seviye1Birlesik.oran * 100) : 0}%
+                Seviye 1&apos;de %{karne.seviye1Birlesik ? Math.round(karne.seviye1Birlesik.oran * 100) : 0}{" "}
                 çıktın. Barajın altında kaldığın için sınavı burada bitirmiyoruz:{" "}
                 <strong className="font-semibold text-ink">
                   {adim.kazanimSayisi} soruluk kısa bir tur
@@ -77,9 +94,9 @@ export default async function SeviyePage({
               </p>
               <form action={telafiBaslatAction} className="mt-5">
                 <input type="hidden" name="runId" value={runId} />
-                <Button type="submit" size="lg">
+                <SubmitButton size="lg" className="max-sm:w-full">
                   <Play /> Devam et
-                </Button>
+                </SubmitButton>
               </form>
             </div>
           </div>
@@ -99,21 +116,22 @@ export default async function SeviyePage({
               ? "Bu testte iki konunun birleştiği ve birden fazla işlem adımı isteyen sorular var."
               : "Son test sınav standardında: analiz ve yorum soruları."}
           </p>
-          <p className="tabular mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-white/75">
+          <p className="tabular mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-white/90">
             <span>{seviyeOzeti(karne.examScope, adim.seviye).soruSayisi} soru</span>
             <span>{seviyeOzeti(karne.examScope, adim.seviye).dakika} dakika</span>
           </p>
           <form action={seviyeBaslatAction} className="mt-5 flex flex-wrap gap-2.5">
             <input type="hidden" name="runId" value={runId} />
             <input type="hidden" name="seviye" value={adim.seviye} />
-            <Button type="submit" variant="white" size="lg">
+            <SubmitButton variant="white" size="lg" className="max-sm:w-full">
               <Play /> Şimdi başla
-            </Button>
-            <LinkButton href="/panel" variant="outlineLight" size="lg">
+            </SubmitButton>
+            <LinkButton href="/panel" variant="outlineLight" size="lg" className="max-sm:w-full">
               Sonra devam et
             </LinkButton>
           </form>
-          <p className="mt-3 text-micro text-white/60">
+          {/* Gradyanın açık ucunda beyaz %60 küçük yazı AA kontrastın altındaydı. */}
+          <p className="mt-3 text-micro text-white/85">
             Ara verebilirsin — süre sen başlatınca işlemeye başlar.
           </p>
         </Card>
@@ -160,10 +178,32 @@ export default async function SeviyePage({
           action={<Badge tone="brand">{sinav}</Badge>}
         />
 
-        {/* Aşama puanları */}
-        <div className="grid gap-px overflow-hidden border-y border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+        {/* Aşama puanları — telefonda 2x2 (tek sütunda dört aşama ekranı
+            boydan boya dolduruyordu). */}
+        {karne.asamalar.length === 0 ? (
+          <p className="border-y border-line bg-surface-sunk px-4 py-4 text-caption text-ink-soft sm:px-6">
+            Henüz biten aşama yok. İlk aşamayı bitirdiğinde puanların ve eksik kazanımların
+            burada görünür.
+          </p>
+        ) : null}
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-px overflow-hidden border-y border-line bg-line empty:hidden",
+            // Aşama sayısı kadar sütun: boş hücre gri dolgu olarak görünmesin.
+            ["", "lg:grid-cols-1", "lg:grid-cols-2", "lg:grid-cols-3", "lg:grid-cols-4"][
+              Math.min(karne.asamalar.length, 4)
+            ]
+          )}
+        >
           {karne.asamalar.map((a, i) => (
-            <div key={i} className="bg-surface p-4">
+            <div
+              key={i}
+              className={cn(
+                "bg-surface p-4",
+                // Tek sayıda aşamada son hücre telefonda iki sütunu kaplar.
+                karne.asamalar.length % 2 === 1 && i === karne.asamalar.length - 1 && "col-span-2 lg:col-span-1"
+              )}
+            >
               <p className="text-micro font-semibold uppercase tracking-[0.14em] text-ink-faint">
                 {a.telafiMi ? "Telafi turu" : `Seviye ${a.seviye}`}
               </p>

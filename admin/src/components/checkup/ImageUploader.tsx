@@ -48,7 +48,7 @@ export function ImageUploader({ onInsert }: { onInsert: (markup: string) => void
 
   return (
     <div className="rounded-xl border border-dashed border-line-strong p-4">
-      <p className="text-sm font-medium text-ink-soft">Şekil / grafik ekle</p>
+      <p className="text-caption font-medium text-ink-soft">Şekil / grafik ekle</p>
 
       {error ? <Notice className="mt-3">{error}</Notice> : null}
 

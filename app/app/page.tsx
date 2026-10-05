@@ -15,6 +15,7 @@ import {
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { SITE_URL } from "@/lib/products";
+import { KATALOG_TURLERI } from "@/lib/catalog";
 import { EXAMS, SECILEBILIR_SINAVLAR, examShort } from "@/lib/exams";
 import { ScoreRing, TopicBar } from "@/components/ui/charts";
 import { Alert, Badge, Card, LinkButton, Wordmark } from "@/components/ui";
@@ -31,8 +32,10 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;
   const yil = new Date().getFullYear();
 
+  // Yalnızca katalog paketleri: seviyeli (117 dk) ve gizli tekrar paketleri
+  // "her biri 15-30 dakika" başlığının altında listeleniyordu.
   const paketler = await prisma.package.findMany({
-    where: { status: "PUBLISHED" },
+    where: { status: "PUBLISHED", kind: { in: [...KATALOG_TURLERI] } },
     orderBy: { sortOrder: "asc" },
     select: { slug: true, name: true, questionCount: true, durationMinutes: true, examScope: true },
   });

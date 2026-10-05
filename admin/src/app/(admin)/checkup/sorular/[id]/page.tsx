@@ -1,28 +1,39 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, CopyPlus } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { percent, trDate } from "@/lib/checkup/format";
+import { trDate } from "@/lib/checkup/format";
+import { loadQuestionAnalysis } from "@/lib/checkup/item-analysis";
+import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
+import { komsular, listeSuzgeciSorgudan } from "@/lib/checkup/question-query";
 import { parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { GateNotice } from "@/components/checkup/GateNotice";
+import { ItemAnalysisCard } from "@/components/checkup/ItemAnalysis";
+import { CopyIdButton } from "@/components/checkup/CopyIdButton";
 import { QuestionForm } from "@/components/checkup/QuestionForm";
-import { Notice, PageHeader } from "@/components/checkup/ui";
+import { LinkButton, Notice, PageHeader, buttonClass } from "@/components/checkup/ui";
 
 export const metadata: Metadata = { title: "Check-up · Soruyu düzenle" };
 
-const CRUMBS = [
-  { href: "/checkup", label: "Check-up" },
-  { href: "/checkup/sorular", label: "Sorular" },
-];
-
-export default async function EditQuestionPage({ params }: PageProps<"/checkup/sorular/[id]">) {
+export default async function EditQuestionPage({ params, searchParams }: PageProps<"/checkup/sorular/[id]">) {
   // Görüntüleyici de açabilir (inceleme); kaydetmeyi form ve sunucu engeller.
   const gate = await checkStaff(ANY_STAFF);
   if (!gate.ok) return <GateNotice gate={gate} roles={ANY_STAFF} />;
   const yazabilir = CONTENT_ROLES.includes(gate.staff.role);
 
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  // Listeden gelindiyse süzgeç ve sayfa: kaydedince oraya dönülür.
+  const listeden = typeof sp.geri === "string";
+  const geri = listeSorgusu(listeden ? (sp.geri as string) : "");
+  // "Kaydet ve sonrakine geç"ten gelindiyse kaydedilen önceki soru.
+  const kaydedilen = typeof sp.kaydedildi === "string" ? sp.kaydedildi.slice(0, 64) : "";
+  const crumbs = [
+    { href: "/checkup", label: "Check-up" },
+    { href: listeAdresi(geri), label: "Sorular" },
+  ];
 
   const [question, topics, objectives] = await Promise.all([
     db.question.findUnique({
@@ -38,28 +49,31 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
         sourceRef: true,
         level: true,
         objectiveId: true,
+        examScopes: true,
         version: true,
         shownCount: true,
-        correctCount: true,
         createdAt: true,
         updatedAt: true,
         createdByStaff: true,
         updatedByStaff: true,
         choices: {
           orderBy: { sortOrder: "asc" },
-          select: { content: true, isCorrect: true, errorType: true, label: true, chosenCount: true },
+          select: { id: true, content: true, isCorrect: true, errorType: true, label: true },
         },
       },
     }),
     db.topic.findMany({
       where: { children: { none: {} } },
       orderBy: [{ examScope: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, examScope: true },
+      select: { id: true, name: true, examScope: true, examScopes: true },
     }),
     db.objective.findMany({
-      where: { status: { not: "ARCHIVED" } },
+      // Arşivdeki kazanım listeye girmez — ama bu sorunun kazanımıysa girer:
+      // yoksa seçim kutusu "Kazanımsız" görünür, gizli alan arşivdeki kimliği
+      // taşırdı. Yazar neye bağlı olduğunu görmeli.
+      where: { OR: [{ status: { not: "ARCHIVED" } }, { questions: { some: { id } } }] },
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-      select: { id: true, topicId: true, code: true, name: true },
+      select: { id: true, topicId: true, code: true, name: true, status: true },
     }),
   ]);
 
@@ -72,7 +86,7 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
   if (hasUneditableBlocks(stemContent)) {
     return (
       <>
-        <PageHeader crumbs={CRUMBS} title="Soruyu düzenle" />
+        <PageHeader crumbs={crumbs} title="Soruyu düzenle" />
         <Notice tone="warn" title="Bu soru metin editöründe düzenlenemiyor">
           Soru, yazım biçiminin temsil edemediği bir blok (tablo ya da altyazılı şekil)
           içeriyor. Bu formda kaydetmek o bloğu silerdi, bu yüzden düzenleme kapalı.
@@ -80,6 +94,21 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
       </>
     );
   }
+
+  const komsu = listeden ? await komsular(question.id, listeSuzgeciSorgudan(geri)) : null;
+
+  const analysis = await loadQuestionAnalysis({
+    id: question.id,
+    version: question.version,
+    difficulty: question.difficulty,
+    targetTimeSeconds: question.targetTimeSeconds,
+    choices: question.choices.map((c) => ({
+      id: c.id,
+      label: c.label,
+      isCorrect: c.isCorrect,
+      errorType: c.errorType,
+    })),
+  });
 
   const initial = {
     id: question.id,
@@ -95,18 +124,13 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
     sourceRef: question.sourceRef ?? "",
     level: question.level ?? "",
     objectiveId: question.objectiveId ?? "",
+    examScopes: question.examScopes as string[],
     version: question.version,
     shownCount: question.shownCount,
   };
 
-  // Şık dağılımı: hangi çeldirici çalışıyor, hangisi hiç seçilmiyor?
-  const secimToplam = question.choices.reduce((s, c) => s + c.chosenCount, 0);
-
   const alt = [
     "Sürüm v" + question.version,
-    question.shownCount > 0
-      ? question.shownCount + " kez soruldu · " + percent(question.correctCount / question.shownCount) + " doğru"
-      : "henüz sorulmadı",
     "eklendi " + trDate(question.createdAt) + (question.createdByStaff ? " · " + question.createdByStaff : ""),
     question.updatedByStaff && question.updatedAt.getTime() !== question.createdAt.getTime()
       ? "son düzenleme " + trDate(question.updatedAt) + " · " + question.updatedByStaff
@@ -117,35 +141,85 @@ export default async function EditQuestionPage({ params }: PageProps<"/checkup/s
 
   return (
     <>
-      <PageHeader crumbs={CRUMBS} title="Soruyu düzenle" description={alt} />
+      <PageHeader
+        crumbs={crumbs}
+        title="Soruyu düzenle"
+        description={alt}
+        actions={
+          <>
+            {komsu ? (
+              <nav aria-label="Listede gezinme" className="flex items-center gap-1">
+                {komsu.onceki ? (
+                  <Link href={soruAdresi(komsu.onceki, geri)} className={buttonClass("ghost", "sm")} aria-label="Önceki soru">
+                    <ChevronLeft aria-hidden />
+                  </Link>
+                ) : (
+                  <span className={buttonClass("ghost", "sm") + " pointer-events-none opacity-40"} aria-hidden>
+                    <ChevronLeft />
+                  </span>
+                )}
+                <span className="tabular min-w-16 text-center text-caption text-ink-soft">
+                  {komsu.sira ? komsu.sira + " / " + komsu.toplam : komsu.toplam + " soru"}
+                </span>
+                {komsu.sonraki ? (
+                  <Link href={soruAdresi(komsu.sonraki, geri)} className={buttonClass("ghost", "sm")} aria-label="Sonraki soru">
+                    <ChevronRight aria-hidden />
+                  </Link>
+                ) : (
+                  <span className={buttonClass("ghost", "sm") + " pointer-events-none opacity-40"} aria-hidden>
+                    <ChevronRight />
+                  </span>
+                )}
+              </nav>
+            ) : null}
+            <CopyIdButton id={question.id} />
+            {yazabilir ? (
+              <LinkButton
+                href={
+                  "/checkup/sorular/yeni?kopya=" +
+                  encodeURIComponent(question.id) +
+                  (geri ? "&geri=" + encodeURIComponent(geri) : "")
+                }
+                variant="outline"
+                size="sm"
+              >
+                <CopyPlus aria-hidden /> Benzerini oluştur
+              </LinkButton>
+            ) : null}
+          </>
+        }
+      />
 
-      {secimToplam > 0 ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {question.choices.map((c) => (
-            <span
-              key={c.label}
-              className={
-                "rounded-lg border px-3 py-1.5 text-micro tabular " +
-                (c.isCorrect
-                  ? "border-ok/50 bg-ok-wash text-ok"
-                  : "border-line text-ink-soft")
-              }
-              title={c.chosenCount + " öğrenci bu şıkkı seçti"}
-            >
-              <strong className="font-semibold">{c.label}</strong> {percent(c.chosenCount / secimToplam)}
-            </span>
-          ))}
-          <span className="self-center text-micro text-ink-faint">
-            şık seçilme oranları ({secimToplam} cevap)
-          </span>
-        </div>
+      {kaydedilen ? (
+        <Notice tone="ok" className="mb-4">
+          Önceki soru kaydedildi —{" "}
+          <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold underline underline-offset-2">
+            ona dön
+          </Link>
+          . Listede sıradaki bu.
+        </Notice>
       ) : null}
+
+      <ItemAnalysisCard analysis={analysis} version={question.version} />
 
       <QuestionForm
         canEdit={yazabilir}
-        topics={topics.map((t) => ({ id: t.id, name: t.name, scope: t.examScope }))}
-        objectives={objectives}
+        topics={topics.map((t) => ({
+          id: t.id,
+          name: t.name,
+          scope: t.examScope,
+          scopes: t.examScopes as string[],
+        }))}
+        objectives={objectives.map((o) => ({
+          id: o.id,
+          topicId: o.topicId,
+          code: o.code,
+          name: o.name,
+          archived: o.status === "ARCHIVED",
+        }))}
         question={initial}
+        returnQuery={listeden ? geri : undefined}
+        sonrakiId={komsu?.sonraki ?? null}
       />
     </>
   );

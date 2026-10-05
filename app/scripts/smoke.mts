@@ -12,6 +12,7 @@ import {
   haftalikPlan,
   hataTavsiyesi,
   karar,
+  kontrolKarari,
   oncelikSirasi,
   tekrarTavsiyesi,
   MAX_TOPICS_PER_WEEK,
@@ -29,6 +30,20 @@ import {
 import type { TopicBreakdownEntry } from "../lib/scoring";
 import type { ReviewItem } from "../lib/checkup";
 import type { TopicBreakdown } from "../lib/scoring";
+import {
+  KAPANDI_MESAJI,
+  KayitKuyrugu,
+  depoyuSuz,
+  geriAdimGecikmesi,
+  sonrakiBosIndeks,
+  sunucuylaBirlestir,
+  uyariEsigi,
+  type KayitYaniti,
+  type KuyrukOlayi,
+} from "../lib/sinav-kuyrugu";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let failed = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -314,6 +329,23 @@ check("düşük bantta tek konu söyleniyor", dusuk.metin.includes("zayif-1"));
 check("çok boşta boş uyarısı var", dusuk.metin.includes("9 soruyu boş"));
 check("üç bant da farklı", new Set([yuksek.metin, orta.metin, dusuk.metin]).size === 3);
 
+// ── koçluk: kontrol testi kararı ──────────────────────────
+console.log("");
+console.log("Koçluk — kontrol testi:");
+const kGecti = kontrolKarari({ name: "Bölünebilme", correct: 5, asked: 5, level: "STRONG" }, 0.33);
+check("kontrol kararı sayı içeriyor", /\d\/\d/.test(kGecti.baslik), kGecti.baslik);
+check(
+  "geçilen kontrol 'ok' ve önceki ölçümü söylüyor",
+  kGecti.ton === "ok" && kGecti.metin.includes("%33") && kGecti.metin.includes("+67"),
+  kGecti.metin
+);
+const kKaldi = kontrolKarari({ name: "Bölünebilme", correct: 1, asked: 5, level: "WEAK" }, null);
+check(
+  "kalınan kontrol 'bad', paket dili yok",
+  kKaldi.ton === "bad" && !/paket/i.test(kKaldi.baslik + kKaldi.metin),
+  kKaldi.metin
+);
+
 // ── koçluk: boş stratejisi ────────────────────────────────
 console.log("");
 console.log("Koçluk — boş:");
@@ -432,6 +464,308 @@ check("karne adlari semadaki gibi",
   karneBasligi(3, "COMPLETED") === "Nihai Check-up Raporu");
 check("akis surerken 'kaldin' baslig i cikmiyor",
   karneBasligi(1, "IN_PROGRESS") === "Şu ana kadarki durumun");
+
+// ── sınav kuyruğu ─────────────────────────────────────────
+/*
+ * Sınav ekranının cevap kaydı kuyruğu (lib/sinav-kuyrugu.ts). Her senaryo
+ * gerçek bir kusurdan: son soruyu işaretleyip hemen "Bitir" (yoldaki tur),
+ * 00:00'da sonsuz deneme (kalıcı hata kodları), geri tuşunda eski işaretin
+ * yeni işareti ezmesi (eşitleme), bozuk cihaz kaydı.
+ */
+console.log("");
+console.log("Sınav kuyruğu:");
+{
+  type Adim = KayitYaniti | "at" | Promise<KayitYaniti>;
+  const bekle = () => new Promise<void>((r) => setTimeout(r, 0));
+  const kur = (adimlar: Adim[]) => {
+    const olaylar: KuyrukOlayi[] = [];
+    const cagrilar: string[] = [];
+    const zamanlar: { fn: () => void; ms: number }[] = [];
+    let iptal = 0;
+    const k = new KayitKuyrugu({
+      kaydet: async (qid, kayit) => {
+        cagrilar.push(`${qid}:${kayit.choiceId}`);
+        const adim = adimlar.shift() ?? { ok: true };
+        if (adim === "at") throw new Error("ağ yok");
+        return adim;
+      },
+      bildir: (o) => {
+        olaylar.push(o);
+      },
+      zamanla: (fn, ms) => zamanlar.push({ fn, ms }),
+      iptalEt: () => {
+        iptal += 1;
+      },
+      simdi: () => 1234,
+    });
+    const tur = (t: KuyrukOlayi["tur"]) => olaylar.filter((o) => o.tur === t);
+    return { k, olaylar, cagrilar, zamanlar, tur, iptal: () => iptal };
+  };
+  const ertelenmis = () => {
+    let coz: (y: KayitYaniti) => void = () => {};
+    const soz = new Promise<KayitYaniti>((r) => (coz = r));
+    return { soz, coz };
+  };
+  const kayit = (choiceId: string | null) => ({ choiceId, timeSpentMs: 5 });
+
+  {
+    const t = kur([{ ok: true }, { ok: true }]);
+    t.k.ekle("q1", kayit("a"));
+    t.k.ekle("q2", kayit("b"));
+    const s = await t.k.bosalt();
+    const durumlar = t.tur("durum").map((o) => (o.tur === "durum" ? o.durum : "")).join(",");
+    check("sırayla yazar ve boşalır", s === "tamam" && t.k.boyut === 0 && t.cagrilar.join(" ") === "q1:a q2:b", t.cagrilar.join(" "));
+    check("durum saving → saved", durumlar === "saving,saved", durumlar);
+    check("kayıt anı bildirilir (eşitleme ezmesin diye)", t.tur("kaydedildi").length === 2);
+  }
+
+  {
+    const d = ertelenmis();
+    const t = kur([d.soz, { ok: true }]);
+    t.k.ekle("q1", kayit("a"));
+    const p1 = t.k.bosalt();
+    const p2 = t.k.bosalt();
+    t.k.ekle("q2", kayit("b"));
+    d.coz({ ok: true });
+    const s = await p2;
+    check("yoldaki tur beklenir: ikinci çağrı AYNI sözü alır", p1 === p2);
+    check("tur sürerken eklenen kayıt da yazılır (Bitir yarışı)", s === "tamam" && t.k.boyut === 0 && t.cagrilar.length === 2, t.cagrilar.join(" "));
+  }
+
+  {
+    const d = ertelenmis();
+    const t = kur([d.soz, { ok: true }]);
+    t.k.ekle("q1", kayit("a"));
+    const p = t.k.bosalt();
+    t.k.ekle("q1", kayit("b"));
+    d.coz({ ok: true });
+    await p;
+    check("yoldayken değişen işaretin YENİSİ de gönderilir", t.cagrilar.join(" ") === "q1:a q1:b" && t.k.boyut === 0, t.cagrilar.join(" "));
+  }
+
+  {
+    const t = kur(["at", "at", { ok: true }]);
+    t.k.ekle("q1", kayit("a"));
+    const s1 = await t.k.bosalt();
+    check("ağ hatası geçici sayılır, kayıt kuyrukta kalır", s1 === "gecici" && t.k.boyut === 1);
+    check("ilk tekrar 1 sn sonra", t.zamanlar[0]?.ms === 1000, String(t.zamanlar[0]?.ms));
+    t.zamanlar[0].fn();
+    await bekle();
+    check("ikinci tekrar 2 sn sonra (geri adım)", t.zamanlar[1]?.ms === 2000, String(t.zamanlar[1]?.ms));
+    const ardisik = t.tur("ardisikHata").map((o) => (o.tur === "ardisikHata" ? o.sayi : -1));
+    check("ardışık hata sayılır", ardisik.join(",") === "1,2", ardisik.join(","));
+    t.zamanlar[1].fn();
+    await bekle();
+    const sonArdisik = t.tur("ardisikHata").at(-1);
+    check(
+      "bağlantı gelince yazılır, sayaç sıfırlanır",
+      t.k.boyut === 0 && sonArdisik?.tur === "ardisikHata" && sonArdisik.sayi === 0
+    );
+  }
+
+  {
+    const t = kur(["at", "at"]);
+    t.k.ekle("q1", kayit("a"));
+    await t.k.bosalt();
+    t.k.sifirlaDeneme();
+    await t.k.bosalt();
+    check("yeni işaret / bağlantı beklemeyi baştan başlatır", t.zamanlar[1]?.ms === 1000, String(t.zamanlar[1]?.ms));
+    check("elle deneme bekleyen zamanlayıcıyı iptal eder", t.iptal() === 1, String(t.iptal()));
+  }
+
+  {
+    const t = kur([{ ok: false, kod: "OTURUM", error: "x" }]);
+    t.k.ekle("q1", kayit("a"));
+    const s = await t.k.bosalt();
+    check(
+      "oturum düşünce tekrar denenmez, kayıt korunur",
+      s === "oturum" && t.k.boyut === 1 && t.zamanlar.length === 0 && t.tur("oturumYok").length === 1
+    );
+  }
+
+  {
+    const t = kur([{ ok: false, kod: "SURE_DOLDU", error: "Süre doldu." }]);
+    t.k.ekle("q1", kayit("a"));
+    t.k.ekle("q2", kayit("b"));
+    const s = await t.k.bosalt();
+    const kayip = t.tur("kayip").at(-1);
+    check("süre dolunca kuyruk bırakılır, bitirme engellenmez", s === "tamam" && t.k.boyut === 0 && t.cagrilar.length === 1);
+    check(
+      "kaybolan işaretler sayılır ve süre bildirilir",
+      kayip?.tur === "kayip" && kayip.toplam === 2 && t.tur("sureDoldu").length === 1
+    );
+  }
+
+  {
+    const t = kur([{ ok: false, kod: "KAPANDI", error: "Bu test kapandı." }]);
+    t.k.ekle("q1", kayit("a"));
+    await t.k.bosalt();
+    const hatalar = t.tur("hata").map((o) => (o.tur === "hata" ? o.mesaj : ""));
+    check("test başka yerde bittiyse eşitleme istenir", t.tur("kapandi").length === 1 && t.k.boyut === 0);
+    check("kapandı mesajı tur sonunda silinmez", hatalar.length === 1 && hatalar[0] === KAPANDI_MESAJI, hatalar.join(" | "));
+  }
+
+  {
+    const t = kur([{ ok: false, kod: "GECERSIZ", error: "Geçersiz şık." }, { ok: true }, { ok: true }]);
+    t.k.ekle("q1", kayit("zzz"));
+    t.k.ekle("q2", kayit("b"));
+    const s = await t.k.bosalt();
+    const hatalar1 = t.tur("hata").map((o) => (o.tur === "hata" ? o.mesaj : ""));
+    check("geçersiz kayıt yalnız kendisi düşer", s === "tamam" && t.k.boyut === 0 && t.cagrilar.join(" ") === "q1:zzz q2:b");
+    check("aynı turda hata mesajı silinmez", hatalar1.join("|") === "Geçersiz şık.", hatalar1.join("|"));
+    t.k.ekle("q3", kayit("c"));
+    await t.k.bosalt();
+    const son = t.tur("hata").at(-1);
+    check("sonraki temiz tur hatayı temizler", son?.tur === "hata" && son.mesaj === null);
+  }
+
+  check(
+    "geri adım 1-2-4 sn, en çok 30 sn",
+    geriAdimGecikmesi(0) === 1000 && geriAdimGecikmesi(2) === 4000 && geriAdimGecikmesi(10) === 30_000
+  );
+
+  const birlesik = sunucuylaBirlestir(
+    { q1: "a", q2: null, q3: "c", q4: "d" },
+    { q1: "x", q2: "y", q3: "z", q4: "w", yabanci: "v" },
+    (q) => q === "q1",
+    { q3: 200, q4: 50 },
+    100
+  );
+  check("eşitleme: bekleyen soru yerel kalır", birlesik.q1 === "a");
+  check("eşitleme: istek yoldayken değişen soru yerel kalır", birlesik.q3 === "c");
+  check("eşitleme: diğerleri sunucudan gelir", birlesik.q2 === "y" && birlesik.q4 === "w");
+  check("eşitleme: ekranda olmayan soru eklenmez", !("yabanci" in birlesik));
+
+  const sorular = [
+    { id: "q1", choices: [{ id: "a" }, { id: "b" }] },
+    { id: "q2", choices: [{ id: "c" }] },
+  ];
+  const suzulmus = depoyuSuz(
+    {
+      sonra: ["q1", "baska-test", 7],
+      kuyruk: [
+        ["q1", { choiceId: "b", timeSpentMs: 10 }],
+        ["q2", { choiceId: null, timeSpentMs: 0 }],
+        ["baska-test", { choiceId: "a", timeSpentMs: 1 }],
+        ["q2", { choiceId: "yok", timeSpentMs: 1 }],
+        ["q1", { choiceId: "a" }],
+        null,
+        "bozuk",
+      ],
+    },
+    sorular
+  );
+  check("depo: başka testin işaretleri atılır", suzulmus.sonra.size === 1 && suzulmus.sonra.has("q1"));
+  check(
+    "depo: geçerli kayıtlar ve boş işaret kalır, bozuk/yabancı atılır",
+    JSON.stringify(suzulmus.kuyruk) ===
+      JSON.stringify([
+        ["q1", { choiceId: "b", timeSpentMs: 10 }],
+        ["q2", { choiceId: null, timeSpentMs: 0 }],
+      ]),
+    JSON.stringify(suzulmus.kuyruk)
+  );
+
+  check(
+    "sıradaki boş: ileri, sonra başa sarar, tek boş kendisiyse yok",
+    sonrakiBosIndeks([1, 4, 7], 4) === 7 &&
+      sonrakiBosIndeks([1, 4, 7], 7) === 1 &&
+      sonrakiBosIndeks([3], 3) === null &&
+      sonrakiBosIndeks([], 0) === null
+  );
+  check(
+    "son dakikalar eşiği 5 ve 1 dakika",
+    uyariEsigi(6 * 60_000) === null &&
+      uyariEsigi(5 * 60_000) === 5 &&
+      uyariEsigi(61_000) === 5 &&
+      uyariEsigi(60_000) === 1 &&
+      uyariEsigi(0) === 1
+  );
+}
+
+// ── istemci paketi ────────────────────────────────────────
+/*
+ * KaTeX YALNIZCA SUNUCUDA çalışır. Bir istemci bileşeni MathContent'i (dolayısıyla
+ * katex'i) import ederse ~270 KB'lık JS o sayfaya iner ve her formül telefonda
+ * yeniden çizilir — derleme bunu hata saymaz, sessizce olur. Sonuç sayfasındaki
+ * cevap incelemesi tam olarak böyle kaçmıştı. Burada "use client" dosyalarından
+ * çıkan import zincirini (tip importları ve "use server" eylemleri hariç) gezip
+ * katex'e ya da veritabanı istemcisine varan yol var mı diye bakıyoruz.
+ */
+console.log("");
+console.log("İstemci paketi:");
+{
+  const KOK = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const YASAK = [
+    { ad: "katex", eslesir: (s: string) => s === "katex" || s.startsWith("katex/") },
+    { ad: "veritabanı istemcisi", eslesir: (s: string) => s === "@/lib/db" || s.startsWith("@prisma/") || s === "pg" },
+  ];
+  // Dosyanın başındaki yorumları atlayıp ilk ifadenin yönerge olup olmadığına bak.
+  const yonerge = (kaynak: string, ad: "use client" | "use server") => {
+    const bas = kaynak.replace(/^(?:\s+|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/, "");
+    return bas.startsWith(`"${ad}"`) || bas.startsWith(`'${ad}'`);
+  };
+
+  const dosyalar: string[] = [];
+  const gez = (dizin: string) => {
+    for (const ad of readdirSync(dizin)) {
+      if (ad === "node_modules" || ad === "generated" || ad.startsWith(".")) continue;
+      const yol = join(dizin, ad);
+      if (statSync(yol).isDirectory()) gez(yol);
+      else if (/\.(ts|tsx)$/.test(ad) && !ad.endsWith(".d.ts")) dosyalar.push(yol);
+    }
+  };
+  for (const d of ["app", "components", "lib"]) gez(join(KOK, d));
+
+  const coz = (kimden: string, spec: string): string | null => {
+    const taban = spec.startsWith("@/") ? join(KOK, spec.slice(2)) : resolve(dirname(kimden), spec);
+    for (const ek of ["", ".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+      const aday = taban + ek;
+      if (existsSync(aday) && statSync(aday).isFile()) return aday;
+    }
+    return null;
+  };
+  const importlar = (kaynak: string): string[] => {
+    const sonuc: string[] = [];
+    const desenler = [
+      /^\s*(?:import|export)\s+(?!type\b)[^;]*?\sfrom\s+["']([^"']+)["']/gm,
+      /^\s*import\s+["']([^"']+)["']/gm,
+      /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+    ];
+    for (const d of desenler) for (const m of kaynak.matchAll(d)) sonuc.push(m[1]);
+    return sonuc;
+  };
+
+  const istemciler = dosyalar.filter((f) => yonerge(readFileSync(f, "utf8"), "use client"));
+  const ihlaller: string[] = [];
+  for (const giris of istemciler) {
+    const onceki = new Map<string, string | null>([[giris, null]]);
+    const kuyruk = [giris];
+    while (kuyruk.length > 0) {
+      const dosya = kuyruk.shift()!;
+      const kaynak = readFileSync(dosya, "utf8");
+      // Sunucu eylemleri istemciye yalnızca referans olarak gider; içi inmez.
+      if (dosya !== giris && yonerge(kaynak, "use server")) continue;
+      for (const spec of importlar(kaynak)) {
+        const yasak = YASAK.find((y) => y.eslesir(spec));
+        if (yasak) {
+          const zincir: string[] = [];
+          for (let f: string | null = dosya; f; f = onceki.get(f) ?? null) zincir.unshift(relative(KOK, f));
+          ihlaller.push(`${yasak.ad}: ${zincir.join(" → ")} → ${spec}`);
+          continue;
+        }
+        if (!spec.startsWith("@/") && !spec.startsWith(".")) continue;
+        const hedef = coz(dosya, spec);
+        if (hedef && !onceki.has(hedef)) {
+          onceki.set(hedef, dosya);
+          kuyruk.push(hedef);
+        }
+      }
+    }
+  }
+  check(`${istemciler.length} istemci bileşeni tarandı`, istemciler.length > 5);
+  check("istemci bileşenlerinden katex'e/veritabanına giden import yok", ihlaller.length === 0, ihlaller.join(" | "));
+}
 
 console.log(failed === 0 ? "\nTümü geçti.\n" : `\n${failed} kontrol BAŞARISIZ.\n`);
 process.exitCode = failed === 0 ? 0 : 1;

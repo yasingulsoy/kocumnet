@@ -37,6 +37,7 @@ Her değişiklikten sonra üçü de çalıştırılmalı:
 
 ```bash
 npm run smoke        # saf mantık: parola, içerik şeması, net, teşhis, SEVİYE KAPILARI
+                     #   + istemci paketi: "use client" dosyalarından katex'e yol yok
 npm run test:markup  # yazım biçimi ayrıştırma + düzenleme gidiş-dönüşü
 npm run test:leak    # uçtan uca akış + CEVAP ANAHTARI SIZINTI DENETİMİ
 npm run test:levels  # seviyeli check-up zinciri + TELAFİDE SORU TEKRARI DENETİMİ
@@ -113,6 +114,7 @@ saf fonksiyonlar olarak duruyor; hepsi `npm run smoke` ile test ediliyor.
 | **Konu tekrar testi yalnızca ÖLÇÜLEN konuda** | Hem anlam (kontrol = yeniden ölçüm) hem güvenlik: bu uç nokta paket hakkına bakmaz, denetimsiz bırakılsa havuz beşer beşer boşaltılırdı. Günlük sınır `GUNLUK_TEKRAR_SINIRI`. |
 | **Boş bırakma tavsiyesi sınava göre** | KPSS/DGS/ALES'te yanlış doğruyu götürmez; orada "boş bırak" demek net kaybettirir. |
 | **Havuz daraldıysa söylenir** (`relaxedExposureCount`) | Şişmiş bir sonucu gerçek sanan öğrenci çalışmayı bırakır. |
+| **Kontrol testi ölçüm değil, doğrulama** | Eğilim grafiğine, tahmini nete ve panodaki genel başarıya girmez (konu haritasına girer). Sonuç ekranı paket kararı yerine `kontrolKarari` kullanır ve planla bağı gösterir: tek zayıf konuluk 5 soru genel çizgiyi sebepsiz düşürüyordu. |
 
 Döngü: **ölç → sırala → çalıştır → DOĞRULA → yeniden ölç.** Doğrulama adımı
 olmayan bir plan yapılacaklar listesidir; yapılacaklar listeleri terk edilir.
@@ -132,6 +134,7 @@ buradan.
 | **Telafi turu kendiliğinden AÇILMAZ** | Öğrenci neden ek soru çözdüğünü bilmeden soruyla karşılaşmamalı; sayaç "devam" dediğinde başlamalı. |
 | **Seviye 3'te baraj yok** | Oraya gelen iki kapıyı geçmiş. Sonuç rapora yazılır, "kaldın" denmez. |
 | **Aşamalar ayrı oturum** | Her birinin kendi süresi var, aralarında ara verilebilir. Mevcut oturum makinesi (sayaç, cevap kaydı, sızıntı koruması) olduğu gibi çalışıyor. |
+| **Kapsam: boş liste = KONUNUN sınavları** | Kazanımın/sorunun `examScopes` listesi doluysa o; boşsa `Topic.examScopes` (o da boşsa konunun ana sınavı). Tek tanım `lib/exam-scope.ts`; seviyeli seçim, paket seçimi ve kontrol testi (konu öğrencinin sınavında değilse açılmaz) aynı tanımı kullanır. Eskiden boş liste "her sınav" sayılıyordu: kapsamı boş AYT/TYT soruları LGS Seviye 2-3'e giriyordu. `npm run test:levels` dört aşamayı, `test:leak` kontrol testini denetliyor. |
 
 ## Tasarım sistemi
 
@@ -179,6 +182,27 @@ buradan.
 - **Öğrencinin hedef sınavını yalnızca `hedefGuncelleAction` yazar.** Profil formu bir
   ara ikinci bir sınav listesi tutuyordu ve eski kaldığı için KPSS öğrencisinin hedefi
   kaydedince siliniyordu. İki liste tutma.
+- **KaTeX yalnızca sunucuda.** İstemci bileşeni (`"use client"`) `MathContent`'i import
+  etmez; formüller sunucuda çizilip hazır düğüm olarak geçer (sınav ekranı, cevap
+  incelemesi). Cevap incelemesi bunu bir ara kaçırmıştı ve sonuç sayfasına 270 KB'lık
+  KaTeX JS'i iniyordu; `npm run smoke` artık import zincirini denetliyor.
+- **Sınav ekranı sunucuyla eşitlenir.** Next geri/ileri gezinmede sayfanın eski
+  çıktısını önbellekten getiriyor (eski kalan süre, eski işaretler). Ekran açılınca ve
+  sekmeye dönülünce `sinavDurumuAction` süreyi ve işaretleri tazeler; test başka yerde
+  bittiyse sonuca gider. Yazılmamış cevaplar ve "sonra bak" işaretleri cihazda
+  (`localStorage`, `sinav-deposu.ts`) — sekme kapansa da kaybolmaz. Kuyruk ve eşitleme
+  kuralları saf modülde (`lib/sinav-kuyrugu.ts`), birim testleri `npm run smoke` içinde.
+- **Paket akışıyla yalnızca katalog paketleri başlar** (`KATALOG_TURLERI`: STANDARD,
+  INTRO). Seviyeli (LEVEL) ve konu tekrar (RETEST) paketlerinin konu dağılımı yok;
+  katalogda kaldıklarında "sıradaki adım" diye öneriliyor, başlatılınca sıfır soruluk
+  oturum açılıp sınav ekranı çöküyordu. `startCheckup` reddeder, `test:leak` denetler.
+- **Cevap kaydında süre toleransı** (`KAYIT_TOLERANSI_MS`, 15 sn): istemci sayacı sayfa
+  tarayıcıda açılınca başladığı için sunucudan birkaç saniye geç biter; son saniyede
+  işaretlenen cevap reddedilmesin diye. Sınav eylemleri hata KODU döndürür
+  (`KAPANDI`, `SURE_DOLDU`, `OTURUM`): üretimde fırlatılan hatanın mesajı istemciye
+  gitmiyor ve ekran kalıcı hatayı ağ kopması sanıp sonsuza kadar tekrar deniyordu.
 - **React 19 form eylemi bitince formu sıfırlar.** `<select>` DOM'da varsayılana döner
   ve React geri yazmaz; paneldeki soru formunda seçimler gizli alanlarla taşınıyor ve
   görünen select'ler efektle durumdan geri yazılıyor (`admin/.../QuestionForm.tsx`).
+  Metin alanları da silinir: giriş ve kayıt eylemleri hata dönüşünde gönderilen
+  değerleri (parola HARİÇ) `values` ile geri verir, alanlar `defaultValue` olarak yazar.

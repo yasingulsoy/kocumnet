@@ -9,7 +9,8 @@ import {
   type QuestionFormState,
 } from "@/lib/checkup/actions/questions";
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
-import { QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "@/lib/checkup/format";
+import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "@/lib/checkup/format";
+import { listeAdresi } from "@/lib/checkup/question-list";
 import { ContentPreview } from "./ContentPreview";
 import { ImageUploader } from "./ImageUploader";
 import {
@@ -32,6 +33,8 @@ export interface TopicOption {
   id: string;
   name: string;
   scope: string;
+  /** Konunun geçtiği bütün sınavlar (Topic.examScopes). Hedef sınav bunlardan seçilir. */
+  scopes?: string[];
 }
 
 export interface ObjectiveOption {
@@ -39,6 +42,8 @@ export interface ObjectiveOption {
   topicId: string;
   code: string;
   name: string;
+  /** Arşivdeki kazanım yalnızca bu sorunun kazanımıysa listede durur. */
+  archived?: boolean;
 }
 
 export interface QuestionInitial {
@@ -55,6 +60,8 @@ export interface QuestionInitial {
   sourceRef: string;
   level: string;
   objectiveId: string;
+  /** Hedef sınav (Question.examScopes). Boş = konunun her sınavı. */
+  examScopes: string[];
   version: number;
   shownCount: number;
 }
@@ -73,30 +80,44 @@ const BOS: QuestionInitial = {
   sourceRef: "",
   level: "",
   objectiveId: "",
+  examScopes: [],
   version: 1,
   shownCount: 0,
 };
 
-const PREVIEW_BOX =
-  "rounded-xl border border-line bg-surface-sunk p-4";
-const PREVIEW_LABEL =
-  "mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint";
+const PREVIEW_BOX = "rounded-xl border border-line bg-surface-sunk p-4";
+const PREVIEW_LABEL = "mb-2 text-micro font-semibold uppercase tracking-wide text-ink-faint";
 const CODE = "rounded bg-surface-sunk px-1 py-0.5 text-micro " + MONO;
+
+const AYRILMA_UYARISI = "Kaydedilmemiş değişiklikler var. Sayfadan çıkarsan kaybolacak. Çıkılsın mı?";
 
 export function QuestionForm({
   topics,
   objectives = [],
   question,
+  defaults,
   canEdit,
+  returnQuery,
+  sonrakiId = null,
 }: {
   topics: TopicOption[];
   /** Kazanımlar — konuya göre süzülür. */
   objectives?: ObjectiveOption[];
+  /** Düzenlenen soru. Yoksa form yeni soru kaydeder. */
   question?: QuestionInitial;
+  /** Yeni soruda ön dolu alanlar ("kaydet ve yenisi", "benzerini oluştur"). */
+  defaults?: Partial<QuestionInitial>;
   /** Görüntüleyici rolü formu görür ama kaydedemez (sunucu da reddeder). */
   canEdit: boolean;
+  /**
+   * Listenin süzgeç sorgusu: kaydedince ve vazgeçince oraya dönülür. Boş
+   * metin "süzgeçsiz listeden geldim" demek; undefined "listeden gelmedim".
+   */
+  returnQuery?: string;
+  /** Süzgeçli listede sıradaki soru — "Kaydet ve sonrakine geç" için. */
+  sonrakiId?: string | null;
 }) {
-  const mevcut = question ?? BOS;
+  const mevcut: QuestionInitial = question ?? { ...BOS, ...defaults };
   const duzenleme = Boolean(question);
 
   const [state, formAction, pending] = useActionState(
@@ -134,7 +155,13 @@ export function QuestionForm({
   const [sourceRef, setSourceRef] = useState(mevcut.sourceRef);
   const [level, setLevel] = useState(mevcut.level);
   const [objectiveId, setObjectiveId] = useState(mevcut.objectiveId);
+  const [hedefSinavlar, setHedefSinavlar] = useState<string[]>(mevcut.examScopes);
+  const seciliKonu = topics.find((t) => t.id === topicId);
+  const konuSinavlari = seciliKonu ? (seciliKonu.scopes?.length ? seciliKonu.scopes : [seciliKonu.scope]) : [];
+  // Konunun sınavları + (eski veride) konu dışında kalmış seçili sınav: kaldırılabilsin diye görünür.
+  const sinavSecenekleri = EXAM_SCOPES.filter((s) => konuSinavlari.includes(s) || hedefSinavlar.includes(s));
   const konununKazanimlari = objectives.filter((o) => o.topicId === topicId);
+  const seciliKazanim = objectives.find((o) => o.id === objectiveId);
   const [errorTypes, setErrorTypes] = useState<string[]>(() =>
     Array.from({ length: 5 }, (_, i) => mevcut.errorTypes[i] ?? "")
   );
@@ -143,6 +170,8 @@ export function QuestionForm({
     setErrorTypes((prev) => prev.map((e, j) => (j === i ? value : e)));
 
   const formRef = useRef<HTMLFormElement>(null);
+  /** Gönderim sürerken ayrılma uyarısı ve kısayollar devre dışı. */
+  const gonderiliyor = useRef(false);
 
   useEffect(() => {
     const f = formRef.current;
@@ -157,17 +186,120 @@ export function QuestionForm({
     setSelect("Seviye", level);
     setSelect("Kazanım", objectiveId);
     errorTypes.forEach((value, i) => setSelect(LABELS[i] + " şıkkının hata tipi", value));
-  }, [state, topicId, status, difficulty, level, objectiveId, errorTypes]);
+    // Onay kutuları da sıfırlamada ilk hâline döner; durumdan geri yaz.
+    f.querySelectorAll<HTMLInputElement>("input[data-hedef-sinav]").forEach((el) => {
+      el.checked = hedefSinavlar.includes(el.value);
+    });
+  }, [state, topicId, status, difficulty, level, objectiveId, errorTypes, hedefSinavlar]);
+
+  /*
+   * Eylem döndüyse (yönlendirme olmadıysa) bir sorun vardır: koruma yeniden
+   * devreye girer ve ilk hatalı alana kaydırılır — kaydet düğmesi sağ
+   * sütunun dibinde, hata ise çoğu zaman ekranın dışında kalıyordu.
+   */
+  useEffect(() => {
+    gonderiliyor.current = false;
+    if (!state.error && !state.fields) return;
+    const ilk = formRef.current?.querySelector("[data-alan-hatasi]") ?? formRef.current;
+    ilk?.scrollIntoView({ block: "center" });
+  }, [state]);
+
+  // ── Kaydedilmemiş değişiklik ─────────────────────────────────
+  const ozet = JSON.stringify([
+    stem,
+    solution,
+    choices,
+    correctIndex,
+    topicId,
+    status,
+    difficulty,
+    targetTime,
+    sourceRef,
+    level,
+    objectiveId,
+    errorTypes,
+    hedefSinavlar,
+  ]);
+  const [ilkOzet] = useState(ozet);
+  const kirli = canEdit && ozet !== ilkOzet;
+
+  useEffect(() => {
+    if (!kirli) return;
+    // Sekmeyi kapatma, yenileme, başka siteye gitme: tarayıcının kendi uyarısı.
+    const kapanis = (e: BeforeUnloadEvent) => {
+      if (gonderiliyor.current) return;
+      e.preventDefault();
+      // Eski Chromium sürümleri uyarıyı yalnızca returnValue ile gösteriyor.
+      e.returnValue = "";
+    };
+    // Panel içi bağlantılar (kenar çubuğu, Vazgeç, gezinti izi) istemci tarafında
+    // gezdiği için beforeunload'a düşmez; tıklamayı yakalama evresinde soruyoruz.
+    const tiklama = (e: MouseEvent) => {
+      if (gonderiliyor.current || e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // yeni sekme
+      const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(a instanceof HTMLAnchorElement) || a.target === "_blank" || a.hasAttribute("download")) return;
+      const hedef = new URL(a.href, window.location.href);
+      if (hedef.origin !== window.location.origin) return; // tam sayfa geçişi: beforeunload sorar
+      if (hedef.pathname === window.location.pathname && hedef.search === window.location.search) return;
+      if (!window.confirm(AYRILMA_UYARISI)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", kapanis);
+    document.addEventListener("click", tiklama, true);
+    return () => {
+      window.removeEventListener("beforeunload", kapanis);
+      document.removeEventListener("click", tiklama, true);
+    };
+  }, [kirli]);
+
+  // ── Klavye: Ctrl/⌘ + S ya da Ctrl/⌘ + Enter kaydeder ─────────
+  useEffect(() => {
+    if (!canEdit) return;
+    const tus = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k !== "s" && k !== "enter") return;
+      // Tarayıcının "sayfayı kaydet" penceresi açılmasın.
+      e.preventDefault();
+      const f = formRef.current;
+      if (!f || gonderiliyor.current) return;
+      // Yeni soruda Ctrl+Shift+Enter: kaydet ve yenisini ekle.
+      const yenisi =
+        e.shiftKey && k === "enter" ? f.querySelector<HTMLButtonElement>('button[name="sonra"]') : null;
+      f.requestSubmit(yenisi ?? undefined);
+    };
+    window.addEventListener("keydown", tus);
+    return () => window.removeEventListener("keydown", tus);
+  }, [canEdit]);
 
   const setChoice = (i: number, value: string) =>
     setChoices((prev) => prev.map((c, j) => (j === i ? value : c)));
 
   const doluSikSayisi = choices.filter((c) => c.trim()).length;
   const hataSayisi = Object.keys(state.fields ?? {}).length;
+  const geriAdres = listeAdresi(returnQuery ?? "");
+
+  // Dolu şıktan önce boş şık: sunucu reddediyor (etiketler kayar, anahtar başka
+  // şıkka geçerdi). Yazar kaydetmeden önce görsün.
+  const doluMu = choices.map((c) => c.trim() !== "");
+  const sonDolu = doluMu.lastIndexOf(true);
+  const aradakiBos = doluMu.findIndex((d, i) => !d && i < sonDolu);
+  const dogruBos = !doluMu[correctIndex] && doluSikSayisi > 0;
 
   return (
-    <form ref={formRef} action={formAction}>
+    <form
+      ref={formRef}
+      action={formAction}
+      onSubmit={() => {
+        gonderiliyor.current = true;
+      }}
+    >
       {duzenleme ? <input type="hidden" name="id" value={mevcut.id} /> : null}
+      {returnQuery !== undefined ? <input type="hidden" name="geri" value={returnQuery} /> : null}
+      {duzenleme && sonrakiId ? <input type="hidden" name="sonrakiId" value={sonrakiId} /> : null}
       <input type="hidden" name="correctIndex" value={correctIndex} />
       {errorTypes.map((value, i) => (
         <input key={i} type="hidden" name={"errorType_" + i} value={value} />
@@ -177,6 +309,9 @@ export function QuestionForm({
       <input type="hidden" name="difficulty" value={difficulty} />
       <input type="hidden" name="level" value={level} />
       <input type="hidden" name="objectiveId" value={objectiveId} />
+      {hedefSinavlar.map((s) => (
+        <input key={s} type="hidden" name="examScopes" value={s} />
+      ))}
 
       <div className="space-y-4">
         {state.error ? <Notice>{state.error}</Notice> : null}
@@ -221,6 +356,7 @@ export function QuestionForm({
                   rows={7}
                   value={stem}
                   onChange={(e) => setStem(e.target.value)}
+                  aria-invalid={state.fields?.stem ? true : undefined}
                   className={clsx(TEXTAREA_CLASS, MONO, "leading-relaxed")}
                   placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
                 />
@@ -250,6 +386,18 @@ export function QuestionForm({
                     ortalanmış şekil, cümle içindeyse satır içi simge olur.
                   </li>
                   <li>Boş satır yeni paragraf açar.</li>
+                  <li>
+                    Kaydet: <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>S</kbd> (Mac’te{" "}
+                    <kbd className={CODE}>⌘</kbd> + <kbd className={CODE}>S</kbd>)
+                    {duzenleme && !sonrakiId ? null : (
+                      <>
+                        {" "}
+                        · {duzenleme ? "kaydet ve sonrakine geç" : "kaydet ve yenisini ekle"}:{" "}
+                        <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>Shift</kbd> +{" "}
+                        <kbd className={CODE}>Enter</kbd>
+                      </>
+                    )}
+                  </li>
                 </ul>
               </details>
 
@@ -266,6 +414,31 @@ export function QuestionForm({
               <div className={PREVIEW_BOX}>
                 <p className={PREVIEW_LABEL}>Öğrencinin göreceği</p>
                 <ContentPreview markup={stem} placeholder="Soru metnini yaz, burada görünecek." />
+                {doluSikSayisi > 0 ? (
+                  // Test ekranındaki şık kartlarının sadeleştirilmiş eşi. Doğru şık
+                  // işaretli değil (öğrenci görmez); etiketler kaydedilecek sırayla.
+                  <ol className="mt-4 space-y-2" aria-label="Şıklar, öğrencinin göreceği sırayla">
+                    {choices
+                      .filter((c) => c.trim())
+                      .map((c, i) => (
+                        <li
+                          key={i}
+                          className="flex items-center gap-3 rounded-xl border-2 border-line bg-surface px-3 py-2.5"
+                        >
+                          <span
+                            aria-hidden
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-caption font-bold text-ink-soft ring-1 ring-inset ring-line-strong"
+                          >
+                            {LABELS[i]}
+                          </span>
+                          <span className="sr-only">{LABELS[i]} şıkkı: </span>
+                          <div className="min-w-0 flex-1">
+                            <ContentPreview markup={c} compact placeholder="—" />
+                          </div>
+                        </li>
+                      ))}
+                  </ol>
+                ) : null}
               </div>
             </div>
           </Card>
@@ -281,8 +454,25 @@ export function QuestionForm({
               }
             />
             <div className="space-y-3 p-5 sm:p-6">
-              {state.fields?.choices ? <Notice>{state.fields.choices}</Notice> : null}
-              {state.fields?.correctIndex ? <Notice>{state.fields.correctIndex}</Notice> : null}
+              {state.fields?.choices ? (
+                <div data-alan-hatasi>
+                  <Notice>{state.fields.choices}</Notice>
+                </div>
+              ) : null}
+              {state.fields?.correctIndex ? (
+                <div data-alan-hatasi>
+                  <Notice>{state.fields.correctIndex}</Notice>
+                </div>
+              ) : null}
+              {aradakiBos !== -1 && !state.fields?.choices ? (
+                <Notice tone="warn">
+                  {LABELS[aradakiBos]} şıkkı boş ama sonrasında dolu şık var. Boş şık yalnızca sonda
+                  olabilir (4 şıklı soruda E boş kalır) — böyle kaydedilemez.
+                </Notice>
+              ) : null}
+              {dogruBos ? (
+                <Notice tone="warn">Doğru olarak işaretlenen {LABELS[correctIndex]} şıkkı boş.</Notice>
+              ) : null}
 
               {choices.map((value, i) => {
                 const dogru = i === correctIndex;
@@ -291,9 +481,7 @@ export function QuestionForm({
                     key={i}
                     className={clsx(
                       "rounded-xl border p-3 transition",
-                      dogru
-                        ? "border-ok/60 bg-ok-wash/60"
-                        : "border-line"
+                      dogru ? "border-ok/60 bg-ok-wash/60" : "border-line"
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -303,7 +491,7 @@ export function QuestionForm({
                         aria-label={LABELS[i] + " şıkkını doğru olarak işaretle"}
                         aria-pressed={dogru}
                         className={clsx(
-                          "mt-1 flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-bold transition",
+                          "mt-1 flex size-9 shrink-0 items-center justify-center rounded-full border text-caption font-bold transition",
                           dogru
                             ? "border-ok bg-ok-fill text-white"
                             : "border-line-strong text-ink-faint hover:border-ok hover:text-ok"
@@ -387,8 +575,9 @@ export function QuestionForm({
           <Card>
             <CardHeader title="Sınıflandırma" />
             <div className="space-y-4 p-5">
-              <Field label="Konu" error={state.fields?.topicId}>
+              <Field label="Konu" htmlFor="soru-konu" error={state.fields?.topicId}>
                 <select
+                  id="soru-konu"
                   aria-label="Konu"
                   required
                   value={topicId}
@@ -396,24 +585,71 @@ export function QuestionForm({
                     setTopicId(e.target.value);
                     // Kazanım konuya bağlı: konu değişince eskisi anlamsız.
                     setObjectiveId("");
+                    // Yeni konunun sınavı olmayan hedefler düşer.
+                    const yeni = topics.find((t) => t.id === e.target.value);
+                    const izinli = yeni ? (yeni.scopes?.length ? yeni.scopes : [yeni.scope]) : [];
+                    setHedefSinavlar((prev) => prev.filter((s) => izinli.includes(s)));
                   }}
                   className={SELECT_CLASS}
                 >
                   <option value="">Seç…</option>
                   {topics.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.scope} · {t.name}
+                      {(EXAM_LABEL[t.scope] ?? t.scope) + " · " + t.name}
                     </option>
                   ))}
                 </select>
               </Field>
 
+              <fieldset>
+                <legend className="mb-1.5 block text-caption font-medium text-ink">Hedef sınav</legend>
+                {sinavSecenekleri.length === 0 ? (
+                  <p className="text-micro text-ink-faint">Önce konu seç.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {sinavSecenekleri.map((s) => (
+                      <label
+                        key={s}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-micro text-ink-soft has-[:checked]:border-brand has-[:checked]:bg-brand-wash has-[:checked]:text-brand has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand"
+                      >
+                        <input
+                          type="checkbox"
+                          data-hedef-sinav
+                          value={s}
+                          checked={hedefSinavlar.includes(s)}
+                          onChange={(e) =>
+                            setHedefSinavlar((prev) =>
+                              e.target.checked ? [...prev, s] : prev.filter((x) => x !== s)
+                            )
+                          }
+                          className="size-3 accent-brand"
+                        />
+                        {EXAM_LABEL[s] ?? s}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {state.fields?.examScopes ? (
+                  <p role="alert" data-alan-hatasi className="mt-1.5 text-micro text-bad">
+                    {state.fields.examScopes}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-micro text-ink-faint">
+                    {hedefSinavlar.length
+                      ? "Yalnızca seçilen sınavların testlerine girer."
+                      : "Boş: konunun geçtiği her sınavda sorulabilir — normal durum. Yalnızca kısıtlama gerekiyorsa seç."}
+                  </p>
+                )}
+              </fieldset>
+
               <Field
                 label="Durum"
+                htmlFor="soru-durum"
                 error={state.fields?.status}
                 hint="Yalnızca “Yayında” olan sorular teste seçilir."
               >
                 <select
+                  id="soru-durum"
                   aria-label="Durum"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
@@ -428,10 +664,17 @@ export function QuestionForm({
 
               <Field
                 label="Seviye"
+                htmlFor="soru-seviye"
                 error={state.fields?.level}
                 hint="Seviyeli check-up için. Boş bırakılırsa yalnızca klasik paketlerde çıkar."
               >
-                <select aria-label="Seviye" value={level} onChange={(e) => setLevel(e.target.value)} className={SELECT_CLASS}>
+                <select
+                  id="soru-seviye"
+                  aria-label="Seviye"
+                  value={level}
+                  onChange={(e) => setLevel(e.target.value)}
+                  className={SELECT_CLASS}
+                >
                   <option value="">Seviyesiz</option>
                   {QUESTION_LEVELS.map((l) => (
                     <option key={l} value={l}>
@@ -443,16 +686,20 @@ export function QuestionForm({
 
               <Field
                 label="Kazanım"
+                htmlFor="soru-kazanim"
                 error={state.fields?.objectiveId}
                 hint={
                   !topicId
                     ? "Önce konu seç."
-                    : konununKazanimlari.length === 0
-                      ? "Bu konuda kazanım yok — Kazanımlar sayfasından ekle."
-                      : "Seviye 1 her kazanımdan bir soru sorar; seviyeli soruda zorunlu."
+                    : seciliKazanim?.archived
+                      ? "Bu kazanım arşivde: seviye 1 onu seçmez. Başka kazanım seç ya da kazanımı yayına al."
+                      : konununKazanimlari.length === 0
+                        ? "Bu konuda kazanım yok — Kazanımlar sayfasından ekle."
+                        : "Seviye 1 her kazanımdan bir soru sorar; seviyeli soruda zorunlu."
                 }
               >
                 <select
+                  id="soru-kazanim"
                   aria-label="Kazanım"
                   value={objectiveId}
                   onChange={(e) => setObjectiveId(e.target.value)}
@@ -463,6 +710,7 @@ export function QuestionForm({
                   {konununKazanimlari.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.code} · {o.name}
+                      {o.archived ? " (arşivde)" : ""}
                     </option>
                   ))}
                 </select>
@@ -470,10 +718,12 @@ export function QuestionForm({
 
               <Field
                 label="Zorluk"
+                htmlFor="soru-zorluk"
                 error={state.fields?.difficulty}
                 hint="Seçimde kolay/orta/zor bant dağılımı için kullanılır."
               >
                 <select
+                  id="soru-zorluk"
                   aria-label="Zorluk"
                   value={difficulty}
                   onChange={(e) => setDifficulty(e.target.value)}
@@ -524,17 +774,49 @@ export function QuestionForm({
             </div>
           </Card>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              disabled={pending || !canEdit}
-              className={clsx(buttonClass("primary", "md"), "flex-1")}
-            >
-              {pending ? "Kaydediliyor…" : duzenleme ? "Değişiklikleri kaydet" : "Soruyu kaydet"}
-            </button>
-            <Link href="/checkup/sorular" className={buttonClass("outline", "md")}>
-              Vazgeç
-            </Link>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                disabled={pending || !canEdit}
+                className={clsx(buttonClass("primary", "md"), "flex-1")}
+              >
+                {pending ? "Kaydediliyor…" : duzenleme ? "Değişiklikleri kaydet" : "Soruyu kaydet"}
+              </button>
+              <Link href={geriAdres} className={buttonClass("outline", "md")}>
+                Vazgeç
+              </Link>
+            </div>
+            {!duzenleme && canEdit ? (
+              <button
+                type="submit"
+                name="sonra"
+                value="yeni"
+                disabled={pending}
+                className={clsx(buttonClass("outline", "md"), "w-full")}
+              >
+                Kaydet ve yenisini ekle
+              </button>
+            ) : null}
+            {duzenleme && canEdit && sonrakiId ? (
+              // İnceleme turu: listedeki sıradaki soruya kaydedip geçer (sıra, kaydetmeden
+              // ÖNCEKİ listeye göre — kaydedilen soru listenin başına zıplasa da zincir kopmaz).
+              <button
+                type="submit"
+                name="sonra"
+                value="sonraki"
+                disabled={pending}
+                className={clsx(buttonClass("outline", "md"), "w-full")}
+              >
+                Kaydet ve sonrakine geç
+              </button>
+            ) : null}
+            {canEdit ? (
+              <p className="text-micro text-ink-faint" aria-live="polite">
+                {kirli ? "Kaydedilmemiş değişiklik var · " : ""}
+                <kbd className={CODE}>Ctrl</kbd>/<kbd className={CODE}>⌘</kbd> + <kbd className={CODE}>S</kbd> kaydeder
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ComponentProps, type ReactNode } from "react";
 
 /*
  * Tasarım sistemi — tanıtım sitesi.
@@ -221,6 +221,9 @@ export function Card({
 const BADGE_TONES = {
   neutral: "bg-surface-sunk text-ink-soft ring-line",
   brand: "bg-brand-wash text-brand ring-brand/15",
+  /** Görsel üstünde (blog kartı etiketi). className ile renk ezmek yerine bu:
+   *  cn() çakışan sınıfları ayıklamıyor, hangisinin kazanacağı CSS sırasına kalıyor. */
+  solid: "bg-brand text-white ring-transparent",
   ok: "bg-ok-wash text-ok ring-ok/15",
   warn: "bg-warn-wash text-warn ring-warn/15",
   light: "bg-white/12 text-white ring-white/25",
@@ -286,6 +289,15 @@ export const INPUT_CLASS =
   "placeholder:text-ink-faint transition focus:border-brand focus:outline-none " +
   "focus:ring-4 focus:ring-brand/12 disabled:bg-surface-sunk disabled:text-ink-faint";
 
+/*
+ * Etiket + alan + ipucu/hata.
+ *
+ * İpucu ve hata metni <label>'ın DIŞINDA: içindeyken alanın erişilebilir
+ * adına karışıyordu (ekran okuyucu "Adınız Adınızı yazın, metin alanı"
+ * diyordu). Artık alan aria-describedby ile metne bağlanıyor, hata varsa
+ * aria-invalid alıyor — çocuk tek bir eleman (input/select/textarea) ise
+ * kendiliğinden; çağıranın verdiği aria-describedby korunur.
+ */
 export function Field({
   label,
   hint,
@@ -299,15 +311,33 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const mesajId = useId();
+  const mesaj = error || hint;
+
+  let alan = children;
+  if (mesaj && isValidElement<{ "aria-describedby"?: string; "aria-invalid"?: boolean | "true" | "false" }>(children)) {
+    const onceki = children.props["aria-describedby"];
+    alan = cloneElement(children, {
+      "aria-describedby": onceki ? `${onceki} ${mesajId}` : mesajId,
+      ...(error ? { "aria-invalid": true } : {}),
+    });
+  }
+
   return (
-    <label className={cn("block", className)}>
-      <span className="mb-1.5 block text-caption font-medium text-ink">{label}</span>
-      {children}
+    <div className={className}>
+      <label className="block">
+        <span className="mb-1.5 block text-caption font-medium text-ink">{label}</span>
+        {alan}
+      </label>
       {error ? (
-        <span className="mt-1.5 block text-caption text-bad">{error}</span>
+        <p id={mesajId} className="mt-1.5 text-caption text-bad">
+          {error}
+        </p>
       ) : hint ? (
-        <span className="mt-1.5 block text-caption text-ink-faint">{hint}</span>
+        <p id={mesajId} className="mt-1.5 text-caption text-ink-faint">
+          {hint}
+        </p>
       ) : null}
-    </label>
+    </div>
   );
 }

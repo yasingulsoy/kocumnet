@@ -23,12 +23,13 @@ function renderLatex(latex: string, displayMode: boolean): string {
     return katex.renderToString(latex, {
       displayMode,
       throwOnError: false,
-      errorColor: "#d92d20",
+      // Ham hex yerine belirteç: KaTeX bunu satır içi style'a yazıyor, var() orada çalışır.
+      errorColor: "var(--bad)",
       strict: "ignore",
       output: "html",
     });
   } catch {
-    return '<span style="color:#d92d20">[formül hatası]</span>';
+    return '<span style="color:var(--bad)">[formül hatası]</span>';
   }
 }
 
@@ -76,13 +77,13 @@ export function ContentPreview({
   const content = useMemo(() => markupToContent(markup), [markup]);
 
   if (!content.blocks.length) {
-    return <p className="text-sm italic text-ink-faint">{placeholder}</p>;
+    return <p className="text-caption italic text-ink-faint">{placeholder}</p>;
   }
 
   return (
     <div
       className={
-        "text-ink " + (compact ? "text-[15px]" : "space-y-1 text-base")
+        "text-ink " + (compact ? "text-body" : "space-y-1 text-read")
       }
     >
       {content.blocks.map((block, i) => {
@@ -114,7 +115,7 @@ export function ContentPreview({
               <ul key={i} className="my-3 space-y-1.5">
                 {block.items.map((item, j) => (
                   <li key={j} className="flex gap-2.5">
-                    <span className="min-w-[1.75rem] shrink-0 text-sm font-medium text-ink-faint">
+                    <span className="min-w-[1.75rem] shrink-0 text-caption font-medium text-ink-faint">
                       {block.style === "roman"
                         ? (ROMAN[j] ?? j + 1) + "."
                         : block.style === "ordered"

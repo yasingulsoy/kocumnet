@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import type { QuestionLevel } from "@/lib/generated/prisma/client";
+import type { ExamScope, QuestionLevel } from "@/lib/generated/prisma/client";
+import { kazanimSinavdaKosulu, soruSinavdaKosulu } from "@/lib/exam-scope";
 import { EXPOSURE_WINDOW_DAYS, type SelectedQuestion } from "@/lib/question-selection";
 
 /**
@@ -32,19 +33,23 @@ function karistir<T>(dizi: T[]): T[] {
   return dizi;
 }
 
+// Sınav kapsamı: tanım lib/exam-scope.ts içinde (boş liste = KONUNUN sınavları).
+
 /**
  * Bir sınavın yayındaki kazanımları, sıra numarasına göre.
  *
  * `examScopes` boşsa kazanım konusunun geçtiği her sınavda ölçülür —
- * sorudaki kuralla aynı (PLAN §11.1).
+ * sorudaki kuralla aynı (PLAN §11.1, lib/exam-scope.ts).
  */
 export async function sinavinKazanimlari(examScope: string, enFazla?: number) {
   return prisma.objective.findMany({
     where: {
       status: "PUBLISHED",
-      OR: [{ examScopes: { isEmpty: true } }, { examScopes: { has: examScope as never } }],
+      ...kazanimSinavdaKosulu(examScope as ExamScope),
     },
-    orderBy: [{ topic: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+    // Eşitlik bozucular şart: kardeş konuların sortOrder'ı aynı olabiliyor ve
+    // `enFazla` ile ilk N alınırken hangi kazanımların sorulacağı belirsiz kalıyordu.
+    orderBy: [{ topic: { sortOrder: "asc" } }, { topic: { slug: "asc" } }, { sortOrder: "asc" }, { code: "asc" }],
     select: { id: true, code: true, name: true, topicId: true },
     ...(enFazla ? { take: enFazla } : {}),
   });
@@ -72,7 +77,13 @@ export async function kazanimBasinaBirSoru(
       level: "L1_TEMEL",
       objectiveId: { in: objectiveIds },
       id: { notIn: excludeQuestionIds.length > 0 ? excludeQuestionIds : ["-"] },
-      OR: [{ examScopes: { isEmpty: true } }, { examScopes: { has: examScope as never } }],
+      // Soru da kazanımı da bu sınavda sorulabilir olmalı. Telafi listesi
+      // düzeltmeden önce açılmış bir koşudan geliyorsa bile kapsam dışı
+      // kazanıma soru seçilmez (o kazanım eksik sayılır).
+      AND: [
+        soruSinavdaKosulu(examScope as ExamScope),
+        { objective: kazanimSinavdaKosulu(examScope as ExamScope) },
+      ],
     },
     select: { id: true, topicId: true, objectiveId: true, version: true },
   });
@@ -145,7 +156,7 @@ export async function seviyeSorulari(
       status: "PUBLISHED",
       level,
       id: { notIn: excludeQuestionIds.length > 0 ? excludeQuestionIds : ["-"] },
-      OR: [{ examScopes: { isEmpty: true } }, { examScopes: { has: examScope as never } }],
+      ...soruSinavdaKosulu(examScope as ExamScope),
     },
     select: { id: true, topicId: true, objectiveId: true, version: true },
   });

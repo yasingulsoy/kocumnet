@@ -25,7 +25,7 @@ export default function GlobalNotFound() {
       <body className="flex min-h-screen flex-col items-center justify-center bg-bg px-5 text-center font-sans text-ink-soft">
         <p className="font-display text-caption font-semibold uppercase tracking-[0.18em] text-brand">404</p>
         <h1 className="font-display mt-3 text-h2 font-semibold tracking-tight text-ink">Sayfa bulunamadı</h1>
-        <p className="mt-2 max-w-md text-body">Aradığın adres taşınmış ya da hiç var olmamış olabilir.</p>
+        <p className="mt-2 max-w-md text-body">Aradığınız adres taşınmış ya da hiç var olmamış olabilir.</p>
         <p className="mt-1 max-w-md text-caption text-ink-faint">The page you are looking for does not exist.</p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/" className="inline-flex min-h-11 items-center rounded-xl bg-brand px-5 text-body font-semibold text-white shadow-brand transition hover:bg-brand-hover">

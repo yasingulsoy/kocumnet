@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
 import { ANY_STAFF, checkStaff } from "@/lib/checkup/staff";
-import { PACKAGE_STATE_LABEL, loadPackageHealth, loadTopicPool } from "@/lib/checkup/pool";
-import { QUESTION_STATUS_LABEL, trNumber } from "@/lib/checkup/format";
+import { BLUEPRINT_KINDS, PACKAGE_STATE_LABEL, loadPackageHealth, loadTopicPool } from "@/lib/checkup/pool";
+import { QUESTION_STATUS_LABEL, examLabel, trNumber } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
-import { Card, CardHeader, PageHeader, Pill, type Tone } from "@/components/checkup/ui";
+import { Card, CardHeader, PACKAGE_STATE_TONE, PageHeader, Pill, qs } from "@/components/checkup/ui";
 
 export const metadata: Metadata = { title: "Check-up · Havuz durumu" };
-
-const STATE_TONE: Record<string, Tone> = { ready: "ok", narrow: "warn", blocked: "bad" };
 
 /**
  * Havuz panosu. Tek bir soruya cevap verir: hangi paket gerçekten
@@ -20,8 +18,9 @@ export default async function PoolPage() {
   const gate = await checkStaff(ANY_STAFF);
   if (!gate.ok) return <GateNotice gate={gate} roles={ANY_STAFF} />;
 
-  const topicRows = await loadTopicPool();
-  const packages = await loadPackageHealth(topicRows);
+  const [topicRows, health] = await Promise.all([loadTopicPool(), loadPackageHealth()]);
+  // Konu tekrar testi ve seviyeli paketin konu dağılımı yok; onların hazırlığı Paketler'de.
+  const packages = health.filter((p) => BLUEPRINT_KINDS.includes(p.kind));
 
   const toplamYayinda = topicRows.reduce((s, r) => s + r.published, 0);
   const toplamTaslak = topicRows.reduce((s, r) => s + r.draft, 0);
@@ -36,11 +35,18 @@ export default async function PoolPage() {
         }
       />
 
-      <section>
-        <h2 className="text-base font-semibold text-ink">Paketler</h2>
-        <p className="mt-0.5 text-caption text-ink-faint">
-          Bir paket, istediği her konuda yeterli yayında soru yoksa başlatılamaz. Tekrar engeli
-          yüzünden ihtiyacın 2 katı sağlıklı sayılır — öğrenci aynı paketi ikinci kez çözebilsin.
+      <section aria-labelledby="havuz-paketler">
+        <h2 id="havuz-paketler" className="font-display text-h2 font-semibold text-ink">
+          Katalog paketleri
+        </h2>
+        <p className="mt-0.5 max-w-3xl text-caption text-ink-faint">
+          Bir paket, istediği her konuda paketin sınavında sorulabilen yeterli yayında soru yoksa
+          başlatılamaz. Tekrar engeli yüzünden ihtiyacın 2 katı sağlıklı sayılır — öğrenci aynı paketi
+          ikinci kez çözebilsin. Seviyeli check-up ve konu tekrar testlerinin hazırlığı{" "}
+          <Link href="/checkup/paketler" className="font-medium text-brand hover:text-brand-hover">
+            Paketler
+          </Link>{" "}
+          sayfasında.
         </p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
@@ -48,13 +54,13 @@ export default async function PoolPage() {
             <Card key={p.id} className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
+                  <p className="truncate text-body font-semibold text-ink">{p.name}</p>
                   <p className="mt-0.5 text-micro text-ink-faint">
-                    {p.examScope} · {p.questionCount} soru · {p.topicCount} konu ·{" "}
+                    {examLabel(p.examScope)} · {p.questionCount} soru · {p.topicCount} konu ·{" "}
                     {QUESTION_STATUS_LABEL[p.status]}
                   </p>
                 </div>
-                <Pill tone={STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
+                <Pill tone={PACKAGE_STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
               </div>
 
               {p.gaps.length > 0 ? (
@@ -76,7 +82,7 @@ export default async function PoolPage() {
                 </ul>
               ) : (
                 <p className="mt-4 border-t border-line pt-3 text-caption text-ok">
-                  Her konuda yeterli soru var.
+                  {p.topicCount === 0 ? "Pakette konu tanımlı değil." : "Her konuda yeterli soru var."}
                 </p>
               )}
             </Card>
@@ -89,33 +95,45 @@ export default async function PoolPage() {
           title="Konular"
           description="Seçim algoritması kolay %30 · orta %50 · zor %20 dağılımı arar; her bantta yayında soru olmalı."
         />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] text-sm">
+        <div className="scroll-x">
+          <table className="data-table min-w-[44rem]">
             <thead>
-              <tr className="border-b border-line bg-surface-sunk text-left text-micro font-medium text-ink-faint">
-                <th className="px-5 py-3 font-medium sm:px-6">Konu</th>
-                <th className="px-3 py-3 text-end font-medium">Yayında</th>
-                <th className="px-3 py-3 text-end font-medium">Kolay</th>
-                <th className="px-3 py-3 text-end font-medium">Orta</th>
-                <th className="px-3 py-3 text-end font-medium">Zor</th>
-                <th className="px-3 py-3 text-end font-medium">Taslak</th>
-                <th className="px-5 py-3 sm:px-6" />
+              <tr>
+                <th scope="col">Konu</th>
+                <th scope="col" className="text-end">
+                  Yayında
+                </th>
+                <th scope="col" className="text-end">
+                  Kolay
+                </th>
+                <th scope="col" className="text-end">
+                  Orta
+                </th>
+                <th scope="col" className="text-end">
+                  Zor
+                </th>
+                <th scope="col" className="text-end">
+                  Taslak
+                </th>
+                <th scope="col">
+                  <span className="sr-only">Durum ve bağlantı</span>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line">
+            <tbody>
               {topicRows.map((r) => {
                 const eksikBant = r.published > 0 && (r.easy === 0 || r.medium === 0 || r.hard === 0);
                 return (
-                  <tr key={r.topicId} className="hover:bg-surface-hover">
-                    <td className="px-5 py-3 sm:px-6">
-                      <span className="me-2 rounded bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">
-                        {r.examScope}
+                  <tr key={r.topicId}>
+                    <td>
+                      <span className="me-2 rounded bg-surface-sunk px-1.5 py-0.5 text-micro font-semibold text-ink-faint">
+                        {examLabel(r.examScope)}
                       </span>
                       <span className="font-medium text-ink">{r.name}</span>
                     </td>
                     <td
                       className={clsx(
-                        "px-3 py-3 text-end tabular font-medium",
+                        "text-end tabular font-medium",
                         r.published === 0 ? "text-bad" : "text-ink"
                       )}
                     >
@@ -124,11 +142,11 @@ export default async function PoolPage() {
                     <NumCell value={r.easy} />
                     <NumCell value={r.medium} />
                     <NumCell value={r.hard} />
-                    <td className="px-3 py-3 text-end tabular text-ink-faint">{r.draft || ""}</td>
-                    <td className="whitespace-nowrap px-5 py-3 text-end sm:px-6">
+                    <td className="text-end tabular text-ink-faint">{r.draft || ""}</td>
+                    <td className="whitespace-nowrap text-end">
                       {eksikBant ? <Pill tone="warn">zorluk dengesiz</Pill> : null}
                       <Link
-                        href={"/checkup/sorular?konu=" + encodeURIComponent(r.slug)}
+                        href={qs("/checkup/sorular", { konu: r.slug })}
                         className="ms-3 text-caption font-medium text-brand hover:text-brand-hover"
                       >
                         Sorular
@@ -146,14 +164,5 @@ export default async function PoolPage() {
 }
 
 function NumCell({ value }: { value: number }) {
-  return (
-    <td
-      className={clsx(
-        "px-3 py-3 text-end tabular",
-        value === 0 ? "text-bad" : "text-ink-soft"
-      )}
-    >
-      {value}
-    </td>
-  );
+  return <td className={clsx("text-end tabular", value === 0 ? "text-bad" : "text-ink-soft")}>{value}</td>;
 }

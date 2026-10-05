@@ -1,25 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { unstable_rethrow, useRouter } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Bookmark,
+  BookmarkCheck,
   Check,
   CircleCheck,
   Clock,
   Flag,
+  Hourglass,
   Keyboard,
   LayoutGrid,
   Loader2,
+  LogIn,
   RefreshCw,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { saveAnswerAction, submitCheckupAction } from "@/lib/actions/checkup";
-import { Alert, Button, Logo } from "@/components/ui";
+import { saveAnswerAction, sinavDurumuAction, submitCheckupAction } from "@/lib/actions/checkup";
+import { Alert, Button, LinkButton, Logo } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
+import {
+  KayitKuyrugu,
+  depoyuSuz,
+  sonrakiBosIndeks,
+  sunucuylaBirlestir,
+  uyariEsigi,
+} from "@/lib/sinav-kuyrugu";
+import {
+  depoOku,
+  depoSil,
+  depoYaz,
+  eskiDepolariTemizle,
+  type SinavDeposu,
+} from "./sinav-deposu";
 
 export interface RunnerChoice {
   id: string;
@@ -43,6 +62,12 @@ function formatClock(ms: number) {
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
 
+function hareketAzalt() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// ── küçük parçalar ───────────────────────────────────────────
+
 /**
  * Soru paleti. Bileşen DIŞARIDA tanımlı: render içinde tanımlansaydı her
  * çizimde yeni bir bileşen kimliği oluşur, React paleti söküp yeniden kurardı.
@@ -50,11 +75,13 @@ function formatClock(ms: number) {
 function Palet({
   questions,
   answers,
+  sonraBak,
   index,
   onGoTo,
 }: {
   questions: RunnerQuestion[];
   answers: Record<string, string | null>;
+  sonraBak: ReadonlySet<string>;
   index: number;
   onGoTo: (i: number) => void;
 }) {
@@ -63,15 +90,18 @@ function Palet({
       {questions.map((q, i) => {
         const dolu = Boolean(answers[q.id]);
         const aktif = i === index;
+        const sonra = sonraBak.has(q.id);
         return (
           <button
             key={q.id}
             type="button"
             onClick={() => onGoTo(i)}
             aria-current={aktif ? "true" : undefined}
-            aria-label={"Soru " + (i + 1) + (dolu ? ", işaretli" : ", boş")}
+            aria-label={
+              "Soru " + (i + 1) + (dolu ? ", işaretli" : ", boş") + (sonra ? ", sonra bakılacak" : "")
+            }
             className={cn(
-              "tabular flex aspect-square touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold transition",
+              "tabular relative flex aspect-square touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold transition",
               aktif
                 ? "bg-brand-deep text-white shadow-card"
                 : dolu
@@ -80,6 +110,12 @@ function Palet({
             )}
           >
             {i + 1}
+            {sonra ? (
+              <span
+                aria-hidden
+                className="absolute -end-1 -top-1 size-3 rounded-full bg-warn-fill ring-2 ring-surface"
+              />
+            ) : null}
           </button>
         );
       })}
@@ -87,13 +123,57 @@ function Palet({
   );
 }
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+/** Bitirme diyaloğunda listelenen en fazla soru numarası. */
+const ILK_N = 24;
 
-/** Bekleyen kayıt: aynı soru için son işaret neyse o gider. */
-interface BekleyenKayit {
-  choiceId: string | null;
-  timeSpentMs: number;
+/** Bitirme diyaloğundaki soru numarası listesi: dokununca o soruya gider. */
+function NumaraListesi({
+  baslik,
+  indeksler,
+  ton,
+  onSec,
+}: {
+  baslik: string;
+  indeksler: number[];
+  ton: "warn" | "neutral";
+  onSec: (i: number) => void;
+}) {
+  if (indeksler.length === 0) return null;
+  // 50 soruluk seviye aşamasında liste diyaloğu boydan boya kaplamasın.
+  const gosterilen = indeksler.slice(0, ILK_N);
+  const kalan = indeksler.length - gosterilen.length;
+  return (
+    <div className="mt-4">
+      <p className="text-[13px] font-semibold text-ink">{baslik}</p>
+      <ul className="mt-2 flex flex-wrap gap-1.5">
+        {gosterilen.map((i) => (
+          <li key={i}>
+            <button
+              type="button"
+              onClick={() => onSec(i)}
+              aria-label={`${i + 1}. soruya git`}
+              className={cn(
+                "tabular flex size-10 touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold ring-1 ring-inset transition",
+                ton === "warn"
+                  ? "bg-warn-wash text-warn ring-warn/30 hover:bg-surface"
+                  : "bg-surface text-ink-soft ring-line-strong hover:bg-surface-hover"
+              )}
+            >
+              {i + 1}
+            </button>
+          </li>
+        ))}
+        {kalan > 0 ? (
+          <li className="tabular flex h-10 items-center px-1.5 text-[13px] font-medium text-ink-faint">
+            +{kalan} soru
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
 }
+
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 /** Süre uyarılarının eşiği (ms) ve metni — her eşik bir kez duyurulur. */
 const SURE_UYARILARI = [
@@ -124,21 +204,35 @@ export function CheckupRunner({
   questions: RunnerQuestion[];
   remainingMs: number;
 }) {
+  const router = useRouter();
+  const baslikId = useId();
+
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(questions.map((q) => [q.id, q.selectedChoiceId]))
   );
+  const [sonraBak, setSonraBak] = useState<ReadonlySet<string>>(() => new Set());
   const [remaining, setRemaining] = useState(remainingMs);
   const [error, setError] = useState<string | null>(null);
+  const [bitirHatasi, setBitirHatasi] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [bekleyen, setBekleyen] = useState(0);
+  const [ardisikHata, setArdisikHata] = useState(0);
+  const [oturumYok, setOturumYok] = useState(false);
+  const [sunucuKapatti, setSunucuKapatti] = useState(false);
+  const [kayipCevap, setKayipCevap] = useState(0);
   const [duyuru, setDuyuru] = useState("");
+  const [konum, setKonum] = useState("");
+  const [kapatilanUyari, setKapatilanUyari] = useState<number | null>(null);
   const [bitirAcik, setBitirAcik] = useState(false);
   const [cikisAcik, setCikisAcik] = useState(false);
   const [paletAcik, setPaletAcik] = useState(false);
   const [submitting, startSubmit] = useTransition();
 
   const current = questions[index];
+  const sureBitti = remaining <= 0;
+  /** Süre bitti ya da sunucu "süre doldu" dedi: artık yalnızca bitirme var. */
+  const kapandi = sureBitti || sunucuKapatti;
 
   // ── süre ölçümü ────────────────────────────────────────────
   // Soru başına harcanan süre konu bazlı hız analizinin girdisi.
@@ -159,126 +253,141 @@ export function CheckupRunner({
     shownAtRef.current = now;
   }, [index, questions]);
 
-  /*
-   * Sekme arkaya atıldığında sayacı durdur.
-   *
-   * Yoksa: telefonu kilitleyip yarım saat sonra dönen öğrencinin o sorusu
-   * "30 dakika sürdü" diye kaydediliyor ve konu bazlı hız analizi çöp oluyor.
-   * Sınav SÜRESİ işlemeye devam eder (o sunucunun saati) — burada duran tek
-   * şey soru başına harcanan süre.
-   */
-  useEffect(() => {
-    function onVisibility() {
-      if (document.visibilityState === "hidden") flushTime();
-      else shownAtRef.current = Date.now();
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [flushTime]);
+  // ── gezinme + odak ─────────────────────────────────────────
+  const soruRef = useRef<HTMLElement>(null);
+  const baslikRef = useRef<HTMLHeadingElement>(null);
+  const odakTasiRef = useRef(false);
 
   const goTo = useCallback(
     (next: number) => {
       if (next < 0 || next >= questions.length) return;
       flushTime();
+      // Odak eski sorunun içindeyse (ör. şık düğmesi) soru değişince belgenin
+      // başına düşer; klavyeyle gezen öğrenci yerini kaybeder. Yeni sorunun
+      // başlığına taşıyoruz.
+      odakTasiRef.current = Boolean(soruRef.current?.contains(document.activeElement));
       setIndex(next);
+      // Ekran okuyucu yeni soruyu duysun (sayaç gibi sürekli değil, tek cümle).
+      setKonum(`Soru ${next + 1} / ${questions.length}`);
       // Uzun bir sorudan sonra yeni soru ekranın ortasında açılmasın.
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: hareketAzalt() ? "auto" : "smooth" });
     },
     [flushTime, questions.length]
   );
 
-  // ── cevap kaydı: kuyruk + yeniden deneme ───────────────────
+  useEffect(() => {
+    if (!odakTasiRef.current) return;
+    odakTasiRef.current = false;
+    baslikRef.current?.focus({ preventScroll: true });
+  }, [index]);
+
+  // ── cevap kaydı kuyruğu + "sonra bak" + yerel depo ─────────
   /*
-   * Neden kuyruk: mobil internet kopar. Eski akışta kayıt isteği başarısız
-   * olduğunda cevap yalnızca ekranda kalıyordu — öğrenci işaretli görüyor,
-   * sunucuda hiçbir şey yok, test bitince o soru boş sayılıyordu. Şimdi
-   * kayıt kuyrukta bekliyor, bağlantı gelince yazılıyor ve testi bitirmeden
-   * ÖNCE kuyruğun boşalması bekleniyor.
+   * Kuyruğun kuralları (tek tur, geri adımlı tekrar, kalıcı hata kodları)
+   * saf bir modülde: lib/sinav-kuyrugu.ts — birim testleri smoke'ta. Burada
+   * yalnızca kuyruğun olayları ekran durumuna bağlanıyor.
    */
-  const kuyrukRef = useRef<Map<string, BekleyenKayit>>(new Map());
-  const calisiyorRef = useRef(false);
-  const denemeRef = useRef(0);
-  const zamanlayiciRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sonraRef = useRef<ReadonlySet<string>>(new Set());
+  /** Soru başına son yerel değişiklik / kayıt zamanı — eşitleme yeni işareti ezmesin. */
+  const degisimRef = useRef<Record<string, number>>({});
+  // Kuyruk "test kapandı" deyince eşitlemeyi çağırabilmek için sabit tutamak.
+  const senkronlaRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const kuyrukRef = useRef<KayitKuyrugu | null>(null);
 
-  // Kendini yeniden çağırabilmek için (backoff) sabit bir tutamak: efektler
-  // ve zamanlayıcılar hep bunun üzerinden çağırır.
-  const bosaltRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
-
-  const bosalt = useCallback(async (): Promise<boolean> => {
-    if (zamanlayiciRef.current) {
-      clearTimeout(zamanlayiciRef.current);
-      zamanlayiciRef.current = null;
+  /** Kuyruk ilk kullanımda kurulur; yalnızca olay işleyicileri ve efektler çağırır. */
+  const kuyruk = useCallback((): KayitKuyrugu => {
+    if (!kuyrukRef.current) {
+      kuyrukRef.current = new KayitKuyrugu({
+        kaydet: (questionId, kayit) =>
+          saveAnswerAction({
+            sessionId,
+            questionId,
+            choiceId: kayit.choiceId,
+            timeSpentMs: kayit.timeSpentMs,
+          }),
+        bildir: (olay) => {
+          switch (olay.tur) {
+            case "durum":
+              setSaveState(olay.durum);
+              break;
+            case "bekleyen":
+              setBekleyen(olay.sayi);
+              break;
+            case "ardisikHata":
+              setArdisikHata(olay.sayi);
+              break;
+            case "hata":
+              setError(olay.mesaj);
+              break;
+            case "oturumYok":
+              setOturumYok(true);
+              break;
+            case "kayip":
+              setKayipCevap(olay.toplam);
+              break;
+            case "kapandi":
+              // Test başka bir yerde bitirilmiş: eşitleme sonuca götürür.
+              void senkronlaRef.current();
+              break;
+            case "sureDoldu":
+              setSunucuKapatti(true);
+              break;
+            case "kaydedildi":
+              degisimRef.current[olay.questionId] = olay.zaman;
+              break;
+            case "depola":
+              if (kuyrukRef.current) {
+                depoYaz(sessionId, sonraRef.current, kuyrukRef.current.bekleyenler);
+              }
+              break;
+          }
+        },
+      });
     }
-    if (kuyrukRef.current.size === 0) return true;
-    // Zaten bir tur dönüyorsa onun bitmesini bekleyen çağrıya "henüz değil"
-    // demek yeterli: tur, kuyruğa yeni eklenenleri de görür.
-    if (calisiyorRef.current) return false;
-
-    calisiyorRef.current = true;
-    setSaveState("saving");
-
-    try {
-      while (kuyrukRef.current.size > 0) {
-        const [qid, veri] = kuyrukRef.current.entries().next().value!;
-        const res = await saveAnswerAction({
-          sessionId,
-          questionId: qid,
-          choiceId: veri.choiceId,
-          timeSpentMs: veri.timeSpentMs,
-        });
-
-        if (!res.ok) {
-          // Sunucu "oturum kapandı / süre doldu" diyorsa tekrar denemek
-          // işe yaramaz; hatayı gösterip kuyruğu bırakıyoruz.
-          setError(res.error ?? "Cevap kaydedilemedi.");
-          throw new Error("kayit-basarisiz");
-        }
-
-        // Öğrenci bu sırada şıkkı değiştirdiyse yeni kayıt kuyrukta kalsın.
-        if (kuyrukRef.current.get(qid) === veri) kuyrukRef.current.delete(qid);
-        setBekleyen(kuyrukRef.current.size);
-      }
-
-      denemeRef.current = 0;
-      setSaveState("saved");
-      setError(null);
-      return true;
-    } catch {
-      setSaveState("error");
-      const gecikme = Math.min(30_000, 1_000 * 2 ** denemeRef.current);
-      denemeRef.current += 1;
-      zamanlayiciRef.current = setTimeout(() => {
-        void bosaltRef.current();
-      }, gecikme);
-      return false;
-    } finally {
-      calisiyorRef.current = false;
-      setBekleyen(kuyrukRef.current.size);
-    }
+    return kuyrukRef.current;
   }, [sessionId]);
 
-  useEffect(() => {
-    bosaltRef.current = bosalt;
-  }, [bosalt]);
+  const depoyuYaz = useCallback(() => {
+    depoYaz(sessionId, sonraRef.current, kuyruk().bekleyenler);
+  }, [kuyruk, sessionId]);
+
+  const sonraDegistir = useCallback(
+    (qid: string) => {
+      const s = new Set(sonraRef.current);
+      if (s.has(qid)) s.delete(qid);
+      else s.add(qid);
+      sonraRef.current = s;
+      setSonraBak(s);
+      depoyuYaz();
+    },
+    [depoyuYaz]
+  );
 
   useEffect(() => {
-    return () => {
-      if (zamanlayiciRef.current) clearTimeout(zamanlayiciRef.current);
-    };
+    // Ekran kapanırken bekleyen yeniden deneme zamanlayıcısı kalmasın.
+    const ref = kuyrukRef;
+    return () => ref.current?.durdur();
   }, []);
 
   // Bağlantı geri geldiğinde beklemeden dene.
   useEffect(() => {
     function onOnline() {
-      denemeRef.current = 0;
-      void bosaltRef.current();
+      kuyruk().sifirlaDeneme();
+      void kuyruk().bosalt();
     }
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
-  }, []);
+  }, [kuyruk]);
+
+  /** Süre dolduktan sonra şık işaretlenmez (diyalog açık, bu ikinci kilit). */
+  const kilitliRef = useRef(false);
+  useEffect(() => {
+    kilitliRef.current = kapandi;
+  }, [kapandi]);
 
   const select = useCallback(
     (choiceId: string) => {
+      if (kilitliRef.current) return;
       const q = questions[index];
       // Aynı şıkka tekrar dokunmak işareti kaldırır — optik formda silgiyle
       // aynı davranış.
@@ -286,54 +395,210 @@ export function CheckupRunner({
 
       setAnswers((prev) => ({ ...prev, [q.id]: next }));
       flushTime();
+      degisimRef.current[q.id] = Date.now();
 
-      kuyrukRef.current.set(q.id, {
+      const k = kuyruk();
+      k.ekle(q.id, {
         choiceId: next,
         timeSpentMs: Math.round(spentRef.current[q.id] ?? 0),
       });
-      setBekleyen(kuyrukRef.current.size);
-      denemeRef.current = 0;
-      void bosaltRef.current();
+      depoyuYaz();
+      setBekleyen(k.boyut);
+      k.sifirlaDeneme();
+      void k.bosalt();
     },
-    [answers, flushTime, index, questions]
+    [answers, depoyuYaz, flushTime, index, kuyruk, questions]
   );
 
   // ── geri sayım ─────────────────────────────────────────────
-  const autoSubmittedRef = useRef(false);
+  /*
+   * Bitiş anı bir referansta: sunucuyla eşitleme onu düzeltebiliyor. Sayaç
+   * Date.now() ile ilerliyor (performance.now() bazı cihazlarda uykudayken
+   * duruyor; sınav süresi ise duvar saatiyle işliyor).
+   */
+  const bitisRef = useRef(0);
 
   useEffect(() => {
-    const started = Date.now();
+    bitisRef.current = Date.now() + remainingMs;
     const id = setInterval(() => {
-      setRemaining(Math.max(0, remainingMs - (Date.now() - started)));
+      setRemaining(Math.max(0, bitisRef.current - Date.now()));
     }, 500);
     return () => clearInterval(id);
   }, [remainingMs]);
 
-  const doSubmit = useCallback(() => {
-    flushTime();
-    startSubmit(async () => {
-      // Bekleyen cevaplar YAZILMADAN puanlama yapılamaz: yoksa öğrencinin
-      // işaretlediğini gördüğü soru boş sayılır.
-      const yazildi = await bosaltRef.current();
-      if (!yazildi) {
-        setError(
-          "Bazı cevapların henüz kaydedilmedi. Bağlantını kontrol et; kaydedilince testi bitirebilirsin."
-        );
-        return;
-      }
-      const res = await submitCheckupAction(sessionId, { ...spentRef.current });
-      // Yönlendirme olduysa buraya hiç gelinmez.
-      if (res?.error) setError(res.error);
-    });
-  }, [flushTime, sessionId]);
+  // ── sunucuyla eşitleme ─────────────────────────────────────
+  /*
+   * Next geri/ileri gezinmede bu sayfanın ESKİ çıktısını önbellekten geri
+   * getiriyor: "Çık" deyip panoya giden ve geri tuşuyla dönen öğrenci ilk
+   * açılıştaki kalan süreyi ve işaretleri görüyordu. Ekran açılınca ve sekmeye
+   * geri dönülünce süreyi ve işaretleri sunucudan tazeliyoruz.
+   */
+  const sonSenkronRef = useRef(0);
+
+  const senkronla = useCallback(async () => {
+    const basladi = Date.now();
+    sonSenkronRef.current = basladi;
+    let res: Awaited<ReturnType<typeof sinavDurumuAction>>;
+    try {
+      res = await sinavDurumuAction(sessionId);
+    } catch {
+      return; // Bağlantı yok: eldeki hâlle devam.
+    }
+    if (!res.ok) {
+      if (res.kod === "OTURUM") setOturumYok(true);
+      return;
+    }
+    if (res.status !== "IN_PROGRESS") {
+      // Test başka bir yerde bitti (başka sekme, süre dolunca bakım işi):
+      // ekranı göstermeye devam etmek anlamsız.
+      kilitliRef.current = true;
+      depoSil(sessionId);
+      router.replace(res.target);
+      return;
+    }
+    bitisRef.current = Date.now() + res.remainingMs;
+    setRemaining(res.remainingMs);
+    // Yerelde bekleyen ya da istek yoldayken değişen işaret daha yeni (kural
+    // ve testi lib/sinav-kuyrugu.ts).
+    const k = kuyruk();
+    setAnswers((onceki) =>
+      sunucuylaBirlestir(onceki, res.selections, (qid) => k.bekliyorMu(qid), degisimRef.current, basladi)
+    );
+  }, [kuyruk, router, sessionId]);
 
   useEffect(() => {
-    if (remaining > 0 || autoSubmittedRef.current) return;
-    // Süre bitti: otomatik bitir. Sunucu süreyi zaten denetliyor; bu yalnızca
-    // öğrenciyi boş ekranda bırakmamak için.
+    senkronlaRef.current = senkronla;
+  }, [senkronla]);
+
+  /** Yerel depodan "sonra bak" işaretlerini ve yazılmamış cevapları geri yükler. */
+  const geriYukle = useCallback(
+    (depo: SinavDeposu) => {
+      const { sonra, kuyruk: kayitlar } = depoyuSuz(depo, questions);
+      sonraRef.current = sonra;
+      setSonraBak(sonra);
+
+      const k = kuyruk();
+      const yerel: Record<string, string | null> = {};
+      for (const [qid, kayit] of kayitlar) {
+        k.ekle(qid, kayit);
+        degisimRef.current[qid] = depo.t;
+        yerel[qid] = kayit.choiceId;
+      }
+      if (kayitlar.length > 0) {
+        setAnswers((onceki) => ({ ...onceki, ...yerel }));
+        setBekleyen(k.boyut);
+        void k.bosalt();
+      }
+    },
+    [kuyruk, questions]
+  );
+
+  useEffect(() => {
+    let iptal = false;
+    eskiDepolariTemizle(sessionId);
+    const depo = depoOku(sessionId);
+    // Durum güncellemeleri efekt gövdesinde değil, bir sonraki mikro görevde.
+    void Promise.resolve().then(() => {
+      if (iptal) return;
+      if (depo) geriYukle(depo);
+      void senkronla();
+    });
+    return () => {
+      iptal = true;
+    };
+  }, [geriYukle, senkronla, sessionId]);
+
+  /*
+   * Sekme arkaya atıldığında soru sayacını durdur.
+   *
+   * Yoksa: telefonu kilitleyip yarım saat sonra dönen öğrencinin o sorusu
+   * "30 dakika sürdü" diye kaydediliyor ve konu bazlı hız analizi çöp oluyor.
+   * Sınav SÜRESİ işlemeye devam eder (o sunucunun saati) — burada duran tek
+   * şey soru başına harcanan süre. Geri dönünce süreyi sunucudan tazeliyoruz.
+   */
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") {
+        flushTime();
+        return;
+      }
+      shownAtRef.current = Date.now();
+      if (Date.now() - sonSenkronRef.current > 15_000) void senkronlaRef.current();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [flushTime]);
+
+  // ── bitir ──────────────────────────────────────────────────
+  const gonderiliyorRef = useRef(false);
+
+  const doSubmit = useCallback(() => {
+    // Süre bitişi ile "Bitir" düğmesi aynı anda gelirse ikinci gönderim olmasın.
+    if (gonderiliyorRef.current) return;
+    gonderiliyorRef.current = true;
+    flushTime();
+    setBitirHatasi(null);
+    startSubmit(async () => {
+      try {
+        // Bekleyen cevaplar YAZILMADAN puanlama yapılamaz: yoksa öğrencinin
+        // işaretlediğini gördüğü soru boş sayılır.
+        const k = kuyruk();
+        let sonuc = await k.bosalt();
+        // Bu arada kuyruğa eklenen olduysa (ör. yerel depodan geri yüklenen
+        // cevaplar) onların turunu da bekle.
+        for (let i = 0; i < 3 && sonuc === "tamam" && k.boyut > 0; i++) {
+          sonuc = await k.bosalt();
+        }
+        if (sonuc === "oturum") {
+          setBitirHatasi("Oturumun kapanmış. Tekrar giriş yap; cevapların bu cihazda saklı.");
+          return;
+        }
+        if (sonuc !== "tamam" || k.boyut > 0) {
+          setBitirHatasi(
+            "Bazı cevapların henüz kaydedilmedi. Bağlantını kontrol et; kaydedilince testi bitirebilirsin."
+          );
+          return;
+        }
+
+        depoSil(sessionId);
+        try {
+          const res = await submitCheckupAction(sessionId, { ...spentRef.current });
+          // Yönlendirme olduysa buraya hiç gelinmez.
+          if (res?.error) {
+            depoyuYaz();
+            if (res.kod === "OTURUM") setOturumYok(true);
+            setBitirHatasi(res.error);
+          }
+        } catch (e) {
+          // Sunucu eylemi yönlendirince söz "redirect" hatasıyla reddediliyor;
+          // onu yutmak yönlendirmeyi durdurur.
+          unstable_rethrow(e);
+          depoyuYaz();
+          setBitirHatasi("Bağlantı koptu, test bitirilemedi. İnternetin gelince tekrar dene.");
+        }
+      } finally {
+        gonderiliyorRef.current = false;
+      }
+    });
+  }, [depoyuYaz, flushTime, kuyruk, sessionId]);
+
+  // Süre bitti ya da sunucu "süre doldu" dedi: otomatik bitir. Sunucu süreyi
+  // zaten denetliyor; bu, öğrenciyi boş ekranda bırakmamak için.
+  const autoSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (!kapandi || autoSubmittedRef.current) return;
     autoSubmittedRef.current = true;
     doSubmit();
-  }, [remaining, doSubmit]);
+  }, [kapandi, doSubmit]);
+
+  // Süre dolduktan sonra bitirme bağlantı yüzünden kaldıysa, bağlantı
+  // gelince kendiliğinden tekrar dene.
+  useEffect(() => {
+    if (!kapandi || !bitirHatasi || oturumYok) return;
+    const tekrar = () => doSubmit();
+    window.addEventListener("online", tekrar);
+    return () => window.removeEventListener("online", tekrar);
+  }, [kapandi, bitirHatasi, oturumYok, doSubmit]);
 
   // ── süre duyuruları ────────────────────────────────────────
   /*
@@ -367,11 +632,13 @@ export function CheckupRunner({
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  // Kuyrukta yazılmamış cevap varken sekmeyi kapatmak veri kaybı.
+  // Kuyrukta yazılmamış cevap varken sekmeyi kapatmak riskli (yerel depo
+  // gizli sekmede tutmayabilir). "Yenile" düğmesi bilerek yeniliyor.
+  const yenileniyorRef = useRef(false);
   useEffect(() => {
     if (bekleyen === 0) return;
     function onBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault();
+      if (!yenileniyorRef.current) e.preventDefault();
     }
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
@@ -380,9 +647,26 @@ export function CheckupRunner({
   // ── klavye ─────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (bitirAcik || cikisAcik || paletAcik) return;
-      if (e.target instanceof HTMLElement && ["INPUT", "TEXTAREA"].includes(e.target.tagName))
+      if (bitirAcik || cikisAcik || paletAcik || kapandi) return;
+      // Ctrl+C (kopyala) C şıkkını, Ctrl+A (tümünü seç) A şıkkını işaretliyordu.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const hedef = e.target;
+      if (
+        hedef instanceof HTMLElement &&
+        (hedef.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(hedef.tagName))
+      )
         return;
+
+      if (e.key === "ArrowRight") {
+        goTo(index + 1);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        goTo(index - 1);
+        return;
+      }
+      // Basılı tutulan harf işareti art arda açıp kapatmasın.
+      if (e.repeat) return;
 
       const q = questions[index];
       const key = e.key.toUpperCase();
@@ -392,21 +676,38 @@ export function CheckupRunner({
       if (byLabel || byNumber) {
         e.preventDefault();
         select((byLabel ?? byNumber)!.id);
-      } else if (e.key === "ArrowRight") {
-        goTo(index + 1);
-      } else if (e.key === "ArrowLeft") {
-        goTo(index - 1);
+      } else if (key === "S") {
+        e.preventDefault();
+        sonraDegistir(q.id);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bitirAcik, cikisAcik, goTo, index, paletAcik, questions, select]);
+  }, [bitirAcik, cikisAcik, goTo, index, kapandi, paletAcik, questions, select, sonraDegistir]);
 
-  const isaretli = Object.values(answers).filter(Boolean).length;
+  // ── türetilenler ───────────────────────────────────────────
+  const isaretli = questions.filter((q) => Boolean(answers[q.id])).length;
   const bos = questions.length - isaretli;
+  const bosIndeksler = questions.flatMap((q, i) => (answers[q.id] ? [] : [i]));
+  const sonraIndeksler = questions.flatMap((q, i) => (sonraBak.has(q.id) ? [i] : []));
   const son = index === questions.length - 1;
   const kritik = remaining < 2 * 60_000;
   const azaliyor = remaining < 5 * 60_000;
+  const sonraMi = sonraBak.has(current.id);
+  const harfler = current.choices.map((c) => c.label);
+
+  /** Bulunduğun sorudan sonraki ilk boş (başa sararak). */
+  const sonrakiBos = sonrakiBosIndeks(bosIndeksler, index);
+
+  // Son dakikalar uyarısı: 5 ve 1 dakika eşiklerinde birer kez; kapatılabilir.
+  const esik = uyariEsigi(remaining);
+  const uyariGoster = esik !== null && !kapandi && kapatilanUyari !== esik;
+
+  const soruyaGit = (i: number) => {
+    setBitirAcik(false);
+    setPaletAcik(false);
+    goTo(i);
+  };
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -499,26 +800,95 @@ export function CheckupRunner({
           <span className="sr-only" aria-live="polite">
             {duyuru}
           </span>
+          <span className="sr-only" aria-live="polite">
+            {konum}
+          </span>
         </div>
 
-        {/* Bağlantı uyarısı — başlığa yapışık, kaydırınca da görünür. */}
-        {saveState === "error" && bekleyen > 0 ? (
-          <div className="border-t border-bad/20 bg-bad-wash">
+        {/* Oturum düştü: tekrar denemek işe yaramaz, giriş gerekir. */}
+        {oturumYok && !kapandi ? (
+          <div role="status" className="border-t border-bad/20 bg-bad-wash">
+            <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2 sm:px-6">
+              <TriangleAlert className="size-4 shrink-0 text-bad" />
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-bad sm:text-[13px]">
+                <strong className="font-semibold">Oturumun kapanmış.</strong> Cevapların bu cihazda
+                saklı; giriş yapınca kaldığın yerden devam edersin.
+              </p>
+              <Link
+                href="/giris"
+                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+              >
+                <LogIn className="size-3.5" /> Giriş yap
+              </Link>
+            </div>
+          </div>
+        ) : saveState === "error" && bekleyen > 0 && !kapandi ? (
+          /* Bağlantı uyarısı — başlığa yapışık, kaydırınca da görünür. */
+          <div role="status" className="border-t border-bad/20 bg-bad-wash">
             <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2 sm:px-6">
               <TriangleAlert className="size-4 shrink-0 text-bad" />
               <p className="min-w-0 flex-1 text-[12px] leading-snug text-bad sm:text-[13px]">
                 <strong className="font-semibold">{bekleyen} cevabın kaydedilmedi.</strong>{" "}
-                Bağlantın gelince kendiliğinden yazılacak.
+                {ardisikHata >= 3
+                  ? "Sorun sürerse sayfayı yenile; cevapların bu cihazda saklı."
+                  : "Bağlantın gelince kendiliğinden yazılacak."}
               </p>
+              {ardisikHata >= 3 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    yenileniyorRef.current = true;
+                    window.location.reload();
+                  }}
+                  className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                >
+                  <RefreshCw className="size-3.5" /> Yenile
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    kuyruk().sifirlaDeneme();
+                    void kuyruk().bosalt();
+                  }}
+                  className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                >
+                  <RefreshCw className="size-3.5" /> Dene
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Son dakikalar: kaç boş ve "sonra bak" kaldığını söyler, oraya götürür.
+            Yanıp sönmez; eşik başına bir kez görünür, kapatılabilir. */}
+        {uyariGoster ? (
+          <div className="border-t border-warn/25 bg-warn-wash">
+            <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-1.5 sm:px-6">
+              <Hourglass className="size-4 shrink-0 text-warn" aria-hidden />
+              <p className="tabular min-w-0 flex-1 text-[12px] leading-snug text-warn sm:text-[13px]">
+                <strong className="font-semibold">
+                  Son {Math.max(1, Math.ceil(remaining / 60_000))} dakika.
+                </strong>{" "}
+                {bos > 0 ? `${bos} boş` : "Boş sorun yok"}
+                {sonraIndeksler.length > 0 ? ` · ${sonraIndeksler.length} sonra bak` : ""}
+              </p>
+              {sonrakiBos !== null ? (
+                <button
+                  type="button"
+                  onClick={() => goTo(sonrakiBos)}
+                  className="flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-warn ring-1 ring-inset ring-warn/25"
+                >
+                  Boşa git <ArrowRight className="size-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  denemeRef.current = 0;
-                  void bosaltRef.current();
-                }}
-                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                onClick={() => setKapatilanUyari(esik)}
+                aria-label="Uyarıyı kapat"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-warn transition hover:bg-surface"
               >
-                <RefreshCw className="size-3.5" /> Dene
+                <X className="size-4" />
               </button>
             </div>
           </div>
@@ -532,20 +902,52 @@ export function CheckupRunner({
 
           <article
             key={current.id}
+            ref={soruRef}
+            aria-labelledby={baslikId}
             className="animate-rise rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-8"
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display tabular flex h-7 min-w-7 items-center justify-center rounded-lg bg-brand-deep px-2 text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm">
+            <div className="flex items-center gap-2">
+              <h2
+                id={baslikId}
+                ref={baslikRef}
+                tabIndex={-1}
+                className="font-display tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-deep px-2 text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
+              >
+                <span className="sr-only">Soru </span>
                 {index + 1}
-              </span>
-              <span className="rounded-full bg-surface-sunk px-2.5 py-0.5 text-[11px] font-medium text-ink-soft ring-1 ring-inset ring-line sm:py-1 sm:text-xs">
+                <span className="sr-only"> / {questions.length}</span>
+              </h2>
+              <span className="min-w-0 truncate rounded-full bg-surface-sunk px-2.5 py-0.5 text-[11px] font-medium text-ink-soft ring-1 ring-inset ring-line sm:py-1 sm:text-xs">
                 {current.topicName}
               </span>
+              {/* Emin olmadığın soruyu işaretle, bitirmeden önce tek listede gör. */}
+              <button
+                type="button"
+                onClick={() => sonraDegistir(current.id)}
+                aria-pressed={sonraMi}
+                className={cn(
+                  "ms-auto flex min-h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold ring-1 ring-inset transition sm:text-[13px]",
+                  sonraMi
+                    ? "bg-warn-wash text-warn ring-warn/30"
+                    : "bg-surface text-ink-soft ring-line hover:bg-surface-hover hover:text-ink"
+                )}
+              >
+                {sonraMi ? (
+                  <BookmarkCheck className="size-4" aria-hidden />
+                ) : (
+                  <Bookmark className="size-4" aria-hidden />
+                )}
+                Sonra bak
+              </button>
             </div>
 
             <div className="mt-4 text-read leading-relaxed text-ink sm:mt-5">{current.stem}</div>
 
-            <div role="radiogroup" aria-label="Şıklar" className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5">
+            <div
+              role="radiogroup"
+              aria-label={`Soru ${index + 1} şıkları`}
+              className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5"
+            >
               {current.choices.map((choice) => {
                 const secili = answers[current.id] === choice.id;
                 return (
@@ -584,12 +986,13 @@ export function CheckupRunner({
           </article>
 
           {/* Masaüstü gezinme */}
-          <div className="mt-5 hidden items-center justify-between lg:flex">
+          <div className="mt-5 hidden items-center justify-between gap-4 lg:flex">
             <Button variant="secondary" onClick={() => goTo(index - 1)} disabled={index === 0}>
               <ArrowLeft /> Önceki
             </Button>
-            <p className="flex items-center gap-1.5 text-xs text-ink-faint">
-              <Keyboard className="size-3.5" /> A–E işaretle · ← → gez · aynı şık işareti kaldırır
+            <p className="flex items-center gap-1.5 text-center text-xs text-ink-faint">
+              <Keyboard className="size-3.5 shrink-0" /> {harfler[0]}–{harfler[harfler.length - 1]}{" "}
+              işaretle · S sonra bak · ← → gez · aynı şık işareti kaldırır
             </p>
             {son ? (
               <Button onClick={() => setBitirAcik(true)} disabled={submitting}>
@@ -608,9 +1011,15 @@ export function CheckupRunner({
           <div className="sticky top-24 rounded-2xl border border-line bg-surface p-5 shadow-card">
             <p className="text-sm font-semibold text-ink">Sorular</p>
             <div className="mt-3">
-              <Palet questions={questions} answers={answers} index={index} onGoTo={goTo} />
+              <Palet
+                questions={questions}
+                answers={answers}
+                sonraBak={sonraBak}
+                index={index}
+                onGoTo={goTo}
+              />
             </div>
-            <div className="mt-4 flex gap-4 border-t border-line pt-4 text-xs text-ink-soft">
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-line pt-4 text-xs text-ink-soft">
               <span className="flex items-center gap-1.5">
                 <span className="size-2.5 rounded-sm bg-brand-wash ring-1 ring-brand/30" />
                 <span className="tabular">{isaretli}</span> işaretli
@@ -618,6 +1027,10 @@ export function CheckupRunner({
               <span className="flex items-center gap-1.5">
                 <span className="size-2.5 rounded-sm bg-surface ring-1 ring-line-strong" />
                 <span className="tabular">{bos}</span> boş
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full bg-warn-fill" />
+                <span className="tabular">{sonraIndeksler.length}</span> sonra bak
               </span>
             </div>
             <Button
@@ -645,11 +1058,24 @@ export function CheckupRunner({
           >
             <ArrowLeft />
           </Button>
-          <Button variant="secondary" onClick={() => setPaletAcik(true)} className="flex-1">
+          <Button
+            variant="secondary"
+            onClick={() => setPaletAcik(true)}
+            aria-label={`Soru listesi, ${index + 1} / ${questions.length}`}
+            className="flex-1"
+          >
             <LayoutGrid />
             <span className="tabular">
               {index + 1} / {questions.length}
             </span>
+            {sonraIndeksler.length > 0 ? (
+              <span
+                aria-hidden
+                className="tabular flex h-5 min-w-5 items-center justify-center rounded-full bg-warn-fill px-1 text-[11px] font-bold text-white"
+              >
+                {sonraIndeksler.length}
+              </span>
+            ) : null}
           </Button>
           {son ? (
             <Button onClick={() => setBitirAcik(true)} disabled={submitting} className="flex-1">
@@ -665,20 +1091,24 @@ export function CheckupRunner({
 
       {/* Mobil soru paleti */}
       <Dialog
-        open={paletAcik}
+        open={paletAcik && !kapandi}
         onClose={() => setPaletAcik(false)}
         title="Sorular"
-        description={isaretli + " işaretli · " + bos + " boş"}
+        description={
+          isaretli +
+          " işaretli · " +
+          bos +
+          " boş" +
+          (sonraIndeksler.length > 0 ? " · " + sonraIndeksler.length + " sonra bak" : "")
+        }
         variant="sheet"
       >
         <Palet
           questions={questions}
           answers={answers}
+          sonraBak={sonraBak}
           index={index}
-          onGoTo={(i) => {
-            goTo(i);
-            setPaletAcik(false);
-          }}
+          onGoTo={soruyaGit}
         />
         <Button
           variant="soft"
@@ -695,18 +1125,18 @@ export function CheckupRunner({
 
       {/* Bitirme onayı */}
       <Dialog
-        open={bitirAcik}
+        open={bitirAcik && !kapandi}
         onClose={() => setBitirAcik(false)}
         title="Testi bitirmek istiyor musun?"
         description="Bitirdikten sonra cevaplarını değiştiremezsin."
       >
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-brand-wash p-4 text-center">
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-xl bg-brand-wash p-3 text-center">
             <p className="font-display tabular text-2xl font-bold text-brand">{isaretli}</p>
             <p className="text-xs text-ink-soft">işaretli</p>
           </div>
           <div
-            className={cn("rounded-xl p-4 text-center", bos > 0 ? "bg-warn-wash" : "bg-surface-sunk")}
+            className={cn("rounded-xl p-3 text-center", bos > 0 ? "bg-warn-wash" : "bg-surface-sunk")}
           >
             <p
               className={cn(
@@ -718,9 +1148,39 @@ export function CheckupRunner({
             </p>
             <p className="text-xs text-ink-soft">boş</p>
           </div>
+          <div
+            className={cn(
+              "rounded-xl p-3 text-center",
+              sonraIndeksler.length > 0 ? "bg-warn-wash" : "bg-surface-sunk"
+            )}
+          >
+            <p
+              className={cn(
+                "font-display tabular text-2xl font-bold",
+                sonraIndeksler.length > 0 ? "text-warn" : "text-ink-faint"
+              )}
+            >
+              {sonraIndeksler.length}
+            </p>
+            <p className="text-xs text-ink-soft">sonra bak</p>
+          </div>
         </div>
+
+        <NumaraListesi
+          baslik="Boş bıraktıkların"
+          indeksler={bosIndeksler}
+          ton="neutral"
+          onSec={soruyaGit}
+        />
+        <NumaraListesi
+          baslik="Sonra bakacakların"
+          indeksler={sonraIndeksler}
+          ton="warn"
+          onSec={soruyaGit}
+        />
+
         {bos > 0 ? (
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+          <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
             Boş sorular nete girmez ama konu haritanda &quot;bilmiyorum&quot; olarak sayılır.
           </p>
         ) : null}
@@ -730,6 +1190,7 @@ export function CheckupRunner({
             {bekleyen} cevabın henüz kaydedilmedi. Bitir dediğinde önce onları yazmayı deneyeceğim.
           </p>
         ) : null}
+        {bitirHatasi ? <Alert className="mt-4">{bitirHatasi}</Alert> : null}
         <div className="mt-5 flex gap-2.5">
           <Button variant="secondary" onClick={() => setBitirAcik(false)} className="flex-1">
             Devam et
@@ -742,12 +1203,23 @@ export function CheckupRunner({
       </Dialog>
 
       {/* Çıkış onayı */}
-      <Dialog open={cikisAcik} onClose={() => setCikisAcik(false)} title="Testten çıkmak istiyor musun?">
+      <Dialog
+        open={cikisAcik && !kapandi}
+        onClose={() => setCikisAcik(false)}
+        title="Testten çıkmak istiyor musun?"
+      >
         <p className="text-sm leading-relaxed text-ink-soft">
           Cevapların kayıtlı, istediğin zaman kaldığın yerden devam edebilirsin.{" "}
           <strong className="font-semibold text-ink">Ama süre işlemeye devam eder:</strong>{" "}
           <span className="tabular font-semibold text-ink">{formatClock(remaining)}</span> kaldı.
         </p>
+        {bekleyen > 0 ? (
+          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-relaxed text-warn">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+            {bekleyen} cevabın henüz sunucuya ulaşmadı. Bu cihazda saklı; teste döndüğünde
+            gönderilir.
+          </p>
+        ) : null}
         <div className="mt-5 flex gap-2.5">
           <Button variant="secondary" onClick={() => setCikisAcik(false)} className="flex-1">
             Teste dön
@@ -759,6 +1231,57 @@ export function CheckupRunner({
             Çık
           </Link>
         </div>
+      </Dialog>
+
+      {/* Süre doldu — kapatılamaz: öğrenci teste geri dönemez, sonuca gider. */}
+      <Dialog
+        open={kapandi}
+        onClose={() => {}}
+        dismissable={false}
+        title="Süre doldu"
+        description={
+          bitirHatasi
+            ? undefined
+            : "Kaydedilen cevapların değerlendiriliyor, birazdan sonuç ekranındasın."
+        }
+      >
+        {bitirHatasi ? (
+          <>
+            <Alert>{bitirHatasi}</Alert>
+            <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+              Kaydedilen cevapların kaybolmaz. Bağlantın gelince kendiliğinden tekrar deneyeceğim;
+              bu ekranı kapatsan da sonucun hesaplanıp Gelişim sayfana düşer.
+            </p>
+            <div className="mt-5 flex gap-2.5">
+              {oturumYok ? (
+                <LinkButton href="/giris" className="flex-1">
+                  <LogIn /> Giriş yap
+                </LinkButton>
+              ) : (
+                <Button onClick={doSubmit} disabled={submitting} className="flex-1">
+                  {submitting ? <Loader2 className="animate-spin" /> : <RefreshCw />} Tekrar dene
+                </Button>
+              )}
+              <LinkButton href="/panel" variant="secondary" className="flex-1">
+                Ana sayfa
+              </LinkButton>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-3 rounded-xl bg-surface-sunk p-4">
+            <Loader2 className="size-5 shrink-0 animate-spin text-brand" aria-hidden />
+            <p className="text-sm text-ink-soft">
+              <span className="tabular font-semibold text-ink">{isaretli}</span> işaretli,{" "}
+              <span className="tabular font-semibold text-ink">{bos}</span> boş.
+            </p>
+          </div>
+        )}
+        {kayipCevap > 0 ? (
+          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-relaxed text-warn">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+            Son {kayipCevap} işaretin süre dolduktan sonra ulaştığı için kaydedilemedi.
+          </p>
+        ) : null}
       </Dialog>
     </div>
   );

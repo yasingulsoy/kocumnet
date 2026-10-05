@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Container, Eyebrow, cn } from "@/components/ui";
+import { fosforla } from "@/components/Marker";
 
 /**
  * İç sayfa başlığı.
@@ -35,6 +36,12 @@ export function PageHero({
   breadcrumb?: ReactNode;
 }) {
   const deep = tone === "deep";
+  /*
+   * Açık zeminli iç sayfa başlıkları ana sayfa hero'su gibi fosforla çizilir
+   * (marka imzası her sayfada). Koyu ton (blog yazısı) hariç: başlık yazarın
+   * metni, rastgele bir kelimesini vurgulamak anlam katmaz.
+   */
+  const baslik = !deep && typeof title === "string" ? fosforla(title, { kisaysaTumu: true }) : title;
 
   return (
     <header
@@ -65,7 +72,7 @@ export function PageHero({
             deep ? "text-white" : "text-ink"
           )}
         >
-          {title}
+          {baslik}
         </h1>
         {description ? (
           <p

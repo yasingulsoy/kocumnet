@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             style: {
               borderRadius: "0.875rem",
               background: "var(--ink)",
-              color: "#fff",
+              color: "var(--bg)",
               fontSize: "0.8125rem",
               fontWeight: 500,
             },

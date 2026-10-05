@@ -147,6 +147,58 @@ export function karar(
  * Boş bırakma stratejisi — konu bilgisinden bağımsız, saf sınav taktiği.
  * Çoğu öğrenciye herhangi bir konudan daha çok net kazandırır.
  */
+/**
+ * Konu kontrol testinin karar cümlesi.
+ *
+ * Paket kararı (karar) burada yanlış konuşuyordu: kontrol testinde 5/5 yapana
+ * "bu paket sana yetmiyor, daha zor bir paketle ölç", 2/5 yapana "aynı anda
+ * her yere bakıyorsun" diyordu — oysa öğrenci planın istediği TEK konuya
+ * bakmıştı. Kontrol testi bir doğrulama; sorduğu tek şey "çalışman işe yaradı
+ * mı". Cümle yine her zaman bir sayı içerir; seviye puanlamanın verdiği
+ * seviyedir (eşik burada yeniden yazılmıyor).
+ */
+export function kontrolKarari(
+  konu: Pick<TopicBreakdownEntry, "name" | "correct" | "asked" | "level">,
+  /** Bu konunun bir önceki ölçümdeki oranı (0-1); hiç ölçülmediyse null. */
+  oncekiOran: number | null
+): Karar {
+  const sayi = `${konu.correct}/${konu.asked}`;
+  const yuzde = konu.asked === 0 ? 0 : Math.round((konu.correct / konu.asked) * 100);
+  let onceki = "";
+  if (oncekiOran !== null) {
+    const eski = Math.round(oncekiOran * 100);
+    const fark = yuzde - eski;
+    onceki = `Önceki ölçümünde %${eski} idi${fark !== 0 ? ` (${fark > 0 ? "+" : ""}${fark} puan)` : ""}. `;
+  }
+
+  if (konu.level === "STRONG") {
+    return {
+      ton: "ok",
+      baslik: `${konu.name}: ${sayi} — konu oturmuş.`,
+      metin: `${onceki}Çalışman karşılığını verdi; planındaki sıradaki işe geç.`,
+    };
+  }
+  if (konu.level === "MEDIUM") {
+    return {
+      ton: "warn",
+      baslik: `${konu.name}: ${sayi} — yol alınmış, henüz bitmedi.`,
+      metin: `${onceki}Yanlışlarının çözümüne bak, aynı tipten birkaç soru daha çöz; birkaç gün sonra yeniden kontrol et.`,
+    };
+  }
+  if (konu.level === "WEAK") {
+    return {
+      ton: "bad",
+      baslik: `${konu.name}: ${sayi} — konu henüz oturmadı.`,
+      metin: `${onceki}Bir haftada her konu oturmaz. Çözümleri incele, konu tekrarına dön; birkaç gün sonra yeniden kontrol et.`,
+    };
+  }
+  return {
+    ton: "warn",
+    baslik: `${konu.name}: ${sayi}`,
+    metin: "Bu testten seviye çıkaracak kadar cevap toplanmadı. Biraz daha soru çözüp yeniden kontrol et.",
+  };
+}
+
 export function bosStratejisi(
   bosSayisi: number,
   toplamSoru: number,

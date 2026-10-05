@@ -17,11 +17,15 @@ import {
   submitCheckup,
   startTopicRetest,
   getCheckupReview,
+  getSessionState,
   CheckupError,
   GUNLUK_TEKRAR_SINIRI,
+  KAYIT_TOLERANSI_MS,
 } from "../lib/checkup";
 import { calculateNet } from "../lib/scoring";
 import { grantEntitlement } from "../lib/entitlements";
+import { selectQuestionsForTopic } from "../lib/question-selection";
+import { loadCatalog } from "../lib/catalog";
 
 let failed = 0;
 function check(label: string, ok: boolean, detail = "") {
@@ -155,6 +159,27 @@ async function main() {
   check("işaretler geri okunuyor", midway.questions.filter((q) => q.selectedChoiceId).length === 13);
   check("ara okumada da sızıntı yok", !JSON.stringify(midway).includes("isCorrect"));
 
+  // Sınav ekranının eşitleme okuması (geri tuşuyla dönülünce çağrılıyor).
+  const durum = await getSessionState(sessionId, user.id);
+  const durumJson = JSON.stringify(durum);
+  check(
+    "eşitleme verisinde cevap anahtarı YOK",
+    !["isCorrect", "is_correct", "errorType", "error_type", "answerKey"].some((k) => durumJson.includes(k))
+  );
+  check(
+    "eşitleme işaretleri ve kalan süreyi döndürüyor",
+    durum.status === "IN_PROGRESS" &&
+      Object.values(durum.selections).filter(Boolean).length === 13 &&
+      durum.remainingMs > 0
+  );
+  check(
+    "başka öğrenci eşitleme verisini okuyamıyor",
+    await getSessionState(sessionId, other.id).then(
+      () => false,
+      (e) => e instanceof CheckupError
+    )
+  );
+
   // Sayaçlar MUTLAK değil FARK olarak ölçülür: havuz taze değilse (testi ikinci
   // kez koşarsan) mutlak toplam önceki turları da içerir ve test yalancı
   // şekilde kırmızı yanar.
@@ -187,12 +212,15 @@ async function main() {
 
   // Bitmiş teste cevap yazılamamalı.
   let kapaliRed = false;
+  let kapaliKod = "";
   try {
     await saveAnswer({ sessionId, userId: user.id, questionId: q0.id, choiceId: correctByQuestion.get(q0.id)!, timeSpentMs: 1 });
   } catch (e) {
     kapaliRed = e instanceof CheckupError;
+    if (e instanceof CheckupError) kapaliKod = e.code;
   }
-  check("kapalı teste cevap yazılamıyor", kapaliRed);
+  // Kod "KAPANDI": sınav ekranı tekrar denemeyi bırakıp sonuca geçer.
+  check("kapalı teste cevap yazılamıyor (KAPANDI)", kapaliRed && kapaliKod === "KAPANDI", kapaliKod);
 
   // Bittikten sonra inceleme açılmalı ve cevap anahtarını İÇERMELİ.
   const inceleme = await getCheckupReview(sessionId, user.id);
@@ -249,6 +277,69 @@ async function main() {
   const tekrarEden = ikinciSession.questions.filter((q) => ilkIds.has(q.id)).length;
   check("ikinci testte aynı sorular gelmiyor", tekrarEden === 0, `${tekrarEden} tekrar`);
 
+  // ── SÜRE TOLERANSI ──────────────────────────────────────────
+  console.log("\nSüre toleransı:");
+  const iq = ikinciSession.questions[0];
+  const kaydet = () =>
+    saveAnswer({ sessionId: ikinci, userId: user.id, questionId: iq.id, choiceId: iq.choices[0].id, timeSpentMs: 1000 });
+
+  // Süre birkaç saniye önce doldu: istemci sayacı geç başladığı için yolda
+  // olan son cevap hâlâ kabul edilmeli.
+  await prisma.checkupSession.update({ where: { id: ikinci }, data: { expiresAt: new Date(Date.now() - 3_000) } });
+  check("süre dolduktan hemen sonra gelen cevap kabul ediliyor", await kaydet().then(() => true, () => false));
+
+  await prisma.checkupSession.update({
+    where: { id: ikinci },
+    data: { expiresAt: new Date(Date.now() - KAYIT_TOLERANSI_MS - 5_000) },
+  });
+  const sureKodu = await kaydet().then(
+    () => "kabul edildi",
+    (e) => (e instanceof CheckupError ? e.code : String(e))
+  );
+  check("tolerans geçince SURE_DOLDU kodu dönüyor", sureKodu === "SURE_DOLDU", sureKodu);
+  const bitmisDurum = await getSessionState(ikinci, user.id);
+  check("eşitleme süresi dolan testte kalan süreyi 0 veriyor", bitmisDurum.remainingMs === 0);
+
+  // Sonraki adımlar etkilenmesin.
+  await prisma.checkupSession.update({
+    where: { id: ikinci },
+    data: { expiresAt: new Date(Date.now() + 60 * 60_000) },
+  });
+
+  // ── KATALOG DIŞI PAKETLER ───────────────────────────────────
+  /*
+   * Seviyeli check-up ve konu tekrar paketlerinin konu dağılımı yok (aşamalar
+   * lib/levels.ts'ten, tekrar konusu oturumdan gelir). Paket akışıyla
+   * başlatılırlarsa SIFIR soruluk oturum açılıyor ve sınav ekranı çöküyordu;
+   * katalog seviyeli paketi "sıradaki adım" diye öneriyordu.
+   */
+  console.log("\nKatalog dışı paketler:");
+  const katalog = await loadCatalog(user.id, new Date(), { scope: "TYT" });
+  check(
+    "katalogda seviyeli / tekrar paketi yok",
+    !katalog.some((p) => p.slug === "tyt-seviyeli" || p.slug === "konu-tekrar-tyt"),
+    katalog.map((p) => p.slug).join(", ")
+  );
+  // Erişim hakkı varken de reddedilmeli: ret sebebi hak değil, paket türü.
+  const seviyeliPaket = await prisma.package.findUniqueOrThrow({ where: { slug: "tyt-seviyeli" }, select: { id: true } });
+  await grantEntitlement({ userId: user.id, packageId: seviyeliPaket.id, expiresAt: null, source: "test" });
+  for (const slug of ["tyt-seviyeli", "konu-tekrar-tyt"]) {
+    const sonuc = await startCheckup(user.id, slug).then(
+      async (id) => {
+        const adet = await prisma.sessionItem.count({ where: { sessionId: id } });
+        await prisma.checkupSession.delete({ where: { id } });
+        return `açıldı (${adet} soru)`;
+      },
+      (e) => (e instanceof CheckupError ? `reddedildi: ${e.message}` : String(e))
+    );
+    check(
+      `${slug} paket akışıyla başlatılamıyor`,
+      sonuc.startsWith("reddedildi") && !sonuc.includes("erişim hakkın yok"),
+      sonuc
+    );
+  }
+  await prisma.entitlement.deleteMany({ where: { userId: user.id } });
+
   // ── ERİŞİM HAKKI ────────────────────────────────────────────
   // ── konu tekrar testi ───────────────────────────────────
   console.log("");
@@ -271,6 +362,46 @@ async function main() {
       engellendi = e instanceof CheckupError;
     }
     check("ölçülmemiş konuda kontrol testi açılmıyor", engellendi, yabanciKonu.name);
+  }
+
+  /*
+   * Sınav kapsamı: öğrenci konuyu ÖLÇMÜŞ olsa da konu öğrencinin sınavında
+   * değilse kontrol testi açılmamalı (TYT'de ölçtüğü konuyu LGS hedefiyle
+   * isteyen öğrenci). Kural seviyeli seçimdekiyle aynı ve burada seçim
+   * kodundan BAĞIMSIZ yazılı: liste doluysa o, boşsa konunun sınavları.
+   */
+  const konuSinavda = (k: { examScope: string; examScopes: string[] }, s: string) =>
+    k.examScopes.length ? k.examScopes.includes(s) : k.examScope === s;
+  const olculenler = await prisma.sessionItem.findMany({
+    where: { session: { userId: user.id, status: "SUBMITTED" } },
+    select: { question: { select: { topic: { select: { id: true, name: true, examScope: true, examScopes: true } } } } },
+  });
+  const lgsDisi = olculenler.map((i) => i.question.topic).find((k) => !konuSinavda(k, "LGS"));
+  if (lgsDisi) {
+    const acildi = await startTopicRetest(user.id, lgsDisi.id, "LGS").then(
+      () => true,
+      (e) => !(e instanceof CheckupError)
+    );
+    check("sınavında olmayan konuda kontrol testi açılmıyor (TYT konusu, LGS hedefi)", !acildi, lgsDisi.name);
+
+    const secim = await selectQuestionsForTopic(lgsDisi.id, 5, user.id, "LGS");
+    const kapsamDisi = (
+      await prisma.question.findMany({
+        where: { id: { in: secim.questions.map((q) => q.id) } },
+        select: { examScopes: true, topic: { select: { examScope: true, examScopes: true } } },
+      })
+    ).filter((q) => !(q.examScopes.length ? q.examScopes.includes("LGS") : konuSinavda(q.topic, "LGS")));
+    check(
+      "konu seçimi kapsamı boş soruyu yabancı sınava taşımıyor",
+      kapsamDisi.length === 0,
+      `${secim.questions.length} soru, ${kapsamDisi.length} kapsam dışı`
+    );
+    // Düzeltmeden önceki hâlde açılmış olabilecek oturum sonraki adımları etkilemesin.
+    await prisma.checkupSession.deleteMany({
+      where: { userId: user.id, kind: "TOPIC_RETEST", focusTopicId: lgsDisi.id },
+    });
+  } else {
+    check("LGS dışı ölçülmüş konu bulundu (kapsam denetimi için)", false);
   }
 
   // Ölçülmüş konuda açılmalı ve aynı konuda ikinci çağrı AYNI oturumu vermeli.

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, LogOut } from "lucide-react";
+import { ActionButton } from "@/components/admin/ActionButtons";
 import { PasswordForm } from "@/components/admin/PasswordForm";
 import { Card, PageHeader, Pill } from "@/components/admin/ui";
+import { logoutOthersAction } from "@/lib/admin/actions";
 import { requireStaff } from "@/lib/admin/auth";
 import { ROLE_DESCRIPTION, ROLE_LABEL } from "@/lib/admin/types";
 
@@ -10,7 +12,7 @@ export const metadata: Metadata = { title: "Hesabım" };
 const CHECKUP_ADMIN_URL = process.env.NEXT_PUBLIC_CHECKUP_ADMIN_URL ?? "https://admin.kocum.net";
 
 export default async function HesabimPage() {
-  const { staff } = await requireStaff();
+  const { staff } = await requireStaff(undefined, "/admin/hesabim");
 
   return (
     <>
@@ -33,6 +35,18 @@ export default async function HesabimPage() {
               <Pill tone="brand">{ROLE_LABEL[staff.role]}</Pill>
             </div>
             <p className="mt-3 text-caption text-ink-soft">{ROLE_DESCRIPTION[staff.role]}</p>
+          </Card>
+          <Card className="p-5">
+            <h2 className="font-display text-body font-semibold text-ink">Oturumlar</h2>
+            <p className="mt-1 text-caption text-ink-soft">
+              Telefonunu kaybettiysen ya da ortak bir bilgisayarda açık bıraktıysan: diğer bütün cihazlarda (iki panelde de)
+              çıkış yapılır, bu cihaz açık kalır. Parolan değişmez.
+            </p>
+            <div className="mt-3">
+              <ActionButton action={logoutOthersAction} variant="secondary" size="sm" confirm="Diğer bütün cihazlardaki oturumların kapatılsın mı?">
+                <LogOut /> Diğer cihazlardan çıkış yap
+              </ActionButton>
+            </div>
           </Card>
           <Card className="p-5">
             <h2 className="font-display text-body font-semibold text-ink">Check-up paneli</h2>

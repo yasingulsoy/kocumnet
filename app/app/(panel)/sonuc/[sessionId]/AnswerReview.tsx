@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   CircleCheck,
@@ -10,10 +10,35 @@ import {
   Timer,
   TriangleAlert,
 } from "lucide-react";
-import { MathContent } from "@/components/MathContent";
 import { ERROR_TYPE_LABELS } from "@/lib/error-types";
-import type { ReviewItem } from "@/lib/checkup";
 import { cn } from "@/lib/cn";
+
+/*
+ * ⚠️ Formüller SUNUCUDA çizilip buraya hazır düğüm olarak geliyor (sonuç
+ * sayfası, MathContent). Bu dosya istemci bileşeni: MathContent'i burada
+ * import etmek KaTeX'in ~270 KB'lık JS'ini sonuç sayfasına indiriyordu ve
+ * telefon her formülü hidrasyon sırasında yeniden çiziyordu. smoke testi
+ * istemci bileşenlerinden katex'e giden import zincirini yakalar.
+ */
+export interface ReviewChoiceView {
+  id: string;
+  label: string;
+  content: ReactNode;
+  isCorrect: boolean;
+  errorType: string | null;
+}
+
+export interface ReviewItemView {
+  order: number;
+  topicName: string;
+  stem: ReactNode;
+  solution: ReactNode | null;
+  choices: ReviewChoiceView[];
+  selectedChoiceId: string | null;
+  isCorrect: boolean | null;
+  timeSpentMs: number;
+  targetTimeSeconds: number;
+}
 
 /**
  * Cevap incelemesi — test BİTTİKTEN sonra.
@@ -36,12 +61,12 @@ const VERDICT = {
   },
 } as const;
 
-function verdictOf(item: ReviewItem) {
+function verdictOf(item: ReviewItemView) {
   if (item.isCorrect === null) return VERDICT.blank;
   return item.isCorrect ? VERDICT.correct : VERDICT.wrong;
 }
 
-export function AnswerReview({ items }: { items: ReviewItem[] }) {
+export function AnswerReview({ items }: { items: ReviewItemView[] }) {
   const hatalilar = useMemo(() => items.filter((i) => i.isCorrect !== true), [items]);
   const [hepsi, setHepsi] = useState(hatalilar.length === 0);
   const [acik, setAcik] = useState<Set<number>>(
@@ -166,9 +191,7 @@ export function AnswerReview({ items }: { items: ReviewItem[] }) {
               </summary>
 
               <div className="border-t border-line px-3.5 py-4 sm:px-5 sm:py-5">
-                <div className="text-read leading-relaxed text-ink">
-                  <MathContent content={item.stem} />
-                </div>
+                <div className="text-read leading-relaxed text-ink">{item.stem}</div>
 
                 <ul className="mt-4 space-y-2 sm:mt-5">
                   {item.choices.map((c) => {
@@ -197,9 +220,7 @@ export function AnswerReview({ items }: { items: ReviewItem[] }) {
                         >
                           {c.label}
                         </span>
-                        <span className="min-w-0 flex-1 text-body text-ink">
-                          <MathContent content={c.content} compact />
-                        </span>
+                        <span className="min-w-0 flex-1 text-body text-ink">{c.content}</span>
                         {c.isCorrect ? (
                           <span className="shrink-0 text-micro font-semibold text-ok">Doğru</span>
                         ) : bu ? (
@@ -237,9 +258,7 @@ export function AnswerReview({ items }: { items: ReviewItem[] }) {
                     <p className="flex items-center gap-2 text-micro font-semibold uppercase tracking-wide text-brand">
                       <Lightbulb className="size-4" /> Çözüm
                     </p>
-                    <div className="mt-2.5 text-body leading-relaxed text-ink">
-                      <MathContent content={item.solution} />
-                    </div>
+                    <div className="mt-2.5 text-body leading-relaxed text-ink">{item.solution}</div>
                   </div>
                 ) : (
                   <p className="mt-4 text-micro text-ink-faint">

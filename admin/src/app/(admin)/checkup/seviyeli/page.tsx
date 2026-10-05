@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { trDate } from "@/lib/checkup/format";
+import { examLabel, trDate } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
-import { EXAM_SCOPE_LABEL } from "@/components/checkup/ObjectiveForms";
 import { Card, EmptyState, PageHeader, Pill, StatCard, type Tone } from "@/components/checkup/ui";
 
 export const metadata: Metadata = { title: "Check-up · Seviyeli koşular" };
@@ -97,7 +96,7 @@ export default async function SeviyeliPage() {
                         )}
                         {kisisel ? <p className="text-micro text-ink-faint">{k.user.email}</p> : null}
                       </td>
-                      <td><Pill>{EXAM_SCOPE_LABEL[k.examScope] ?? k.examScope}</Pill></td>
+                      <td><Pill>{examLabel(k.examScope)}</Pill></td>
                       <td>
                         <Pill tone={d.ton}>{d.etiket}</Pill>
                         {k.pendingRemedialIds.length ? (

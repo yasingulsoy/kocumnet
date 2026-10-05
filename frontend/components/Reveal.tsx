@@ -1,79 +1,63 @@
-"use client";
+import type { CSSProperties, ReactNode } from "react";
 
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import type { ReactNode } from "react";
+/*
+ * Kaydırınca beliren bölümler — SAF CSS, sunucuda çizilir.
+ *
+ * Eskiden framer-motion'dı: başlangıç durumunu (opacity:0) sunucu HTML'ine
+ * yazıyordu ve içerik JavaScript yüklenip sayfa hidrasyonu bitene kadar
+ * görünmüyordu (yavaş telefonda iletişim formu dahil saniyelerce boşluk).
+ * Kütüphane de her sayfanın paketindeydi.
+ *
+ * Şimdi bu bileşenler yalnızca işaret koyar (`data-reveal`, `data-reveal-group`).
+ * Gizleme ve canlandırma globals.css'te ve YALNIZCA <html> `reveal-on`
+ * sınıfını aldıysa devrededir; o sınıfı tek istemci bileşeni RevealObserver
+ * ekler. JavaScript yoksa, hata verirse ya da kullanıcı hareket azaltmayı
+ * seçtiyse hiçbir şey gizlenmez: içerik her zaman ilk HTML'de görünür.
+ */
 
-const easeOut = [0.22, 1, 0.36, 1] as const;
-
-/** Tek öğe için scroll ile beliren (fade + yukarı kayma) animasyonu. */
+/** Tek öğe: görünüme girince yukarı kayarak belirir. */
 export function Reveal({
   children,
   delay = 0,
-  y = 18,
+  y,
   className,
 }: {
   children: ReactNode;
+  /** Saniye. */
   delay?: number;
+  /** Başlangıç kayması (px), varsayılan 18. */
   y?: number;
   className?: string;
 }) {
-  const reduce = useReducedMotion();
+  const style: Record<string, string> = {};
+  if (delay) style["--reveal-delay"] = `${delay}s`;
+  if (y !== undefined) style["--reveal-y"] = `${y}px`;
+
   return (
-    <motion.div
+    <div
+      data-reveal=""
       className={className}
-      initial={reduce ? false : { opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.55, ease: easeOut, delay }}
+      style={Object.keys(style).length > 0 ? (style as CSSProperties) : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-const container: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
-};
-
-const item: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: easeOut } },
-};
-
-/** Izgara/kart grupları için sıralı (stagger) beliriş. Çocuklar StaggerItem olmalı. */
-export function StaggerGroup({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  const reduce = useReducedMotion();
+/** Izgara/kart grupları: grup görünüme girince çocuklar sırayla belirir. */
+export function StaggerGroup({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <motion.div
-      className={className}
-      variants={reduce ? undefined : container}
-      initial={reduce ? false : "hidden"}
-      whileInView="show"
-      viewport={{ once: true, margin: "-60px" }}
-    >
+    <div data-reveal-group="" className={className}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-export function StaggerItem({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  const reduce = useReducedMotion();
+/** StaggerGroup'un DOĞRUDAN çocuğu olmalı: sıra gecikmesi :nth-child ile verilir. */
+export function StaggerItem({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <motion.div className={className} variants={reduce ? undefined : item}>
+    <div data-reveal-item="" className={className}>
       {children}
-    </motion.div>
+    </div>
   );
 }

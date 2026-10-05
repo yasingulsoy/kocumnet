@@ -33,12 +33,21 @@ const testConnection = async () => {
  */
 const EK_SUTUNLAR = [
   { tablo: 'users', sutun: 'password_changed_at', tanim: { type: DataTypes.DATE, allowNull: true } },
+  { tablo: 'users', sutun: 'sessions_revoked_at', tanim: { type: DataTypes.DATE, allowNull: true } },
+  // Mesaj kutusu: "yanıtlandı" durumu ve ekip içi not (4 Ekim 2026).
+  { tablo: 'contact_messages', sutun: 'answered_by', tanim: { type: DataTypes.INTEGER, allowNull: true } },
+  { tablo: 'contact_messages', sutun: 'answered_at', tanim: { type: DataTypes.DATE, allowNull: true } },
+  { tablo: 'contact_messages', sutun: 'note', tanim: { type: DataTypes.TEXT, allowNull: true } },
+  // Blog kapak görseli alt metni (4 Ekim 2026).
+  { tablo: 'blogs', sutun: 'image_alt', tanim: { type: DataTypes.STRING(200), allowNull: true } },
 ];
 
 async function ensureColumns() {
   const qi = sequelize.getQueryInterface();
+  const tablolar = new Map();
   for (const { tablo, sutun, tanim } of EK_SUTUNLAR) {
-    const mevcut = await qi.describeTable(tablo);
+    if (!tablolar.has(tablo)) tablolar.set(tablo, await qi.describeTable(tablo));
+    const mevcut = tablolar.get(tablo);
     if (!mevcut[sutun]) {
       await qi.addColumn(tablo, sutun, tanim);
       console.log(`· Sütun eklendi: ${tablo}.${sutun}`);

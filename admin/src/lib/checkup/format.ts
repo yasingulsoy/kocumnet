@@ -1,7 +1,15 @@
 /**
  * Check-up ekranlarının ortak etiketleri ve biçimlendiricileri.
  * Saf modül: hem sunucu hem istemci bileşenlerinden içe aktarılabilir.
+ *
+ * ⚠️ Sabitler BURADA durur, bir "use client" bileşen dosyasında DEĞİL: sunucu
+ * bileşeni istemci modülünden içe aktardığı nesneyi değil, bir istemci
+ * referansını (çağrılamayan bir fonksiyon) görür. `"LGS" in X` her zaman
+ * false, `Object.keys(X)` boş döner — hata vermeden. Kazanımlar sayfasının
+ * sınav süzgeci ve hazırlık sayacı bu yüzden hiç görünmüyordu.
  */
+
+import { EXAM_SCOPES, GRADE_LABEL as UYGULAMA_SINIF_ADI, isExamScope, type ExamScopeValue } from "./shared/exams";
 
 export const QUESTION_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Taslak",
@@ -24,13 +32,47 @@ export const SESSION_STATUS_LABEL: Record<string, string> = {
   ABANDONED: "Bırakıldı",
 };
 
-export const GRADE_LABEL: Record<string, string> = {
-  GRADE_9: "9. sınıf",
-  GRADE_10: "10. sınıf",
-  GRADE_11: "11. sınıf",
-  GRADE_12: "12. sınıf",
-  GRADUATE: "Mezun",
+/*
+ * Sınav listesi ve sınıf adları öğrenci uygulamasından (shared/exams.ts —
+ * app/lib/exams.ts'in kopyası): yeni bir sınav ya da sınıf eklenince panel
+ * ayrıca güncellenmeyi beklemesin.
+ */
+
+export { EXAM_SCOPES, isExamScope };
+export type ExamScope = ExamScopeValue;
+
+/** Şemadaki Grade enum'ının tamamı, öğrenci uygulamasındaki adlarla. */
+export const GRADE_LABEL: Record<string, string> = UYGULAMA_SINIF_ADI;
+
+export function gradeLabel(grade: string | null | undefined): string | null {
+  return grade ? (GRADE_LABEL[grade] ?? grade) : null;
+}
+
+/**
+ * Rozet ve listelerde görünen sınav adı. Ham enum (KPSS_LISANS) ekrana çıkmaz.
+ * Uygulamanın kısa adından (EXAMS[x].short) bilerek ayrı: panelde "KPSS" ile
+ * "KPSS Ön Lisans" yan yana karışmasın diye "KPSS Lisans". Tür, uygulamadaki
+ * sınav listesine bağlı — yeni sınav eklenip burada adı yoksa derleme kırılır.
+ */
+const SINAV_ADI: Record<ExamScopeValue, string> = {
+  LGS: "LGS",
+  TYT: "TYT",
+  AYT: "AYT",
+  KPSS_LISANS: "KPSS Lisans",
+  KPSS_ONLISANS: "KPSS Ön Lisans",
+  DGS: "DGS",
+  ALES: "ALES",
 };
+
+export const EXAM_LABEL: Record<string, string> = {
+  ...SINAV_ADI,
+  // Eski "TYT+AYT" değeri: yeni kayıtlarda yok, eski satırlar okunabilsin.
+  BOTH: "TYT + AYT",
+};
+
+export function examLabel(scope: string | null | undefined): string {
+  return scope ? (EXAM_LABEL[scope] ?? scope) : "—";
+}
 
 /** Soru seviyesi (seviyeli check-up). Boş = seviyesiz, yalnızca klasik paketlerde. */
 export const QUESTION_LEVEL_LABEL: Record<string, string> = {
@@ -44,6 +86,13 @@ export const LEVEL_LABEL: Record<string, string> = {
   STRONG: "Güçlü",
   MEDIUM: "Orta",
   WEAK: "Zayıf",
+};
+
+export const PACKAGE_KIND_LABEL: Record<string, string> = {
+  STANDARD: "Check-up",
+  INTRO: "Tanışma",
+  RETEST: "Konu tekrar testi",
+  LEVEL: "Seviyeli",
 };
 
 /** Sunucu UTC'de çalışsa da tarihler Türkiye saatiyle gösterilir. */
@@ -88,4 +137,13 @@ export function relativeDay(d: Date, now: Date): string {
 export function durationMinutes(ms: number): string {
   const dk = Math.round(ms / 60_000);
   return dk < 1 ? "1 dk'dan az" : dk + " dk";
+}
+
+/** Soru başına süre: "48 sn", "1 dk 12 sn". */
+export function secondsLabel(ms: number): string {
+  const sn = Math.round(ms / 1000);
+  if (sn < 60) return sn + " sn";
+  const dk = Math.floor(sn / 60);
+  const kalan = sn % 60;
+  return kalan ? dk + " dk " + kalan + " sn" : dk + " dk";
 }

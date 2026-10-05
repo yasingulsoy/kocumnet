@@ -33,7 +33,44 @@ const MODULLER = [
   "error-types.ts", // çeldirici hata tipleri
   "scoring.ts", // net, konu seviyesi eşikleri
   "insights.ts", // çok testli konu haritası (öğrenci panosuyla aynı eşik)
+  // Sınav sabitleri ve seviye ayarları: panelin hazırlık sayaçları (seviye 1'de
+  // kaç kazanım, seviye 2-3'te kaç soru) öğrenci uygulamasıyla aynı sayıyı
+  // kullansın. Eskiden panelde elle tutulan bir ayna vardı; hoca sayıları
+  // değiştirince sessizce eskide kalırdı. levels.ts yalnızca ./exams'ten tip
+  // alıyor, exams.ts hiçbir şey içe aktarmıyor.
+  "exams.ts",
+  "levels.ts",
+  // "Bu kazanım/soru şu sınavda sorulabilir mi" kuralı. Panelin hazırlık
+  // sayaçları öğrencinin karşılaşacağı havuzla birebir aynı saysın diye.
+  // Yalnızca Prisma'nın üretilmiş TİPLERİNİ alıyor (aşağıdaki TIP_YOLLARI).
+  "exam-scope.ts",
+  // Koçluk kuralları: haftanın başı (pazartesi, Türkiye saati) ve hafta
+  // etiketi. Panel koç notunu "bu haftanın" planına yazıyor; hafta sınırı
+  // öğrencinin gördüğüyle aynı olmalı. Yalnızca ./scoring'den tip alıyor.
+  "coaching.ts",
 ];
+
+/**
+ * "@/..." importları kopyada başka yeri gösterir, bu yüzden yasak. Tek
+ * istisna Prisma'nın ÜRETİLMİŞ TİPLERİ: panelin client'ı aynı şemadan
+ * üretiliyor, yalnızca yolu farklı. Yalnızca `import type` kabul edilir —
+ * paylaşılan modül çalışma anında veritabanı client'ına bağlanmasın.
+ */
+const TIP_YOLLARI = {
+  "@/lib/generated/prisma/client": "../generated/client",
+};
+
+function tipYollariniCevir(metin) {
+  let cikti = metin;
+  for (const [uygulama, panel] of Object.entries(TIP_YOLLARI)) {
+    const kalip = new RegExp(
+      "(import type [^;]*?from\\s+[\"'])" + uygulama.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&") + "([\"'])",
+      "g"
+    );
+    cikti = cikti.replace(kalip, "$1" + panel + "$2");
+  }
+  return cikti;
+}
 
 const kaynaklar = [
   {
@@ -60,17 +97,19 @@ const kaynaklar = [
     kaynak: resolve(APP, "lib", ad),
     hedef: resolve(ADMIN, "src/lib/checkup/shared", ad),
     donustur(metin) {
+      const cevrilmis = tipYollariniCevir(metin);
       // Kopya başka bir dizinde duruyor; "@/lib/..." orada başka yeri gösterir.
-      if (/from\s+["']@\//.test(metin)) {
+      if (/from\s+["']@\//.test(cevrilmis)) {
         throw new Error(
           `app/lib/${ad} "@/..." ile import ediyor. Paylaşılan modüller yalnızca ` +
-            `göreli ("./x") ya da paket importu kullanabilir.`
+            `göreli ("./x") ya da paket importu kullanabilir (istisna: Prisma ` +
+            `tiplerinin "import type"ı, bkz. TIP_YOLLARI).`
         );
       }
       return (
         "// ⚠️ OTOMATİK KOPYA — ELLE DÜZENLEMEYİN.\n" +
         `// Kaynak: kocumnet/app/lib/${ad} · eşitlemek için: npm run checkup:sync\n\n` +
-        metin
+        cevrilmis
       );
     },
   })),

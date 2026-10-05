@@ -1,13 +1,25 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { BookOpen, Check, ClipboardCheck, PencilLine, Play, Target, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { BookOpen, Check, ClipboardCheck, PencilLine, Play, Target, Undo2, X } from "lucide-react";
 import { konuTekrarBaslat, planIsiAction, planIsiSilAction } from "@/lib/actions/plan";
-import { Card, CardHeader } from "@/components/ui";
+import { Card, CardHeader, LinkButton } from "@/components/ui";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { cn } from "@/lib/cn";
 import type { PlanGorunumu } from "@/lib/plan";
 
 type PlanIsi = PlanGorunumu["items"][number];
+
+/** 45 → "45 dakika", 120 → "2 saat", 135 → "2 saat 15 dakika" ("~0 saat 45 dakika" yazmasın). */
+function sureMetni(dakika: number) {
+  const saat = Math.floor(dakika / 60);
+  const dk = dakika % 60;
+  if (saat === 0) return `${dk} dakika`;
+  return dk === 0 ? `${saat} saat` : `${saat} saat ${dk} dakika`;
+}
+
+/** Plandan çıkarılan iş bu kadar süre "geri al" ile geri getirilebilir. */
+const GERI_AL_MS = 6_000;
 
 const SIMGE = {
   STUDY: BookOpen,
@@ -78,13 +90,67 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
     });
   };
 
-  const sil = (id: string) => {
-    start(async () => {
-      const res = await planIsiSilAction(id);
-      if (res.ok) setItems((prev) => prev.filter((i) => i.id !== id));
-      else setHata(res.error ?? "Silinemedi.");
+  /*
+   * Çıkarma GERİ ALINABİLİR: X telefonda satırın başparmak tarafında duruyor
+   * ve tek yanlış dokunuş işi kalıcı olarak siliyordu (haftanın planı yeniden
+   * üretilemiyor). İş önce ekrandan kalkıyor; sunucuya ancak birkaç saniye
+   * sonra gidiyor. Sayfadan çıkılırsa bekleyen çıkarma hemen gönderilir.
+   */
+  const [kaldirilan, setKaldirilan] = useState<PlanIsi | null>(null);
+  const bekleyenRef = useRef<{ isi: PlanIsi; sira: number } | null>(null);
+  const zamanlayiciRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const geriKoy = (isi: PlanIsi, sira: number) =>
+    setItems((prev) => {
+      const s = prev.filter((i) => i.id !== isi.id);
+      s.splice(Math.min(sira, s.length), 0, isi);
+      return s;
     });
+
+  const kesinlestir = useCallback(() => {
+    if (zamanlayiciRef.current) clearTimeout(zamanlayiciRef.current);
+    zamanlayiciRef.current = null;
+    const b = bekleyenRef.current;
+    if (!b) return;
+    bekleyenRef.current = null;
+    setKaldirilan(null);
+    start(async () => {
+      const res = await planIsiSilAction(b.isi.id);
+      if (!res.ok) {
+        geriKoy(b.isi, b.sira);
+        setHata(res.error ?? "Silinemedi.");
+      }
+    });
+  }, []);
+
+  const sil = (id: string) => {
+    kesinlestir(); // önceki bekleyen çıkarma varsa önce onu gönder
+    const sira = items.findIndex((i) => i.id === id);
+    if (sira === -1) return;
+    setHata(null);
+    bekleyenRef.current = { isi: items[sira], sira };
+    setKaldirilan(items[sira]);
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    zamanlayiciRef.current = setTimeout(kesinlestir, GERI_AL_MS);
   };
+
+  const geriAl = () => {
+    if (zamanlayiciRef.current) clearTimeout(zamanlayiciRef.current);
+    zamanlayiciRef.current = null;
+    const b = bekleyenRef.current;
+    bekleyenRef.current = null;
+    setKaldirilan(null);
+    if (b) geriKoy(b.isi, b.sira);
+  };
+
+  useEffect(() => {
+    const bekleyen = bekleyenRef;
+    const zamanlayici = zamanlayiciRef;
+    return () => {
+      if (zamanlayici.current) clearTimeout(zamanlayici.current);
+      if (bekleyen.current) void planIsiSilAction(bekleyen.current.isi.id);
+    };
+  }, []);
 
   return (
     <Card className="border-brand/25 shadow-raised">
@@ -116,6 +182,19 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
         >
           {hata}
         </p>
+      ) : null}
+
+      {/* Bütün işler çıkarıldıysa "0/0 · haftanın işleri bitti" yazmasın. */}
+      {items.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-4 sm:px-6">
+          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">
+            <span className="font-semibold text-ink">Bu haftanın planında iş kalmadı.</span> Gelecek
+            haftanın planı, o hafta çözdüğün ilk check-up&apos;tan çıkar.
+          </p>
+          <LinkButton href="/paketler" variant="soft" size="sm" className="max-sm:w-full">
+            Testlere göz at
+          </LinkButton>
+        </div>
       ) : null}
 
       {/* Haftada en fazla iki konu olduğu için geniş ekranda yan yana:
@@ -167,6 +246,7 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                         </span>
                       ) : (
                         <input
+                          id={"plan-isi-" + i.id}
                           type="checkbox"
                           checked={i.done}
                           onChange={(e) => degistir(i.id, e.target.checked)}
@@ -175,7 +255,12 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                         />
                       )}
 
-                      <span className="min-w-0 flex-1 py-1">
+                      {/* Metne dokunmak da işaretler: 24 piksellik kutuyu
+                          telefonda tutturmak zordu. Kontrol testi işaretlenmez. */}
+                      <label
+                        htmlFor={i.verifiable ? undefined : "plan-isi-" + i.id}
+                        className={cn("min-w-0 flex-1 py-1", !i.verifiable && "cursor-pointer")}
+                      >
                         <span
                           className={cn(
                             "block truncate text-body leading-snug",
@@ -190,17 +275,14 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                             <span className="ms-1.5 text-brand">sistem doğrular</span>
                           ) : null}
                         </span>
-                      </span>
+                      </label>
 
                       {i.verifiable && !i.done && i.topicId ? (
                         <form action={konuTekrarBaslat} className="shrink-0">
                           <input type="hidden" name="topicId" value={i.topicId} />
-                          <button
-                            type="submit"
-                            className="flex min-h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-caption font-semibold text-white active:bg-brand-hover"
-                          >
-                            <Play className="size-3.5" /> Çöz
-                          </button>
+                          <SubmitButton size="sm" className="rounded-lg px-3" pendingText="Açılıyor…">
+                            <Play /> Çöz
+                          </SubmitButton>
                         </form>
                       ) : !i.verifiable ? (
                         <button
@@ -221,11 +303,36 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
         })}
       </div>
 
-      <p className="border-t border-line px-4 py-2.5 text-micro text-ink-faint sm:px-6">
-        {biten === items.length
-          ? "Haftanın işleri bitti. Sıradaki check-up'ı çözüp yeni plan alabilirsin."
-          : `Kalan iş ~${Math.floor(kalanDakika / 60)} saat ${kalanDakika % 60} dakika. Kontrol testini sen işaretleyemezsin: çözünce kendiliğinden kapanır.`}
-      </p>
+      {kaldirilan ? (
+        <div
+          role="status"
+          className="flex items-center gap-3 border-t border-line bg-surface-sunk px-4 py-2 sm:px-6"
+        >
+          <p className="min-w-0 flex-1 truncate text-caption text-ink-soft">
+            <span className="font-semibold text-ink">
+              {kisaBaslik(kaldirilan.title, kaldirilan.topicName)}
+            </span>{" "}
+            plandan çıkarıldı.
+          </p>
+          <button
+            type="button"
+            onClick={geriAl}
+            className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-caption font-semibold text-brand transition hover:bg-brand-wash"
+          >
+            <Undo2 className="size-4" aria-hidden /> Geri al
+          </button>
+        </div>
+      ) : null}
+
+      {/* Plan haftada bir kez, o haftanın ilk check-up'ından çıkıyor: "sıradaki
+          check-up'ı çöz, yeni plan al" sözü aynı hafta içinde doğru değildi. */}
+      {items.length > 0 ? (
+        <p className="border-t border-line px-4 py-2.5 text-micro text-ink-faint sm:px-6">
+          {biten === items.length
+            ? "Haftanın işleri bitti. Gelecek haftanın planı, o hafta çözdüğün ilk check-up'tan çıkar."
+            : `Kalan iş ~${sureMetni(kalanDakika)}. Kontrol testini sen işaretleyemezsin: çözünce kendiliğinden kapanır.`}
+        </p>
+      ) : null}
     </Card>
   );
 }

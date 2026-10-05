@@ -6,8 +6,8 @@ import { Card, buttonClass } from "./ui";
  * Sunucu tarafı denetim geçmediğinde sayfanın yerine çizilen kutu.
  * Hiçbir veri içermez — denetim, sayfa veritabanına gitmeden önce yapılır.
  *
- * Gerçekten çıkış yapmış biri bunu görmez: istemci düzeni onu zaten giriş
- * sayfasına yönlendiriyor. Bunu görenler ya yetkisi yetmeyen personel ya da
+ * Gerçekten çıkış yapmış biri bunu görmez: panel düzeni ((admin)/layout.tsx)
+ * onu sunucuda giriş sayfasına yönlendiriyor. Bunu görenler ya yetkisi yetmeyen personel ya da
  * çerezi bu sunucuya ulaşmayan (yapılandırma) biri — mesajlar onlar için.
  */
 export function GateNotice({
@@ -81,10 +81,8 @@ export function GateNotice({
           />
         </svg>
       </div>
-      <h1 className="mt-4 text-lg font-semibold text-ink">
-        {icerik.baslik}
-      </h1>
-      <div className="mt-2 text-sm leading-relaxed text-ink-soft">
+      <h1 className="font-display mt-4 text-h2 font-semibold text-ink">{icerik.baslik}</h1>
+      <div className="mt-2 text-body leading-relaxed text-ink-soft">
         {icerik.metin}
       </div>
       {icerik.eylem ? <div className="mt-5">{icerik.eylem}</div> : null}

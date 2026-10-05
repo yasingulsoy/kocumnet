@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowUpRight,
   FileText,
+  History,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -34,6 +35,7 @@ function nav(staff: Staff) {
     { href: "/admin/blog", label: "Blog", icon: FileText },
     ...(yonetim ? [{ href: "/admin/mesajlar", label: "Mesajlar", icon: Inbox }] : []),
     ...(yonetim ? [{ href: "/admin/personel", label: "Personel", icon: Users }] : []),
+    ...(staff.role === "admin" ? [{ href: "/admin/etkinlik", label: "Etkinlik", icon: History }] : []),
     { href: "/admin/hesabim", label: "Hesabım", icon: UserCircle },
   ];
 }
@@ -63,7 +65,8 @@ function Nav({ staff, pathname, onNavigate, unread }: { staff: Staff; pathname: 
             <span className="flex-1">{label}</span>
             {href === "/admin/mesajlar" && unread ? (
               <span className="tabular rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {unread}
+                {unread > 99 ? "99+" : unread}
+                <span className="sr-only"> okunmamış</span>
               </span>
             ) : null}
           </Link>
@@ -116,10 +119,39 @@ function Alt({ staff }: { staff: Staff }) {
 export function AdminShell({ staff, unread, children }: { staff: Staff; unread?: number; children: ReactNode }) {
   const pathname = usePathname() ?? "/admin";
   const [acik, setAcik] = useState(false);
+  const menuDugmesi = useRef<HTMLButtonElement>(null);
+  const kapatDugmesi = useRef<HTMLButtonElement>(null);
+  const actiMi = useRef(false);
 
+  /*
+   * Mobil çekmece: açıkken arka plan kaymaz, Escape kapatır, odak çekmeceye
+   * girer ve kapanınca menü düğmesine döner. Kapalıyken `inert`: eskiden
+   * ekran dışındaki bağlantılar Tab ile odaklanabiliyordu (görünmeyen odak).
+   */
   useEffect(() => {
     document.body.style.overflow = acik ? "hidden" : "";
+    if (acik) {
+      actiMi.current = true;
+      kapatDugmesi.current?.focus();
+    } else if (actiMi.current) {
+      actiMi.current = false;
+      menuDugmesi.current?.focus();
+    }
+    if (!acik) return;
+    const tus = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAcik(false);
+    };
+    // Açıkken pencere masaüstü genişliğine çıkarsa çekmece (lg:hidden) görünmez
+    // olur ama arka plan inert kalırdı: kapat.
+    const genis = window.matchMedia("(min-width: 1024px)");
+    const boyut = () => {
+      if (genis.matches) setAcik(false);
+    };
+    document.addEventListener("keydown", tus);
+    genis.addEventListener("change", boyut);
     return () => {
+      document.removeEventListener("keydown", tus);
+      genis.removeEventListener("change", boyut);
       document.body.style.overflow = "";
     };
   }, [acik]);
@@ -145,7 +177,7 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
         <Alt staff={staff} />
       </aside>
 
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
+      <header inert={acik} className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
         <Link href="/admin" aria-label="Genel bakış" className="flex items-center gap-2">
           <Wordmark className="h-[22px]" />
           <span className="rounded-md bg-surface-sunk px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
@@ -153,6 +185,7 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
           </span>
         </Link>
         <button
+          ref={menuDugmesi}
           type="button"
           onClick={() => setAcik(true)}
           aria-label="Menüyü aç"
@@ -164,10 +197,18 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
         </button>
       </header>
 
-      <div id="mobil-menu" className={cn("fixed inset-0 z-50 lg:hidden", acik ? "pointer-events-auto" : "pointer-events-none")} aria-hidden={!acik}>
+      <div
+        id="mobil-menu"
+        className={cn("fixed inset-0 z-50 lg:hidden", acik ? "pointer-events-auto" : "pointer-events-none")}
+        inert={!acik}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menü"
+      >
         <button
           type="button"
-          aria-label="Menüyü kapat"
+          tabIndex={-1}
+          aria-hidden
           onClick={() => setAcik(false)}
           className={cn("absolute inset-0 bg-brand-deep/40 backdrop-blur-[2px] transition-opacity duration-200", acik ? "opacity-100" : "opacity-0")}
         />
@@ -180,6 +221,7 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
           <div className="flex h-14 items-center justify-between border-b border-line px-4">
             <Wordmark className="h-[22px]" />
             <button
+              ref={kapatDugmesi}
               type="button"
               onClick={() => setAcik(false)}
               aria-label="Menüyü kapat"
@@ -195,7 +237,8 @@ export function AdminShell({ staff, unread, children }: { staff: Staff; unread?:
         </div>
       </div>
 
-      <main id="icerik" className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
+      {/* Çekmece açıkken arkası odaklanamaz (odak tuzağı): Tab çekmecede kalır. */}
+      <main id="icerik" inert={acik} className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
         {children}
       </main>
     </div>

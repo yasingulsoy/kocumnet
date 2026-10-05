@@ -1,5 +1,6 @@
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { konuSinavdaMi } from "@/lib/exam-scope";
 
 /**
  * Soru seçimi — MVP'de adaptif DEĞİL, katmanlı sabit uzunluk (PLAN §5).
@@ -54,11 +55,17 @@ interface PickArgs {
   userId: string | null;
   exposureCutoff: Date;
   /**
-   * Sınav kapsamı. Soru `examScopes` boşsa her sınavda çıkar; doluysa yalnızca
-   * listelediği sınavlarda. Eskiden hiç bakılmıyordu: "yalnızca AYT" diye
-   * işaretlenmiş bir türev sorusu LGS testine düşebiliyordu.
+   * Sınav kapsamı. Soru `examScopes` doluysa yalnızca listelediği sınavlarda
+   * çıkar; boşsa KONUSUNUN sınavlarında (lib/exam-scope.ts). Eskiden kapsama
+   * hiç bakılmıyordu: "yalnızca AYT" diye işaretlenmiş bir türev sorusu LGS
+   * testine düşebiliyordu.
    */
   examScope: string | null;
+  /**
+   * Kapsamı boş sorular bu sınavda geçerli mi — yani konu bu sınavda mı.
+   * Konu sabit olduğu için çağıran bir kez hesaplar.
+   */
+  bosKapsamGecerli: boolean;
 }
 
 /**
@@ -74,12 +81,15 @@ async function pick({
   userId,
   exposureCutoff,
   examScope,
+  bosKapsamGecerli,
 }: PickArgs): Promise<SelectedQuestion[]> {
   if (limit <= 0) return [];
 
-  const scopeMatches = examScope
-    ? Prisma.sql`AND (cardinality(q."examScopes") = 0 OR ${examScope}::"ExamScope" = ANY(q."examScopes"))`
-    : Prisma.empty;
+  const scopeMatches = !examScope
+    ? Prisma.empty
+    : bosKapsamGecerli
+      ? Prisma.sql`AND (cardinality(q."examScopes") = 0 OR ${examScope}::"ExamScope" = ANY(q."examScopes"))`
+      : Prisma.sql`AND ${examScope}::"ExamScope" = ANY(q."examScopes")`;
 
   const notInChosen = excludeIds.length
     ? Prisma.sql`AND q.id NOT IN (${Prisma.join(excludeIds)})`
@@ -130,6 +140,19 @@ export async function selectQuestionsForPackage(
   ]);
   const examScope: string | null = paket?.examScope ?? null;
 
+  // Paket konuları paketin sınavında olmalı; değilse kapsamı boş sorular o
+  // konudan gelmez (bugünkü katalogda böyle bir paket konusu yok).
+  const konular = examScope
+    ? await prisma.topic.findMany({
+        where: { id: { in: packageTopics.map((pt) => pt.topicId) } },
+        select: { id: true, examScope: true, examScopes: true },
+      })
+    : [];
+  const sinavdakiKonular = new Set(
+    konular.filter((k) => konuSinavdaMi(k, examScope as string)).map((k) => k.id)
+  );
+  const bosKapsam = (topicId: string) => sinavdakiKonular.has(topicId);
+
   const exposureCutoff = new Date(Date.now() - EXPOSURE_WINDOW_DAYS * 86_400_000);
   const chosen: SelectedQuestion[] = [];
   const shortfalls: SelectionResult["shortfalls"] = [];
@@ -150,6 +173,7 @@ export async function selectQuestionsForPackage(
         userId,
         exposureCutoff,
         examScope,
+        bosKapsamGecerli: bosKapsam(pt.topicId),
       });
       topicPicked.push(...rows);
     }
@@ -166,6 +190,7 @@ export async function selectQuestionsForPackage(
         userId,
         exposureCutoff,
         examScope,
+        bosKapsamGecerli: bosKapsam(pt.topicId),
       });
       topicPicked.push(...rows);
     }
@@ -183,6 +208,7 @@ export async function selectQuestionsForPackage(
         userId: null,
         exposureCutoff,
         examScope,
+        bosKapsamGecerli: bosKapsam(pt.topicId),
       });
       relaxedExposureCount += rows.length;
       topicPicked.push(...rows);
@@ -217,6 +243,17 @@ export async function selectQuestionsForTopic(
   const secilen: SelectedQuestion[] = [];
   let relaxedExposureCount = 0;
 
+  // Konu öğrencinin sınavında değilse kapsamı boş sorular gelmez; yalnızca
+  // o sınav için açıkça işaretlenmiş sorular kalır (startTopicRetest konuyu
+  // ayrıca reddeder).
+  const konu = examScope
+    ? await prisma.topic.findUnique({
+        where: { id: topicId },
+        select: { examScope: true, examScopes: true },
+      })
+    : null;
+  const bosKapsamGecerli = !examScope || (konu !== null && konuSinavdaMi(konu, examScope));
+
   for (const band of bandTargets(count)) {
     const rows = await pick({
       topicId,
@@ -227,6 +264,7 @@ export async function selectQuestionsForTopic(
       userId,
       exposureCutoff,
       examScope,
+      bosKapsamGecerli,
     });
     secilen.push(...rows);
   }
@@ -242,6 +280,7 @@ export async function selectQuestionsForTopic(
       userId,
       exposureCutoff,
       examScope,
+      bosKapsamGecerli,
     });
     secilen.push(...rows);
   }
@@ -257,6 +296,7 @@ export async function selectQuestionsForTopic(
       userId: null,
       exposureCutoff,
       examScope,
+      bosKapsamGecerli,
     });
     relaxedExposureCount += rows.length;
     secilen.push(...rows);

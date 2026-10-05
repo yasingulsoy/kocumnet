@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
-import { loadCatalog } from "@/lib/catalog";
+import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
 import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
 import { aktifPlan } from "@/lib/plan";
 import { aktifKosu } from "@/lib/level-run";
@@ -56,6 +56,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         id: true,
         expiresAt: true,
         kind: true,
+        stageLevel: true,
+        stageKind: true,
         package: { select: { name: true, questionCount: true } },
         focusTopic: { select: { name: true } },
         _count: { select: { items: true } },
@@ -86,7 +88,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         totalTimeMs: true,
         computedAt: true,
         topicBreakdown: true,
-        session: { select: { package: { select: { name: true } } } },
+        session: { select: { kind: true, package: { select: { name: true } } } },
       },
     }),
     loadCatalog(user.id, now, { scope: user.targetExam }),
@@ -111,10 +113,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     aktifKosu(user.id),
   ]);
 
-  const sonuclar: (ResultLike & { sessionId: string; packageName: string })[] = sonuclarHam.map(
-    (r) => ({
+  const sonuclar: (ResultLike & { sessionId: string; packageName: string; kontrol: boolean })[] =
+    sonuclarHam.map((r) => ({
       sessionId: r.sessionId,
       packageName: r.session.package.name,
+      kontrol: r.session.kind === "TOPIC_RETEST",
       correctCount: r.correctCount,
       wrongCount: r.wrongCount,
       blankCount: r.blankCount,
@@ -122,20 +125,23 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
       totalTimeMs: r.totalTimeMs,
       computedAt: r.computedAt,
       topicBreakdown: r.topicBreakdown as unknown as TopicBreakdown,
-    })
-  );
+    }));
 
-  const ozet = studentStats(sonuclar);
+  /*
+   * Genel başarı, eğilim ve son altı şerit yalnızca ÖLÇÜMLERDEN. 5 soruluk
+   * kontrol testi tek zayıf konuyu ölçüyor: plandaki kontrol testini çözen
+   * öğrenci "-30 puan" gibi sebepsiz bir düşüş görüyordu. Zayıf konu listesi
+   * ise hepsini topluyor (kontrol testi o konunun gerçek ölçümü).
+   */
+  const olcumler = sonuclar.filter((r) => !r.kontrol);
+  const ozet = studentStats(olcumler);
   const konular = aggregateTopics(sonuclar).filter((t) => t.level !== null);
   const zayiflar = [...konular]
     .filter((t) => t.level === "WEAK")
     .sort((a, b) => a.ratio - b.ratio)
     .slice(0, 3);
 
-  const oneriler = katalog
-    .filter((p) => !p.locked && !p.inProgress)
-    .sort((a, b) => (a.timesTaken ?? 0) - (b.timesTaken ?? 0) || Number(b.isIntro) - Number(a.isIntro))
-    .slice(0, 2);
+  const oneriler = siradakiPaketler(katalog);
 
   const ilkAd = user.name.split(" ")[0];
   const yeni = sonuclar.length === 0;
@@ -148,7 +154,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     const t = r.correctCount + r.wrongCount + r.blankCount;
     return t === 0 ? 0 : r.correctCount / t;
   };
-  const sonAlti = sonuclar.slice(0, 6).reverse();
+  const sonAlti = olcumler.slice(0, 6).reverse();
 
   return (
     <div className="animate-fade space-y-5 sm:space-y-6">
@@ -184,7 +190,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
       ) : null}
 
       {/* ── Seviyeli check-up devam ediyor ──────────────── */}
-      {seviyeliKosu ? (
+      {/* Aşama zaten açıksa aşağıdaki "yarım kalan test" kartı aynı yere
+          götürüyor; iki ayrı "Devam et" göstermiyoruz. */}
+      {seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? (
         <Card className="flex flex-wrap items-center gap-3 border-brand/25 p-4 shadow-raised sm:p-5">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
             <Layers className="size-5" />
@@ -216,7 +224,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
               <h2 className="font-display mt-1.5 text-h2 font-bold text-balance">
                 {acik.kind === "TOPIC_RETEST" && acik.focusTopic
                   ? `${acik.focusTopic.name} kontrol testi`
-                  : acik.package.name}
+                  : acik.kind === "LEVEL_STAGE"
+                    ? `${acik.stageKind === "REMEDIAL" ? "Teyit turu" : `Seviye ${acik.stageLevel ?? 1}`} · ${acik.package.name}`
+                    : acik.package.name}
               </h2>
               <p className="tabular mt-1 text-caption text-white/90">
                 {acik.items.length}/{acik._count.items} işaretli · süre{" "}
@@ -238,7 +248,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
             </LinkButton>
           </div>
         </Card>
-      ) : yeni ? (
+      ) : seviyeliKosu || (yeni && katalog.length === 0) ? null : yeni ? (
+        /* Tek sonraki adım: seviyeli koşu yarımsa onun kartı, katalog boşsa
+           alttaki boş durum; ikisi yoksa ilk test. */
         <Card className="border-brand/25 bg-brand-wash/30 p-5 shadow-raised sm:p-8">
           <p className="flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.14em] text-brand">
             <Sparkles className="size-3.5" /> İlk adım
@@ -289,7 +301,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
       ) : null}
 
       {/* ── 3. İlerleme şeridi ──────────────────────────── */}
-      {!yeni ? (
+      {olcumler.length > 0 ? (
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="font-display tabular text-num-md font-bold text-ink">

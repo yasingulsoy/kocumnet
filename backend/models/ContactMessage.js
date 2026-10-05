@@ -52,7 +52,10 @@ const ContactMessage = sequelize.define(
       allowNull: false,
       defaultValue: 'contact',
     },
-    /** new | read | archived | spam */
+    /**
+     * new | read | answered | archived | spam
+     * "Bekleyen" = new + read: henüz yanıtlanmamış ya da kapatılmamış.
+     */
     status: {
       type: DataTypes.STRING(20),
       allowNull: false,
@@ -65,6 +68,24 @@ const ContactMessage = sequelize.define(
     },
     handled_at: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    /**
+     * Yanıtlandı olarak işaretleyen ve zamanı. Mesaj sonra arşivlense de
+     * kalır: "kim, ne zaman yanıtladı" sorusu ekipte iki kişinin aynı
+     * veliye ayrı ayrı dönmesini önler.
+     */
+    answered_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    answered_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    /** Ekip içi not ("telefonla arandı, pazartesi görüşme"). Gönderen görmez. */
+    note: {
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     /** IP'nin tuzlanmış özeti (ham IP saklanmıyor). */

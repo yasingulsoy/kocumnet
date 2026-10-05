@@ -25,7 +25,19 @@ NEXT_PUBLIC_BACKEND_URL=https://api.kocum.net
 | Değişken | Set edilmezse ne olur |
 |----------|------------------------|
 | `NEXT_PUBLIC_SITE_URL` | Tüm canonical, hreflang, Open Graph, `sitemap.xml`, `llms.txt` ve JSON-LD adresleri **`http://localhost:3000`** olarak gömülür. Google localhost'u indeksler. |
-| `NEXT_PUBLIC_BACKEND_URL` | Blog yazıları çekilemez (liste boş kalır), blog görselleri yüklenmez, görüntülenme sayacı çalışmaz. |
+| `NEXT_PUBLIC_BACKEND_URL` | Blog yazıları çekilemez (liste boş kalır), blog görselleri yüklenmez, görüntülenme sayacı ve iletişim formu çalışmaz. |
+
+İsteğe bağlı (yine **build** değişkeni):
+
+```bash
+NEXT_PUBLIC_CHECKUP_URL=https://checkup.kocum.net
+```
+
+Matematik Check-up uygulamasının adresi. **Boşsa sitede check-up'a giden hiçbir
+bağlantı çıkmaz** (uygulama yayına alınmadan 404'e giden düğme durmasın diye).
+Tanımlanınca tek seferde şunlar görünür: ana sayfa hero düğmesi ("Check-up'a başla")
+ve check-up bölümü, başlıktaki marka şeridinde bağlantı (masaüstü), mobil menüde
+düğme, altbilgide hızlı bağlantı. `http(s)://` ile başlamayan değer yok sayılır.
 
 ## Site yönetimi: `kocum.net/admin`
 
@@ -38,6 +50,7 @@ bu alan adına çerezlenir.
 |----------|--------|-------|
 | `BACKEND_URL` | runtime | Sunucudan backend'e adres (yoksa `NEXT_PUBLIC_BACKEND_URL`). |
 | `AUTH_COOKIE_DOMAIN=.kocum.net` | runtime | Oturum çerezi `admin.kocum.net`'e de gitsin: iki panel arasında tek giriş. Backend'deki değerle aynı olmalı. |
+| `BFF_SHARED_SECRET` | runtime | **Önerilir.** Backend'deki değerle AYNI (en az 32 karakter). Tarayıcının gerçek IP'si imzalı (HMAC) gider; backend giriş denemesi sınırlarını kişi başına uygular. Boşsa bütün personel bu sunucunun tek IP'siyle sayılır (bir kişinin yanlış denemeleri herkesi etkileyebilir). İki sunucunun saati 5 dakikadan fazla kaymamalı. |
 | `NEXT_PUBLIC_CHECKUP_ADMIN_URL` | build | Kenar çubuğundaki "Check-up paneli" bağlantısı (varsayılan `https://admin.kocum.net`). |
 
 Davet ve parola sıfırlama e-postaları `FRONTEND_URL/admin/sifre-belirle/…` ve
@@ -63,6 +76,7 @@ SMTP_URL=smtps://resend:re_...@smtp.resend.com:465         # davet, parola sıf�
 FRONTEND_URL=https://kocum.net
 BACKEND_URL=https://api.kocum.net
 NODE_ENV=production                                       # çerezler Secure olur, CSRF aktifleşir
+BFF_SHARED_SECRET=<frontend'dekiyle aynı, ≥32 karakter>   # site yönetiminde gerçek istemci IP'si (hız sınırları)
 ```
 
 `NODE_ENV=production` olmadan CSRF devre dışı kalabilir ve auth çerezi `Secure`

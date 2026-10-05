@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getStudentSession, CheckupError } from "@/lib/checkup";
 import { MathContent } from "@/components/MathContent";
+import { EmptyState, LinkButton } from "@/components/ui";
+import { CircleAlert } from "lucide-react";
 import { CheckupRunner } from "./CheckupRunner";
 
 export const metadata: Metadata = { title: "Check-up" };
@@ -21,8 +23,28 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
     throw e;
   }
 
-  // Bitmiş testin ekranını göstermek anlamsız — sonuca gönder.
-  if (session.status !== "IN_PROGRESS") redirect(`/sonuc/${sessionId}`);
+  // Bitmiş testin ekranını göstermek anlamsız — sonuca gönder. Seviyeli
+  // check-up aşaması koçluk sonucuna değil kendi deneme sayfasına döner.
+  if (session.status !== "IN_PROGRESS") {
+    redirect(session.levelRunId ? `/seviye/${session.levelRunId}` : `/sonuc/${sessionId}`);
+  }
+
+  /*
+   * Sorusuz oturum (eskiden katalog dışı bir paketle açılabiliyordu, artık
+   * startCheckup reddediyor): sınav ekranı ilk soruyu ararken çöküyordu.
+   */
+  if (session.questions.length === 0) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-canvas px-4">
+        <EmptyState
+          icon={<CircleAlert />}
+          title="Bu testte soru yok"
+          description="Test hazırlanırken bir sorun çıkmış. Testler sayfasından yeniden başlayabilirsin."
+          action={<LinkButton href="/paketler">Testlere dön</LinkButton>}
+        />
+      </main>
+    );
+  }
 
   /*
    * Formüller BURADA, sunucuda render ediliyor ve React elemanı olarak

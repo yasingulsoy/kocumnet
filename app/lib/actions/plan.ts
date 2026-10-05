@@ -89,7 +89,12 @@ export async function konuTekrarBaslat(formData: FormData): Promise<void> {
  * (Normalde plan test bitince otomatik oluşuyor; bu, eski sonuçları olan
  * öğrencilerin de plan görebilmesi için.)
  */
-export async function planYenidenUretAction(): Promise<{ ok: boolean; error?: string }> {
+export async function planYenidenUretAction(): Promise<{
+  ok: boolean;
+  error?: string;
+  /** ZAYIF_YOK: plan gerekmiyor — ekran hata değil "gerek yok" gösterir. */
+  kod?: "SONUC_YOK" | "ZAYIF_YOK";
+}> {
   const user = await requireUser();
   const now = new Date();
 
@@ -109,7 +114,7 @@ export async function planYenidenUretAction(): Promise<{ ok: boolean; error?: st
     },
   });
   if (!son?.result) {
-    return { ok: false, error: "Plan için önce bir check-up çözmen gerekiyor." };
+    return { ok: false, error: "Plan için önce bir check-up çözmen gerekiyor.", kod: "SONUC_YOK" };
   }
 
   const { planOlustur } = await import("@/lib/plan");
@@ -122,5 +127,7 @@ export async function planYenidenUretAction(): Promise<{ ok: boolean; error?: st
   });
 
   revalidatePath("/panel");
-  return sonuc.planId ? { ok: true } : { ok: false, error: "Kanıtlı zayıf konu bulunamadı." };
+  return sonuc.planId
+    ? { ok: true }
+    : { ok: false, error: "Kanıtlı zayıf konu bulunamadı.", kod: "ZAYIF_YOK" };
 }

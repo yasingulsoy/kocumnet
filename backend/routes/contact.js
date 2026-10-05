@@ -23,7 +23,7 @@ function metin(v, enFazla) {
 }
 
 function ipOzeti(req) {
-  const ip = String(req.ip || '');
+  const ip = String(req.clientIp || req.ip || '');
   if (!ip) return null;
   // Ham IP saklamıyoruz: aynı gönderenin tekrarını görmeye yetecek kadar.
   return crypto.createHmac('sha256', JWT_SECRET).update(ip).digest('hex').slice(0, 32);

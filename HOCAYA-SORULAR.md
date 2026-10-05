@@ -221,6 +221,57 @@ kullanılacaksa `Kaynak: 2023 TYT / 12` biçiminde yazılmalı; sistemde ayrı i
 
 ---
 
+## 9. Soru kalitesi ve kontrol testi (yeni, 4 Ekim)
+
+**Madde analizi.** Panel artık her sorunun gerçek cevaplardan istatistiğini çıkarıyor ve
+şüpheli soruları işaretliyor (Check-up → Madde analizi). Eşikler şu an böyle:
+
+| Ölçü | Eşik | Anlamı |
+| --- | ---: | --- |
+| Bulgu için en az cevap | 20 | Daha azında oranlar yazı-turadan ayırt edilemez |
+| Ayırt edicilik için en az cevap | 30 | |
+| Çok zor | doğru oranı < %25 | 5 şıkta şans düzeyi %20 |
+| Ayırt etmiyor | r < 0,15 | Başarılı ve zayıf öğrenci aynı oranda doğru yapıyor |
+| Ters ayırt ediyor | r ≤ −0,05 | Zayıf öğrenciler daha çok doğru yapıyor: anahtar ya da soru hatalı olabilir |
+| İyi | r ≥ 0,30 | |
+| Çalışmayan çeldirici | seçilme < %5 | Hiç kimseyi çekmeyen şık |
+| Çok boş bırakılıyor | boş ≥ %30 | |
+| Yavaş | medyan süre > hedefin 1,3 katı | Öğrenciye "yavaş" denen eşikle aynı |
+| Zorluk etiketi uymuyor | 2 kademe fark | Etiket ile gözlenen zorluk arasında |
+
+**Soru 9.1** — Bu eşikler sizce makul mü? Özellikle "çalışmayan çeldirici" (%5) ve
+"çok zor" (%25) sınırları.
+
+> Cevap:
+
+**Soru 9.2** — Kontrol testi (5 soruluk "konu oturdu mu" testi) bittiğinde öğrenci şu
+cümlelerden birini görüyor. Önündeki "Önceki ölçümünde %33 idi (+67 puan)." kısmı
+otomatik. Dili size uygun mu, değiştirmek istediğiniz var mı?
+
+| Sonuç | Başlık | Metin |
+| --- | --- | --- |
+| Güçlü | *Konu*: 5/5 — konu oturmuş. | Çalışman karşılığını verdi; planındaki sıradaki işe geç. |
+| Orta | *Konu*: 3/5 — yol alınmış, henüz bitmedi. | Yanlışlarının çözümüne bak, aynı tipten birkaç soru daha çöz; birkaç gün sonra yeniden kontrol et. |
+| Zayıf | *Konu*: 1/5 — konu henüz oturmadı. | Bir haftada her konu oturmaz. Çözümleri incele, konu tekrarına dön; birkaç gün sonra yeniden kontrol et. |
+
+> Cevap:
+
+**Soru 9.3** — Panelde "Riskli öğrenciler" listesi var (yalnızca yönetici/müdür görür).
+Bir öğrenci şu durumlarda listeye düşüyor:
+
+| Durum | Şu anki eşik |
+| --- | --- |
+| Pasif | 14 gündür ne giriş ne test |
+| Hiç başlamadı | Kayıttan 3 gün sonra hâlâ test yok |
+| Planı yapmıyor | Geçen haftanın planında işlerin %40'ından azı bitmiş |
+| Düşüşte | Son iki testte en az 10 puan düşüş |
+
+Bu sınırlar koçluk pratiğinize uyuyor mu? Hangisinde öğrenciyi aramak istersiniz?
+
+> Cevap:
+
+---
+
 Teşekkürler. Cevaplar geldikçe `app/lib/exams.ts` (sınav sabitleri), `app/lib/levels.ts`
 (kapı eşikleri) ve kazanım listesi güncellenecek; soru dosyaları `npm run import:questions`
 ile alınacak.

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CircleCheck, ListChecks, PieChart, Users } from "lucide-react";
+import { ChevronRight, CircleCheck, ListChecks, PieChart, Plus, Users } from "lucide-react";
+import { Prisma } from "@/lib/checkup/generated/client";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { PACKAGE_STATE_LABEL, loadPackageHealth, loadTopicPool } from "@/lib/checkup/pool";
-import { GRADE_LABEL, QUESTION_STATUS_LABEL, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
+import { BLUEPRINT_KINDS, PACKAGE_STATE_LABEL, loadPackageHealth } from "@/lib/checkup/pool";
+import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
+import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import {
@@ -13,6 +15,9 @@ import {
   EmptyState,
   LinkButton,
   Meter,
+  Notice,
+  PACKAGE_STATE_TONE,
+  PageHeader,
   Pill,
   StatCard,
   buttonClass,
@@ -26,8 +31,6 @@ const TZ = "Europe/Istanbul";
 
 /** Bir tarihin Türkiye'deki takvim günü: "2026-09-21". */
 const gunAnahtari = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
-
-const STATE_TONE: Record<string, Tone> = { ready: "ok", narrow: "warn", blocked: "bad" };
 
 export default async function CheckupOverviewPage() {
   const gate = await checkStaff(ANY_STAFF);
@@ -50,7 +53,10 @@ export default async function CheckupOverviewPage() {
     suruyor,
     basari30,
     soruDurum,
-    pool,
+    cozumsuzYayinda,
+    hataTipsizYayinda,
+    health,
+    analiz,
     gunlukTest,
     gunlukKayit,
     sonuclar30,
@@ -68,7 +74,12 @@ export default async function CheckupOverviewPage() {
       _count: { _all: true },
     }),
     db.question.groupBy({ by: ["status"], _count: { _all: true } }),
-    loadTopicPool(),
+    db.question.count({ where: { status: "PUBLISHED", solution: { equals: Prisma.DbNull } } }),
+    db.question.count({
+      where: { status: "PUBLISHED", choices: { some: { isCorrect: false, errorType: null } } },
+    }),
+    loadPackageHealth(),
+    loadItemAnalysis(),
     // Günler Türkiye saatiyle kesiliyor; sunucu UTC'de çalışsa da gece 01:00'deki
     // test "dün"e yazılmasın. (Prisma DateTime = saat dilimsiz UTC.)
     db.$queryRaw<{ gun: string; n: number }[]>`
@@ -112,17 +123,16 @@ export default async function CheckupOverviewPage() {
           where: { role: "STUDENT" },
           orderBy: { createdAt: "desc" },
           take: 6,
-          select: { id: true, name: true, email: true, grade: true, createdAt: true },
+          select: { id: true, name: true, grade: true, createdAt: true },
         })
       : Promise.resolve([]),
   ]);
 
-  const health = await loadPackageHealth(pool);
-
   // ── Özet sayılar ─────────────────────────────────────────
   const soruSayisi = (s: string) => soruDurum.find((r) => r.status === s)?._count._all ?? 0;
   const yayinda = soruSayisi("PUBLISHED");
-  const hazirlikta = soruSayisi("DRAFT") + soruSayisi("REVIEW");
+  const incelemede = soruSayisi("REVIEW");
+  const taslak = soruSayisi("DRAFT");
 
   const s = basari30._sum;
   const soru30 = (s.correctCount ?? 0) + (s.wrongCount ?? 0) + (s.blankCount ?? 0);
@@ -166,41 +176,87 @@ export default async function CheckupOverviewPage() {
     .sort((a, b) => a.ratio - b.ratio)
     .slice(0, 6);
 
-  const sorunluPaket = health.filter((p) => p.status === "PUBLISHED" && p.state !== "ready");
+  // ── Paketler: yalnızca dikkat isteyenler ─────────────────
+  // Katalog paketinde "başlatılamaz" kırmızı alarm: öğrenci görüyor ama başlatamıyor.
+  // Seviyeli ve tekrar testi paketleri gizli/kilitli; onlar listede, alarmda değil.
+  const yayindakiler = health.filter((p) => p.status === "PUBLISHED");
+  const engelli = yayindakiler.filter((p) => BLUEPRINT_KINDS.includes(p.kind) && p.state === "blocked");
+  const dikkat = yayindakiler
+    .filter((p) => p.state !== "ready")
+    .sort((a, b) => (a.state === b.state ? 0 : a.state === "blocked" ? -1 : 1));
+  const katalogYayinda = yayindakiler.filter((p) => BLUEPRINT_KINDS.includes(p.kind)).length;
+
+  // ── İçerik kuyruğu: içerik ekibinin "sırada ne var" listesi ──
+  const bulgulu = analiz.filter((x) => x.bulgular.length > 0).length;
+  const anahtarSupheli = analiz.filter((x) => x.bulgular.some((b) => b.key === "ters")).length;
+  const kuyruk: { href: string; label: string; sayi: number; tone: Tone; aciklama: string }[] = [
+    {
+      href: "/checkup/sorular?durum=REVIEW",
+      label: "İncelemede",
+      sayi: incelemede,
+      tone: "warn",
+      aciklama: "Yayına almadan önce ikinci göz",
+    },
+    {
+      href: "/checkup/sorular?durum=DRAFT",
+      label: "Taslak",
+      sayi: taslak,
+      tone: "neutral",
+      aciklama: "Yazımı süren sorular",
+    },
+    {
+      href: "/checkup/sorular?durum=PUBLISHED&eksik=cozumsuz",
+      label: "Çözümü olmayan yayındaki soru",
+      sayi: cozumsuzYayinda,
+      tone: "warn",
+      aciklama: "Öğrenci yanlışının nasıl çözüldüğünü göremiyor",
+    },
+    {
+      href: "/checkup/sorular?durum=PUBLISHED&eksik=hatatipsiz",
+      label: "Hata tipi eksik çeldirici",
+      sayi: hataTipsizYayinda,
+      tone: "neutral",
+      aciklama: "Teşhis bu şıklarda çalışmıyor",
+    },
+    {
+      href: "/checkup/sorular/analiz?bulgu=hepsi",
+      label: "Madde analizinde bulgulu soru",
+      sayi: bulgulu,
+      tone: anahtarSupheli > 0 ? "bad" : "warn",
+      aciklama:
+        anahtarSupheli > 0
+          ? anahtarSupheli + " soru ters ayırt ediyor — anahtarı kontrol et"
+          : "Gerçek cevaplara göre gözden geçirilecekler",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">
-            Matematik Check-up
-          </h1>
-          <p className="mt-1 text-sm text-ink-faint">
-            Öğrenci uygulamasının özeti — kayıtlar, testler ve soru havuzu.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <LinkButton href="/checkup/sorular" variant="outline" size="sm">
-            Sorular
-          </LinkButton>
-          {yazabilir ? (
-            <LinkButton href="/checkup/sorular/yeni" size="sm">
-              Yeni soru
+      <PageHeader
+        title="Matematik Check-up"
+        description="Öğrenci uygulamasının özeti — kayıtlar, testler ve soru havuzu."
+        actions={
+          <>
+            <LinkButton href="/checkup/sorular" variant="outline" size="sm">
+              Sorular
             </LinkButton>
-          ) : null}
-        </div>
-      </div>
+            {yazabilir ? (
+              <LinkButton href="/checkup/sorular/yeni" size="sm">
+                <Plus aria-hidden /> Yeni soru
+              </LinkButton>
+            ) : null}
+          </>
+        }
+      />
 
-      {sorunluPaket.length > 0 ? (
-        <div className="rounded-xl border border-bad/40 bg-bad-wash px-4 py-3 text-sm text-bad">
-          <strong className="font-semibold">
-            Yayındaki {sorunluPaket.length} paketin havuzu yetersiz:
-          </strong>{" "}
-          {sorunluPaket.map((p) => p.name).join(", ")}.{" "}
-          <Link href="/checkup/havuz" className="font-medium underline underline-offset-2">
-            Havuz durumuna bak
+      {engelli.length > 0 ? (
+        <Notice tone="bad" title={`Yayındaki ${engelli.length} paket başlatılamıyor`}>
+          {engelli.map((p) => p.name).join(", ")}. Öğrenci katalogda görüyor ama &quot;Başla&quot;ya basınca
+          hata alır.{" "}
+          <Link href="/checkup/paketler" className="font-semibold underline underline-offset-2">
+            Paketlere bak
           </Link>
-        </div>
+        </Notice>
       ) : null}
 
       {/* ── Göstergeler ───────────────────────── */}
@@ -232,7 +288,7 @@ export default async function CheckupOverviewPage() {
         <StatCard
           label="Yayındaki soru"
           value={trNumber(yayinda)}
-          sub={hazirlikta > 0 ? hazirlikta + " taslak / incelemede" : "Bekleyen taslak yok"}
+          sub={incelemede + taslak > 0 ? incelemede + taslak + " taslak / incelemede" : "Bekleyen taslak yok"}
           icon={<ListChecks />}
           tone="warn"
         />
@@ -245,7 +301,7 @@ export default async function CheckupOverviewPage() {
             title="Son 14 gün"
             description={test14 + " tamamlanan test · " + kayit14 + " yeni kayıt"}
             action={
-              <div className="flex items-center gap-4 text-micro text-ink-faint">
+              <div className="flex items-center gap-4 text-micro text-ink-faint" aria-hidden>
                 <span className="flex items-center gap-1.5">
                   <span className="size-2.5 rounded-sm bg-brand" /> Test
                 </span>
@@ -256,7 +312,11 @@ export default async function CheckupOverviewPage() {
             }
           />
           <div className="px-5 pb-5 pt-6 sm:px-6">
-            <div className="flex h-44 items-end gap-1 sm:gap-2" role="img" aria-label={`Son 14 günde ${test14} test, ${kayit14} kayıt`}>
+            <div
+              className="flex h-44 items-end gap-1 sm:gap-2"
+              role="img"
+              aria-label={`Son 14 günde ${test14} tamamlanan test, ${kayit14} yeni kayıt`}
+            >
               {gunler.map((g) => (
                 <div
                   key={g.k}
@@ -271,7 +331,7 @@ export default async function CheckupOverviewPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex gap-1 border-t border-line pt-2 text-[10px] tabular text-ink-faint sm:gap-2">
+            <div className="mt-2 flex gap-1 border-t border-line pt-2 text-micro tabular text-ink-faint sm:gap-2" aria-hidden>
               {gunler.map((g, i) => (
                 <span key={g.k} className="min-w-0 flex-1 text-center">
                   {i % 2 === 1 || i === 13 ? g.gun : ""}
@@ -281,27 +341,27 @@ export default async function CheckupOverviewPage() {
           </div>
         </Card>
 
-        {/* ── Paketler ────────────────────────── */}
+        {/* ── İçerik kuyruğu ──────────────────── */}
         <Card>
-          <CardHeader
-            title="Paketler"
-            description="Havuzu yetmeyen paket öğrenciye açılmaz."
-            action={
-              <Link href="/checkup/paketler" className="text-caption font-medium text-brand hover:text-brand-hover">
-                Yönet
-              </Link>
-            }
-          />
+          <CardHeader title="İçerik kuyruğu" description="Soru havuzunda sırada ne var — her satır süzülmüş listeye açılır." />
           <ul className="divide-y divide-line">
-            {health.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{p.name}</p>
-                  <p className="text-micro text-ink-faint">
-                    {p.examScope} · {QUESTION_STATUS_LABEL[p.status]} · {p.isFree ? "ücretsiz" : "ücretli"}
-                  </p>
-                </div>
-                <Pill tone={STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
+            {kuyruk.map((k) => (
+              <li key={k.href}>
+                <Link
+                  href={k.href}
+                  className="group flex items-center gap-3 px-5 py-3 transition hover:bg-surface-hover sm:px-6"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-caption font-medium text-ink group-hover:text-brand">
+                      {k.label}
+                    </span>
+                    <span className="block truncate text-micro text-ink-faint">{k.aciklama}</span>
+                  </span>
+                  <Pill tone={k.sayi > 0 ? k.tone : "neutral"} className="tabular">
+                    {trNumber(k.sayi)}
+                  </Pill>
+                  <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-muted" />
+                </Link>
               </li>
             ))}
           </ul>
@@ -309,6 +369,47 @@ export default async function CheckupOverviewPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
+        {/* ── Paketler ────────────────────────── */}
+        <Card>
+          <CardHeader
+            title="Paketler"
+            description={katalogYayinda + " katalog paketi yayında. Dikkat isteyenler:"}
+            action={
+              <Link href="/checkup/paketler" className="text-caption font-medium text-brand hover:text-brand-hover">
+                Yönet
+              </Link>
+            }
+          />
+          {dikkat.length === 0 ? (
+            <EmptyState
+              title="Yayındaki bütün paketler başlatılabilir"
+              description="Her konuda ihtiyacın en az iki katı yayında soru var."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {dikkat.slice(0, 6).map((p) => (
+                <li key={p.id} className="flex items-start justify-between gap-3 px-5 py-3 sm:px-6">
+                  <div className="min-w-0">
+                    <p className="truncate text-caption font-medium text-ink">{p.name}</p>
+                    <p className="line-clamp-2 text-micro text-ink-faint">
+                      {examLabel(p.examScope)} · {p.summary}
+                    </p>
+                  </div>
+                  <Pill tone={PACKAGE_STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
+                </li>
+              ))}
+              {dikkat.length > 6 ? (
+                <li className="px-5 py-2.5 text-micro text-ink-faint sm:px-6">
+                  ve {dikkat.length - 6} paket daha —{" "}
+                  <Link href="/checkup/paketler" className="font-medium text-brand hover:text-brand-hover">
+                    tümü
+                  </Link>
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </Card>
+
         {/* ── Zorlanılan konular ──────────────── */}
         <Card>
           <CardHeader
@@ -324,11 +425,10 @@ export default async function CheckupOverviewPage() {
             <ul className="space-y-4 px-5 py-5 sm:px-6">
               {zorKonular.map((k) => (
                 <li key={k.name}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-caption">
                     <span className="truncate font-medium text-ink-soft">{k.name}</span>
                     <span className="shrink-0 tabular text-ink-faint">
-                      <strong className="font-semibold text-ink">{percent(k.ratio)}</strong>{" "}
-                      · {k.correct}/{k.asked}
+                      <strong className="font-semibold text-ink">{percent(k.ratio)}</strong> · {k.correct}/{k.asked}
                     </span>
                   </div>
                   <Meter ratio={k.ratio} tone={k.ratio >= 0.75 ? "ok" : k.ratio >= 0.45 ? "warn" : "bad"} />
@@ -337,9 +437,11 @@ export default async function CheckupOverviewPage() {
             </ul>
           )}
         </Card>
+      </div>
 
-        {/* ── Son testler (kişisel veri) ──────── */}
-        {kisisel ? (
+      {kisisel ? (
+        <div className="grid gap-6 xl:grid-cols-2">
+          {/* ── Son testler (kişisel veri) ──────── */}
           <Card>
             <CardHeader
               title="Son tamamlanan testler"
@@ -362,7 +464,7 @@ export default async function CheckupOverviewPage() {
                       <div className="min-w-0 flex-1">
                         <Link
                           href={"/checkup/ogrenciler/" + t.user.id}
-                          className="block truncate text-sm font-medium text-ink hover:text-brand"
+                          className="block truncate text-caption font-medium text-ink hover:text-brand"
                         >
                           {t.user.name}
                         </Link>
@@ -373,7 +475,7 @@ export default async function CheckupOverviewPage() {
                       </div>
                       {r ? (
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-semibold tabular text-ink">
+                          <p className="text-caption font-semibold tabular text-ink">
                             {trNumber(Number(r.netScore), 2)} net
                           </p>
                           <p className="text-micro tabular text-ink-faint">
@@ -388,45 +490,45 @@ export default async function CheckupOverviewPage() {
               </ul>
             )}
           </Card>
-        ) : null}
-      </div>
 
-      {kisisel ? (
-        <Card>
-          <CardHeader
-            title="Son kayıtlar"
-            action={
-              <Link href="/checkup/ogrenciler" className={buttonClass("outline", "xs")}>
-                Tümü
-              </Link>
-            }
-          />
-          {sonKayitlar.length === 0 ? (
-            <EmptyState title="Henüz kayıtlı öğrenci yok" />
-          ) : (
-            <ul className="grid divide-y divide-line sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
-              {sonKayitlar.map((u) => (
-                <li key={u.id}>
-                  <Link
-                    href={"/checkup/ogrenciler/" + u.id}
-                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-hover sm:px-6"
-                  >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-micro font-semibold text-brand">
-                      {u.name.trim().charAt(0).toLocaleUpperCase("tr-TR")}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-ink">{u.name}</span>
-                      <span className="block truncate text-micro text-ink-faint">
-                        {u.grade ? GRADE_LABEL[u.grade] + " · " : ""}
-                        {relativeDay(u.createdAt, now)}
+          <Card>
+            <CardHeader
+              title="Son kayıtlar"
+              action={
+                <Link href="/checkup/ogrenciler" className={buttonClass("outline", "xs")}>
+                  Tümü
+                </Link>
+              }
+            />
+            {sonKayitlar.length === 0 ? (
+              <EmptyState title="Henüz kayıtlı öğrenci yok" />
+            ) : (
+              <ul className="divide-y divide-line">
+                {sonKayitlar.map((u) => (
+                  <li key={u.id}>
+                    <Link
+                      href={"/checkup/ogrenciler/" + u.id}
+                      className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-hover sm:px-6"
+                    >
+                      <span
+                        aria-hidden
+                        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-micro font-semibold text-brand"
+                      >
+                        {u.name.trim().charAt(0).toLocaleUpperCase("tr-TR")}
                       </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+                      <span className="min-w-0">
+                        <span className="block truncate text-caption font-medium text-ink">{u.name}</span>
+                        <span className="block truncate text-micro text-ink-faint">
+                          {[gradeLabel(u.grade), relativeDay(u.createdAt, now)].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
       ) : null}
     </div>
   );

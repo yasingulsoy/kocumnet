@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, EmptyState, Forbidden, Notice, PageHeader, Pill, relative } from "@/components/admin/ui";
 import { InviteForm } from "@/components/admin/StaffForms";
+import { StaffStatusPill } from "@/components/admin/StaffStatusPill";
 import { requireStaff, staffDurumu } from "@/lib/admin/auth";
 import { listStaff } from "@/lib/admin/data";
 import { MANAGE_ROLES, ROLE_LABEL, staffName } from "@/lib/admin/types";
@@ -9,7 +10,7 @@ import { MANAGE_ROLES, ROLE_LABEL, staffName } from "@/lib/admin/types";
 export const metadata: Metadata = { title: "Personel" };
 
 export default async function PersonelPage({ searchParams }: PageProps<"/admin/personel">) {
-  const { staff, allowed } = await requireStaff(MANAGE_ROLES);
+  const { staff, allowed } = await requireStaff(MANAGE_ROLES, "/admin/personel");
   if (!allowed) return <Forbidden roles="Yönetici, Müdür" />;
   const d = await staffDurumu();
   const mailAcik = d.kind === "ok" && d.mail;
@@ -50,7 +51,7 @@ export default async function PersonelPage({ searchParams }: PageProps<"/admin/p
                       </td>
                       <td><Pill tone={u.role === "admin" ? "brand" : "neutral"}>{ROLE_LABEL[u.role]}</Pill></td>
                       <td>
-                        {!u.is_active ? <Pill tone="bad">Pasif</Pill> : !u.has_password ? <Pill tone="warn">Davet bekliyor</Pill> : <Pill tone="ok">Aktif</Pill>}
+                        <StaffStatusPill user={u} />
                       </td>
                       <td className="whitespace-nowrap text-ink-faint">{u.last_login ? relative(u.last_login) : "hiç girmedi"}</td>
                     </tr>

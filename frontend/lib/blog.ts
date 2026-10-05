@@ -19,6 +19,11 @@ export interface BlogPost {
   /** Yalnızca detay yanıtında dolu gelir; liste yanıtında yok. */
   content?: string | null;
   image: string | null;
+  /**
+   * Kapak görselinin açıklaması (site yönetiminde yazılır). Eski backend'de
+   * alan hiç gelmeyebilir; boşsa her yer bugünkü davranışına düşer.
+   */
+  image_alt?: string | null;
   tags: string[] | null;
   published_at: string | null;
   created_at: string;
@@ -26,12 +31,23 @@ export interface BlogPost {
   view_count: number | null;
   meta_title: string | null;
   meta_description: string | null;
+  /**
+   * Yazının dili ("tr" | "en" | "ar"). Slug bütün dillerde TEKİL olduğu için
+   * bir yazının tek doğru adresi vardır: bu dilin blog yolu.
+   */
+  locale?: string | null;
   /** Liste yanıtında içerik gönderilmiyor, uzunluğu gönderiliyor. */
   content_length?: number | null;
   author?: {
     first_name: string | null;
     last_name: string | null;
   } | null;
+}
+
+/** Kapak açıklaması: doluysa o, boşsa verilen yedek (kartta "", yazıda başlık). */
+export function coverAlt(post: BlogPost, yedek: string): string {
+  const alt = typeof post.image_alt === "string" ? post.image_alt.trim() : "";
+  return alt || yedek;
 }
 
 /** Yazının yayın tarihi — yayınlanmadıysa oluşturulma tarihine düşer. */
@@ -70,4 +86,23 @@ export function readingMinutes(post: BlogPost): number {
 export function authorName(post: BlogPost): string | null {
   const ad = [post.author?.first_name, post.author?.last_name].filter(Boolean).join(" ").trim();
   return ad.length > 0 ? ad : null;
+}
+
+/**
+ * "İlgili yazılar": aynı etiketi taşıyanlar önce, eşitlikte en yenisi.
+ *
+ * Eskiden yalnızca son üç yazı gösteriliyordu — TYT matematik yazısının
+ * altında beslenme yazısı çıkabiliyordu. Etiket yoksa davranış aynı kalır.
+ */
+export function relatedPosts(current: BlogPost, candidates: BlogPost[], count = 3): BlogPost[] {
+  const etiketler = new Set((current.tags ?? []).map((t) => t.toLocaleLowerCase("tr")));
+  const ortak = (p: BlogPost) =>
+    (p.tags ?? []).filter((t) => etiketler.has(t.toLocaleLowerCase("tr"))).length;
+
+  return candidates
+    .filter((p) => p.id !== current.id)
+    .map((p) => ({ p, puan: ortak(p), zaman: new Date(postDate(p)).getTime() || 0 }))
+    .sort((a, b) => b.puan - a.puan || b.zaman - a.zaman)
+    .slice(0, count)
+    .map(({ p }) => p);
 }

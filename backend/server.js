@@ -8,6 +8,8 @@ const { sequelize, testConnection, syncDatabase, closeConnection } = require('./
 const { issueCsrfToken, csrfProtection } = require('./middleware/csrf');
 const { apiLimiter } = require('./middleware/rateLimits');
 const { requestLogger } = require('./middleware/requestLogger');
+const { clientIp, BFF_AKTIF } = require('./middleware/clientIp');
+const { eskiDenetimKayitlariniSil } = require('./utils/audit');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,6 +56,13 @@ app.use(
 );
 
 app.use(requestLogger);
+// Gerçek istemci IP'si (site yönetimi BFF'i imzalayıp gönderir); hız
+// sınırlarından ÖNCE.
+app.use(clientIp);
+// Çerezler hız sınırından önce: genel sınır, oturumu olan personeli IP'ye
+// göre değil kendi hesabıyla sayıyor (middleware/rateLimits.js). Çerez
+// ayrıştırma ucuz; gövde değil.
+app.use(cookieParser());
 // Hız sınırı gövde ayrıştırmadan ÖNCE: eskiden 10 MB'lık JSON, sınır
 // devreye girmeden önce okunup ayrıştırılıyordu.
 app.use('/api', apiLimiter);
@@ -61,7 +70,6 @@ app.use(express.json({ limit: '10mb' }));
 // Eskiden varsayılan 100 kb'da kalıyordu; JSON ile arasındaki uçurum
 // "aynı veri form olarak gelince neden reddediliyor" hatalarına yol açar.
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(cookieParser());
 
 app.use(
   '/uploads',
@@ -98,20 +106,35 @@ app.use('/api/blogs', require('./routes/blogs'));
 app.use('/api/contact', require('./routes/contact'));
 
 app.use((_req, res) => {
-  res.status(404).json({ success: false, error: 'Endpoint bulunamadı' });
+  res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Endpoint bulunamadı' });
 });
+
+/**
+ * Tek hata biçimi: { success: false, code, error } (5xx'te + requestId).
+ * body-parser hataları eskiden kütüphanenin İngilizce metniyle dönüyordu
+ * ("request entity too large", "Unexpected token … in JSON") — panel bunu
+ * kullanıcıya olduğu gibi gösteriyordu.
+ */
+const GOVDE_HATALARI = {
+  'entity.too.large': { code: 'PAYLOAD_TOO_LARGE', error: 'Gönderilen veri çok büyük (en fazla 10 MB). Görselleri küçültüp tekrar dene.' },
+  'entity.parse.failed': { code: 'INVALID_JSON', error: 'İstek gövdesi geçerli JSON değil.' },
+  'encoding.unsupported': { code: 'UNSUPPORTED_ENCODING', error: 'Desteklenmeyen karakter kodlaması.' },
+};
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
   const durum = Number(err.status || err.statusCode) || 500;
   if (durum >= 500) {
-    console.error('Sunucu hatası:', req.method, req.originalUrl, '—', err);
+    console.error(`Sunucu hatası [${req.id}]:`, req.method, req.originalUrl, '—', err);
+    return res.status(durum).json({ success: false, code: 'SERVER_ERROR', error: 'Sunucu hatası', requestId: req.id });
   }
+  const bilinen = GOVDE_HATALARI[err.type];
   res.status(durum).json({
     success: false,
+    code: bilinen ? bilinen.code : 'BAD_REQUEST',
     // İstemciye yalnızca bizim yazdığımız mesajlar gider; beklenmeyen
     // hataların metni yığın/kütüphane ayrıntısı sızdırabilir.
-    error: durum >= 500 ? 'Sunucu hatası' : err.expose ? err.message : 'Geçersiz istek',
+    error: bilinen ? bilinen.error : err.expose ? err.message : 'Geçersiz istek',
   });
 });
 
@@ -120,8 +143,12 @@ let server;
 async function start() {
   await testConnection();
   await syncDatabase();
+  // Denetim kayıtları 365 gün tutulur; eskiler açılışta ve günde bir silinir.
+  await eskiDenetimKayitlariniSil();
+  setInterval(eskiDenetimKayitlariniSil, 24 * 60 * 60 * 1000).unref();
   server = app.listen(PORT, () => {
     console.log(`🚀 Kocumnet API http://127.0.0.1:${PORT}  (${IS_PRODUCTION ? 'üretim' : 'geliştirme'})`);
+    console.log(`   Site yönetimi istemci IP'si (BFF_SHARED_SECRET): ${BFF_AKTIF ? 'açık' : 'kapalı — sunucu IP\'siyle sayılıyor'}`);
   });
 }
 

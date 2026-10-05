@@ -29,10 +29,35 @@ export const BACKEND_URL = getBackendUrl();
  */
 export const PUBLIC_BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
 
+export interface BlogPagination {
+  page: number;
+  limit: number;
+  total: number;
+  /** En az 1 (hiç yazı yokken de "1 sayfa"). */
+  totalPages: number;
+}
+
 interface BlogListResponse {
   success: boolean;
   data: BlogPost[];
-  pagination: { page: number; limit: number; total: number; pages: number } | null;
+  pagination: BlogPagination | null;
+}
+
+/**
+ * Backend'in sayfalama nesnesini doğrular. Backend `totalPages` döndürüyor;
+ * eski tip `pages` bekliyordu ve alan hep undefined geliyordu (kullanılmadığı
+ * için fark edilmemişti). İkisini de kabul edip yoksa toplamdan hesaplıyoruz.
+ */
+function sayfalamayiCoz(ham: unknown, istenenLimit: number): BlogPagination | null {
+  if (!ham || typeof ham !== "object") return null;
+  const p = ham as Record<string, unknown>;
+  const sayi = (v: unknown) => (typeof v === "number" ? v : Number.parseInt(String(v ?? ""), 10));
+  const total = sayi(p.total);
+  if (!Number.isFinite(total) || total < 0) return null;
+  const limit = sayi(p.limit) || istenenLimit;
+  const page = sayi(p.page) || 1;
+  const totalPages = sayi(p.totalPages) || sayi(p.pages) || Math.ceil(total / Math.max(1, limit));
+  return { page, limit, total, totalPages: Math.max(1, totalPages) };
 }
 
 export async function fetchBlogs(params?: {
@@ -40,6 +65,8 @@ export async function fetchBlogs(params?: {
   limit?: number;
   /** Verilirse yalnızca o dildeki yazılar döner (backend ?locale=). */
   locale?: string;
+  /** Önbellek süresi (sn). Sayfalar 60; sitemap saatlik yeter. */
+  revalidate?: number;
 }): Promise<BlogListResponse> {
   const searchParams = new URLSearchParams();
   if (params?.page) searchParams.set("page", String(params.page));
@@ -48,14 +75,14 @@ export async function fetchBlogs(params?: {
 
   const url = `${BACKEND_URL}/api/blogs?${searchParams.toString()}`;
   try {
-    const res = await fetch(url, { next: { revalidate: 60 } });
+    const res = await fetch(url, { next: { revalidate: params?.revalidate ?? 60 } });
     if (!res.ok) return { success: false, data: [], pagination: null };
-    const json = (await res.json()) as Partial<BlogListResponse>;
+    const json = (await res.json()) as { success?: unknown; data?: unknown; pagination?: unknown };
     // Backend beklenmedik bir şey dönerse sayfa çökmesin.
     return {
       success: Boolean(json.success),
-      data: Array.isArray(json.data) ? json.data : [],
-      pagination: json.pagination ?? null,
+      data: Array.isArray(json.data) ? (json.data as BlogPost[]) : [],
+      pagination: sayfalamayiCoz(json.pagination, params?.limit ?? 50),
     };
   } catch {
     return { success: false, data: [], pagination: null };

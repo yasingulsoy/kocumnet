@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardList, Layers, Lock, Timer } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,8 @@ import { aktifKosu } from "@/lib/level-run";
 import { ayarGetir, type Seviye } from "@/lib/levels";
 import { EXAMS, examShort, isExamScope } from "@/lib/exams";
 import { seviyeliBaslatAction } from "@/lib/actions/levels";
-import { Alert, Badge, Button, Card, CardHeader, LinkButton, PageHeader } from "@/components/ui";
+import { Alert, Badge, Card, CardHeader, LinkButton, PageHeader } from "@/components/ui";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { checkPackageAccess } from "@/lib/entitlements";
 
 export const metadata: Metadata = { title: "Seviyeli check-up" };
@@ -144,11 +146,11 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
           </p>
           <form action={seviyeliBaslatAction} className="mt-5">
             <input type="hidden" name="examScope" value={sinav} />
-            <Button type="submit" variant="white" size="lg">
+            <SubmitButton variant="white" size="lg" className="max-sm:w-full">
               <ClipboardList /> Seviye 1&apos;i başlat <ArrowRight />
-            </Button>
+            </SubmitButton>
           </form>
-          <p className="mt-3 flex items-center gap-1.5 text-micro text-white/60">
+          <p className="mt-3 flex items-center gap-1.5 text-micro text-white/85">
             <Timer className="size-3.5" /> Süre başlat dediğin anda işlemeye başlar.
           </p>
         </Card>
@@ -161,7 +163,7 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
           <ul className="divide-y divide-line border-t border-line">
             {gecmis.map((g) => (
               <li key={g.id}>
-                <a
+                <Link
                   href={`/seviye/${g.id}`}
                   className="flex min-h-14 items-center gap-3 px-4 py-3 transition hover:bg-surface-hover sm:px-6"
                 >
@@ -180,7 +182,7 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
                       timeZone: "Europe/Istanbul",
                     })}
                   </span>
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

@@ -1,18 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { changePasswordAction } from "@/lib/admin/actions";
-import type { FormState } from "@/lib/admin/types";
 import { Button, Field, INPUT_CLASS, Notice } from "./ui";
-
-const initial: FormState = {};
+import { useFormAction } from "./useFormAction";
 
 export function PasswordForm() {
-  const [state, action, pending] = useActionState(changePasswordAction, initial);
+  // Başarıda alanlar temizlenir; hatada (ör. "mevcut parola hatalı") yeni parola silinmez.
+  const { state, pending, formProps } = useFormAction(changePasswordAction, { sifirlaBasarida: true });
 
   return (
-    <form action={action} className="space-y-4" key={state.ok ? "sifirla" : "form"}>
+    <form {...formProps} className="space-y-4">
       {state.error ? <Notice>{state.error}</Notice> : null}
       {state.ok ? <Notice tone="ok">{state.message}</Notice> : null}
       <Field label="Mevcut parola">

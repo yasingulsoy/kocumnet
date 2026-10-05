@@ -6,7 +6,12 @@ import { z } from "zod";
 import { Prisma } from "@/lib/checkup/generated/client";
 import { db } from "@/lib/checkup/db";
 import { CONTENT_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
-import { isQuestionStatus } from "@/lib/checkup/format";
+import { EXAM_LABEL, EXAM_SCOPES, isExamScope, isQuestionStatus } from "@/lib/checkup/format";
+import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
+import { onerilenZorluk } from "@/lib/checkup/item-flags";
+import { DONEM_SECENEK } from "@/lib/checkup/item-list";
+import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
+import { konuSinavdaMi } from "@/lib/checkup/shared/exam-scope";
 import { ERROR_TYPES } from "@/lib/checkup/shared/error-types";
 import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import {
@@ -42,6 +47,11 @@ const schema = z.object({
   correctIndex: z.coerce.number().int().min(0).max(4),
   choices: z.array(z.string().trim()).min(4, "En az 4 şık gerekli.").max(5),
   errorTypes: z.array(z.string().optional()),
+  /**
+   * Hedef sınav (Question.examScopes). Boş = konusunun geçtiği her sınavda —
+   * normal durum. Yalnızca kısıtlama gerekiyorsa dolu (SORU-SABLONU "Hedef Sınav").
+   */
+  examScopes: z.array(z.enum(EXAM_SCOPES, { message: "Geçersiz sınav." })).max(EXAM_SCOPES.length),
 });
 
 type QuestionInput = z.infer<typeof schema>;
@@ -53,8 +63,8 @@ function readForm(formData: FormData) {
 
   for (let i = 0; i < 5; i++) {
     const value = String(formData.get("choice_" + i) ?? "").trim();
-    // Boş bırakılan son şık 4 şıklı soru demek. Aradaki boşluk kabul edilmez:
-    // etiketler kayar ve A, B, D gibi bir dizi oluşur.
+    // Boş bırakılan son şık 4 şıklı soru demek. Aradaki boşluk burada
+    // sıkıştırılıyor; o yüzden eylemler önce aradakiBosSik() ile reddediyor.
     if (value) {
       choices.push(value);
       errorTypes.push(String(formData.get("errorType_" + i) ?? "") || undefined);
@@ -74,6 +84,32 @@ function readForm(formData: FormData) {
     correctIndex: formData.get("correctIndex"),
     choices,
     errorTypes,
+    examScopes: [...new Set(formData.getAll("examScopes").map(String))],
+  };
+}
+
+/**
+ * Dolu bir şıktan ÖNCE boş şık var mı (ör. C boş, D ve E dolu)?
+ *
+ * readForm boş şıkları atıp sıkıştırıyor, `correctIndex` ise formdaki
+ * konumu taşıyor. Ara boşluk kabul edilseydi D'nin metni "C" olur ve doğru
+ * işaretlenen D yerine E'nin metni doğru sayılırdı: cevap anahtarı SESSİZCE
+ * kayardı, validateChoices de yakalamazdı (tek doğru, sıralı etiket).
+ */
+function aradakiBosSik(formData: FormData): string | null {
+  const dolu = Array.from({ length: 5 }, (_, i) => String(formData.get("choice_" + i) ?? "").trim() !== "");
+  const sonDolu = dolu.lastIndexOf(true);
+  const bos = dolu.findIndex((d, i) => !d && i < sonDolu);
+  return bos === -1 ? null : CHOICE_LABELS[bos];
+}
+
+function bosSikHatasi(harf: string): QuestionFormState {
+  return {
+    fields: {
+      choices:
+        harf + " şıkkı boş ama sonrasında dolu şık var. Boş şık yalnızca sonda olabilir " +
+        "(4 şıklı soruda E boş kalır); yoksa etiketler kayar ve doğru cevap başka şıkka geçer.",
+    },
   };
 }
 
@@ -176,15 +212,36 @@ async function levelFieldsError(input: { level: string; objectiveId: string; top
   return null;
 }
 
-async function topicIsLeaf(topicId: string): Promise<boolean> {
-  // Soru yalnızca yaprak konuya bağlanır: üst konuya bağlanan soru hiçbir
-  // pakette seçilemez (seçim tam eşleşme yapıyor). Form zaten yalnızca
-  // yaprakları listeliyor; bu denetim elle kurcalanmış isteğe karşı.
+/**
+ * Konu ve hedef sınav denetimi.
+ *
+ * Soru yalnızca yaprak konuya bağlanır: üst konuya bağlanan soru hiçbir
+ * pakette seçilemez (seçim tam eşleşme yapıyor). Form zaten yalnızca
+ * yaprakları listeliyor; bu denetim elle kurcalanmış isteğe karşı.
+ *
+ * Hedef sınav konunun sınavlarından biri olmalı: TYT'ye ait bir konuda
+ * "yalnızca LGS" işaretli soru hiçbir teste giremez — sessizce ölü kalır.
+ */
+async function topicFieldsError(topicId: string, examScopes: string[]): Promise<Record<string, string> | null> {
   const t = await db.topic.findUnique({
     where: { id: topicId },
-    select: { _count: { select: { children: true } } },
+    select: { examScope: true, examScopes: true, _count: { select: { children: true } } },
   });
-  return t !== null && t._count.children === 0;
+  if (!t || t._count.children > 0) return { topicId: "Geçersiz konu." };
+
+  // Öğrenci uygulamasıyla aynı kural (shared/exam-scope.ts).
+  const disarida = examScopes.filter((s) => !konuSinavdaMi(t, s));
+  const konuSinavlari: string[] = t.examScopes.length ? t.examScopes : [t.examScope];
+  if (disarida.length) {
+    return {
+      examScopes:
+        disarida.map((s) => EXAM_LABEL[s] ?? s).join(", ") +
+        " bu konunun sınavlarından değil (konu: " +
+        konuSinavlari.map((s) => EXAM_LABEL[s] ?? s).join(", ") +
+        ").",
+    };
+  }
+  return null;
 }
 
 function revalidateQuestionScreens() {
@@ -203,21 +260,25 @@ export async function createQuestionAction(
   const auth = await staffForAction(CONTENT_ROLES);
   if (!auth.ok) return { error: auth.error };
 
+  const bosluk = aradakiBosSik(formData);
+  if (bosluk) return bosSikHatasi(bosluk);
+
   const parsed = schema.safeParse(readForm(formData));
   if (!parsed.success) return { fields: fieldErrors(parsed.error) };
 
   const built = buildQuestion(parsed.data);
   if ("errors" in built) return { fields: built.errors };
 
-  if (!(await topicIsLeaf(parsed.data.topicId))) {
-    return { fields: { topicId: "Geçersiz konu." } };
-  }
+  const konuHatasi = await topicFieldsError(parsed.data.topicId, parsed.data.examScopes);
+  if (konuHatasi) return { fields: konuHatasi };
   const seviyeHatasi = await levelFieldsError(parsed.data);
   if (seviyeHatasi) return { fields: seviyeHatasi };
 
   const damga = staffStamp(auth.staff);
+  let yeniId: string;
   try {
-    await db.question.create({
+    const yeni = await db.question.create({
+      select: { id: true },
       data: {
         topicId: parsed.data.topicId,
         stem: built.data.stem,
@@ -230,11 +291,13 @@ export async function createQuestionAction(
         sourceRef: parsed.data.sourceRef,
         level: parsed.data.level || null,
         objectiveId: parsed.data.objectiveId || null,
+        examScopes: parsed.data.examScopes,
         createdByStaff: damga,
         updatedByStaff: damga,
         choices: { create: choiceRows(built.data.drafts, built.data.errorTypes) },
       },
     });
+    yeniId = yeni.id;
   } catch (e) {
     if (isDuplicate(e)) {
       return { fields: { stem: "Bu soru zaten kayıtlı (aynı metin). Havuzda arayın." } };
@@ -243,9 +306,31 @@ export async function createQuestionAction(
   }
 
   revalidateQuestionScreens();
+
+  const geri = listeSorgusu(String(formData.get("geri") ?? ""));
+
   // redirect() try/catch DIŞINDA olmalı: fırlattığı özel hata yakalanırsa
   // yönlendirme hiç gerçekleşmez.
-  redirect("/checkup/sorular?kaydedildi=1");
+  if (formData.get("sonra") === "yeni") {
+    /*
+     * "Kaydet ve yenisini ekle": yazar aynı konudan art arda soru giriyor.
+     * Sınıflandırma (konu, seviye, kazanım, zorluk, durum, süre) taşınır;
+     * metin, şıklar, çözüm ve kaynak boş gelir.
+     */
+    const u = new URLSearchParams({
+      kaydedildi: yeniId,
+      konuId: parsed.data.topicId,
+      zorluk: String(parsed.data.difficulty),
+      durum: parsed.data.status,
+      sure: String(parsed.data.targetTimeSeconds),
+    });
+    if (parsed.data.level) u.set("seviye", parsed.data.level);
+    if (parsed.data.objectiveId) u.set("kazanimId", parsed.data.objectiveId);
+    if (parsed.data.examScopes.length) u.set("hedef", parsed.data.examScopes.join(","));
+    if (geri) u.set("geri", geri);
+    redirect("/checkup/sorular/yeni?" + u.toString());
+  }
+  redirect(listeAdresi(geri, { kaydedildi: yeniId }));
 }
 
 export async function updateQuestionAction(
@@ -258,15 +343,17 @@ export async function updateQuestionAction(
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Soru kimliği eksik." };
 
+  const bosluk = aradakiBosSik(formData);
+  if (bosluk) return bosSikHatasi(bosluk);
+
   const parsed = schema.safeParse(readForm(formData));
   if (!parsed.success) return { fields: fieldErrors(parsed.error) };
 
   const built = buildQuestion(parsed.data);
   if ("errors" in built) return { fields: built.errors };
 
-  if (!(await topicIsLeaf(parsed.data.topicId))) {
-    return { fields: { topicId: "Geçersiz konu." } };
-  }
+  const konuHatasi = await topicFieldsError(parsed.data.topicId, parsed.data.examScopes);
+  if (konuHatasi) return { fields: konuHatasi };
   const seviyeHatasi = await levelFieldsError(parsed.data);
   if (seviyeHatasi) return { fields: seviyeHatasi };
 
@@ -348,6 +435,7 @@ export async function updateQuestionAction(
           sourceRef: parsed.data.sourceRef ?? null,
           level: parsed.data.level || null,
           objectiveId: parsed.data.objectiveId || null,
+          examScopes: parsed.data.examScopes,
           updatedByStaff: staffStamp(auth.staff),
           version: anahtarDegisti ? mevcut.version + 1 : mevcut.version,
         },
@@ -366,7 +454,15 @@ export async function updateQuestionAction(
 
   revalidateQuestionScreens();
   revalidatePath("/checkup/sorular/" + id);
-  redirect("/checkup/sorular?guncellendi=1");
+  const geri = listeSorgusu(String(formData.get("geri") ?? ""));
+  const sonrakiId = String(formData.get("sonrakiId") ?? "");
+  // "Kaydet ve sonrakine geç": listedeki sıradaki soru (form açılırken hesaplandı).
+  // Kimlik yalnızca adrese girer; soru yoksa sayfa 404 verir, başka yere gidilmez.
+  if (formData.get("sonra") === "sonraki" && /^[a-z0-9]{1,64}$/i.test(sonrakiId)) {
+    redirect(soruAdresi(sonrakiId, formData.has("geri") ? geri : undefined, { kaydedildi: id }));
+  }
+  // Listeden gelindiyse aynı süzgece ve sayfaya dönülür (bkz. lib/checkup/question-list.ts).
+  redirect(listeAdresi(geri, { guncellendi: id }));
 }
 
 /**
@@ -391,4 +487,98 @@ export async function setQuestionStatusAction(
 
   revalidateQuestionScreens();
   return { ok: true };
+}
+
+/** Bir istekte en fazla bu kadar soru (liste sayfası 30 soru gösteriyor). */
+const TOPLU_SINIR = 100;
+
+/**
+ * Toplu durum değiştirme — içe aktarılan 40 soruyu tek tek yayına almak
+ * yerine. Yalnızca durumu gerçekten değişen sorulara dokunur (damga ve
+ * güncellenme zamanı boşuna oynamasın). İçerik değişmediği için şık
+ * doğrulaması gerekmez: sorular kaydedilirken zaten doğrulandı.
+ */
+export async function setQuestionsStatusAction(
+  ids: unknown,
+  status: string
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > TOPLU_SINIR ||
+    !ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64) ||
+    !isQuestionStatus(status)
+  ) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+
+  const sonuc = await db.question.updateMany({
+    where: { id: { in: [...new Set(ids as string[])] }, status: { not: status } },
+    data: { status, updatedByStaff: staffStamp(auth.staff) },
+  });
+
+  revalidateQuestionScreens();
+  return { ok: true, count: sonuc.count };
+}
+
+/** Önerilen zorluğu bir istekte en fazla bu kadar soruya uygula. */
+const ZORLUK_SINIR = 300;
+
+/**
+ * Madde analizinin önerdiği zorluğu uygular (toplu, onaylı).
+ *
+ * İstemciden gelen kimliklere ve "şuradan şuraya" bilgisine GÜVENİLMEZ:
+ * analiz aynı kapsamla (sınav, dönem) sunucuda yeniden hesaplanır; yalnızca
+ * gerçekten "zorluk etiketi uymuyor" bulgusu olan sorular, gözlenen doğru
+ * oranının karşılığı olan zorluğa çekilir. İçerik değişmediği için şık
+ * doğrulaması ve sürüm artışı gerekmez; personel damgası yazılır.
+ */
+export async function applySuggestedDifficultyAction(
+  ids: unknown,
+  kapsam: unknown
+): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const k = (kapsam ?? {}) as { sinav?: unknown; gun?: unknown };
+  const sinav = k.sinav === "" || k.sinav === undefined ? "" : isExamScope(k.sinav) ? k.sinav : null;
+  const gun = k.gun === null || k.gun === undefined ? null : DONEM_SECENEK.some((d) => d.gun === k.gun) ? (k.gun as number) : NaN;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > ZORLUK_SINIR ||
+    !ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64) ||
+    sinav === null ||
+    Number.isNaN(gun)
+  ) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+
+  const istenen = new Set(ids as string[]);
+  const satirlar = await loadItemAnalysis({ sinav, gun });
+
+  // Hedef zorluğa göre grupla: her grup tek güncelleme.
+  const gruplar = new Map<number, string[]>();
+  for (const r of satirlar) {
+    if (!istenen.has(r.questionId) || !r.bulgular.some((b) => b.key === "zorluk")) continue;
+    const hedef = onerilenZorluk(r.p);
+    if (hedef === r.difficulty) continue;
+    gruplar.set(hedef, [...(gruplar.get(hedef) ?? []), r.questionId]);
+  }
+
+  const damga = staffStamp(auth.staff);
+  let count = 0;
+  for (const [zorluk, liste] of gruplar) {
+    const sonuc = await db.question.updateMany({
+      where: { id: { in: liste }, difficulty: { not: zorluk } },
+      data: { difficulty: zorluk, updatedByStaff: damga },
+    });
+    count += sonuc.count;
+  }
+
+  revalidateQuestionScreens();
+  revalidatePath("/checkup/sorular/analiz");
+  return { ok: true, count };
 }

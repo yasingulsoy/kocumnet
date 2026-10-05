@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronDown, Globe, Mail, MapPin, Menu, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, ChevronDown, Globe, Mail, MapPin, Menu, X } from "lucide-react";
 import { SITE_BRAND } from "@/lib/site-brand";
+import { CHECKUP_URL } from "@/lib/site";
 import { Wordmark } from "./LogoMark";
 import { InstagramIcon } from "./icons";
 import { buttonClass, cn } from "./ui";
@@ -15,7 +15,8 @@ import type { Dictionary } from "@/lib/i18n/dictionaries";
 
 const NAV_KEYS: RouteKey[] = ["home", "about", "services", "products", "blog", "contact"];
 
-const easeOut = [0.22, 1, 0.36, 1] as const;
+/** Panelin klavyeyle gezilen öğeleri (Tab döngüsü için). */
+const ODAKLANABILIR = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Site başlığı: ince marka şeridi (konum · e-posta · Instagram · dil) ve
@@ -23,14 +24,31 @@ const easeOut = [0.22, 1, 0.36, 1] as const;
  * panele iner.
  *
  * Gölge geçişi bilerek SAF CSS: sticky bir öğeye kaydırma boyunca JS'ten
- * stil yazmak (framer-motion animate) titremeye yol açabiliyor.
+ * stil yazmak titremeye yol açabiliyor.
+ *
+ * Dil menüsü ve arka perde de CSS geçişiyle açılıp kapanıyor (eskiden
+ * framer-motion AnimatePresence). İkisi de hep DOM'da; kapalıyken
+ * `invisible`: odaklanılamaz, ekran okuyucu görmez. visibility geçişi
+ * kapanırken sona kadar "görünür" kaldığı için çıkış animasyonu da oynar.
+ * Hareket azaltmada tokens.css bütün geçişleri sıfırlıyor.
+ *
+ * Yan panel bir diyalog: açılınca odak içine girer, Tab panelde döner,
+ * Escape kapatır, kapanınca odak menü düğmesine döner. Kapalıyken `inert`:
+ * eskiden yalnızca aria-hidden idi ve ekran dışındaki 11 bağlantı sekmeyle
+ * geziliyordu — masaüstünde bile, görünmeyen menüde.
  */
 export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const pathname = usePathname() || "/";
   const [panelOpen, setPanelOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const reduce = useReducedMotion();
+
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelAcikti = useRef(false);
+  const langWrapRef = useRef<HTMLDivElement>(null);
+  const langButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     document.body.style.overflow = panelOpen ? "hidden" : "";
@@ -39,11 +57,71 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
     };
   }, [panelOpen]);
 
+  // Yan panel: odak yönetimi, Escape ve Tab döngüsü.
+  useEffect(() => {
+    if (!panelOpen) {
+      if (panelAcikti.current) {
+        panelAcikti.current = false;
+        menuButtonRef.current?.focus();
+      }
+      return;
+    }
+    panelAcikti.current = true;
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setPanelOpen(false);
+        return;
+      }
+      const panel = panelRef.current;
+      if (e.key !== "Tab" || !panel) return;
+      const ogeler = Array.from(panel.querySelectorAll<HTMLElement>(ODAKLANABILIR));
+      if (ogeler.length === 0) return;
+      const ilk = ogeler[0];
+      const son = ogeler[ogeler.length - 1];
+      const aktif = document.activeElement;
+      if (e.shiftKey && (aktif === ilk || !panel.contains(aktif))) {
+        e.preventDefault();
+        son.focus();
+      } else if (!e.shiftKey && (aktif === son || !panel.contains(aktif))) {
+        e.preventDefault();
+        ilk.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [panelOpen]);
+
+  // Pencere masaüstü genişliğine çıkınca açık kalan paneli kapat.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setPanelOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Dil menüsü: dışarı tıklayınca ya da Escape ile kapanır.
   useEffect(() => {
     if (!langOpen) return;
-    const close = () => setLangOpen(false);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    const onPointerDown = (e: PointerEvent) => {
+      if (!langWrapRef.current?.contains(e.target as Node)) setLangOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLangOpen(false);
+        langButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [langOpen]);
 
   useEffect(() => {
@@ -88,6 +166,19 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
               </a>
             </div>
             <div className="flex shrink-0 items-center gap-4">
+              {/* Check-up uygulaması adresi tanımlıysa her sayfadan bir tık uzakta. */}
+              {CHECKUP_URL ? (
+                <a
+                  href={CHECKUP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden items-center gap-1 font-semibold text-white transition hover:underline md:inline-flex"
+                >
+                  {dict.nav.checkup}
+                  <ArrowUpRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
+                  <span className="sr-only"> ({dict.nav.opensInNewTab})</span>
+                </a>
+              ) : null}
               <a
                 href={SITE_BRAND.social.instagram}
                 target="_blank"
@@ -98,12 +189,24 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                 <InstagramIcon className="size-3.5" />
                 <span className="hidden sm:inline">{SITE_BRAND.instagramHandle}</span>
               </a>
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <div
+                ref={langWrapRef}
+                className="relative"
+                onBlur={(e) => {
+                  // Tab ile menünün dışına geçilince kapan. relatedTarget boşsa
+                  // (Safari tıklanan bağlantıya odak vermez) dışarı tıklamayı
+                  // pointerdown dinleyicisi zaten yakalıyor.
+                  const sonraki = e.relatedTarget as Node | null;
+                  if (langOpen && sonraki && !e.currentTarget.contains(sonraki)) setLangOpen(false);
+                }}
+              >
                 <button
+                  ref={langButtonRef}
                   type="button"
                   className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-1.5 transition hover:text-white"
                   aria-expanded={langOpen}
-                  aria-label={dict.nav.language}
+                  aria-controls="dil-menusu"
+                  aria-label={`${dict.nav.language}: ${LOCALE_NAMES[locale]}`}
                   onClick={() => setLangOpen((v) => !v)}
                 >
                   <Globe className="size-3.5" aria-hidden />
@@ -113,33 +216,32 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                     aria-hidden
                   />
                 </button>
-                <AnimatePresence>
-                  {langOpen && (
-                    <motion.ul
-                      className="absolute end-0 top-full z-[60] mt-1.5 min-w-[9.5rem] rounded-xl border border-line bg-surface p-1 text-body text-ink shadow-raised"
-                      initial={reduce ? false : { opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={reduce ? undefined : { opacity: 0, y: -6 }}
-                      transition={{ duration: 0.18, ease: easeOut }}
-                    >
-                      {LOCALES.map((loc) => (
-                        <li key={loc}>
-                          <Link
-                            href={switchLocalePath(pathname, loc)}
-                            hrefLang={loc}
-                            className={cn(
-                              "block w-full rounded-lg px-3 py-2 text-start transition hover:bg-surface-hover",
-                              locale === loc && "bg-brand-wash font-semibold text-brand"
-                            )}
-                            onClick={() => setLangOpen(false)}
-                          >
-                            {LOCALE_NAMES[loc]}
-                          </Link>
-                        </li>
-                      ))}
-                    </motion.ul>
+                <ul
+                  id="dil-menusu"
+                  className={cn(
+                    "absolute end-0 top-full z-[60] mt-1.5 min-w-[9.5rem] rounded-xl border border-line bg-surface p-1 text-body text-ink shadow-raised",
+                    "transition-[opacity,translate,visibility] duration-[180ms] ease-out",
+                    langOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1.5 opacity-0"
                   )}
-                </AnimatePresence>
+                >
+                  {LOCALES.map((loc) => (
+                    <li key={loc}>
+                      <Link
+                        href={switchLocalePath(pathname, loc)}
+                        hrefLang={loc}
+                        lang={loc}
+                        aria-current={locale === loc ? "true" : undefined}
+                        className={cn(
+                          "block w-full rounded-lg px-3 py-2 text-start transition hover:bg-surface-hover",
+                          locale === loc && "bg-brand-wash font-semibold text-brand"
+                        )}
+                        onClick={() => setLangOpen(false)}
+                      >
+                        {LOCALE_NAMES[loc]}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>
@@ -182,14 +284,16 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
               {dict.nav.contact}
             </Link>
             <button
+              ref={menuButtonRef}
               type="button"
               className="flex size-11 items-center justify-center rounded-xl text-ink transition hover:bg-surface-hover min-[1100px]:hidden"
               aria-controls="side-panel"
               aria-expanded={panelOpen}
+              aria-haspopup="dialog"
               aria-label={dict.nav.menu}
               onClick={() => setPanelOpen(true)}
             >
-              <Menu className="size-6" />
+              <Menu className="size-6" aria-hidden />
             </button>
           </div>
         </div>
@@ -199,24 +303,23 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
       <div
         id="side-panel"
         className={cn("fixed inset-0 z-[70]", panelOpen ? "pointer-events-auto" : "pointer-events-none")}
-        aria-hidden={!panelOpen}
+        inert={!panelOpen}
       >
-        <AnimatePresence>
-          {panelOpen && (
-            <motion.button
-              key="backdrop"
-              type="button"
-              className="absolute inset-0 bg-brand-deep/40 backdrop-blur-[2px]"
-              initial={reduce ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={reduce ? undefined : { opacity: 0 }}
-              transition={{ duration: 0.22, ease: easeOut }}
-              aria-label={dict.nav.close}
-              onClick={() => setPanelOpen(false)}
-            />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          className={cn(
+            "absolute inset-0 bg-brand-deep/40 backdrop-blur-[2px] transition-[opacity,visibility] duration-[220ms] ease-out",
+            panelOpen ? "visible opacity-100" : "invisible opacity-0"
           )}
-        </AnimatePresence>
+          onClick={() => setPanelOpen(false)}
+        />
         <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={dict.nav.menu}
           className={cn(
             "absolute inset-y-0 end-0 flex w-full max-w-sm flex-col bg-surface shadow-pop transition-transform duration-300 ease-out",
             panelOpen ? "translate-x-0" : "ltr:translate-x-full rtl:-translate-x-full"
@@ -225,12 +328,13 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           <div className="flex h-[4.5rem] items-center justify-between border-b border-line px-5">
             <Wordmark />
             <button
+              ref={closeButtonRef}
               type="button"
               className="flex size-11 items-center justify-center rounded-xl text-ink transition hover:bg-surface-hover"
               aria-label={dict.nav.close}
               onClick={() => setPanelOpen(false)}
             >
-              <X className="size-6" />
+              <X className="size-6" aria-hidden />
             </button>
           </div>
           <nav className="flex flex-1 flex-col overflow-y-auto px-3 py-4" aria-label={dict.nav.menu}>
@@ -255,6 +359,19 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
             >
               {dict.nav.contact}
             </Link>
+            {CHECKUP_URL ? (
+              <a
+                href={CHECKUP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonClass({ variant: "soft", size: "lg", block: true }), "mt-3")}
+                onClick={() => setPanelOpen(false)}
+              >
+                {dict.nav.checkup}
+                <ArrowUpRight className="rtl:-scale-x-100" aria-hidden />
+                <span className="sr-only"> ({dict.nav.opensInNewTab})</span>
+              </a>
+            ) : null}
 
             <div className="mt-8 border-t border-line px-3 pt-6">
               <p className="mb-3 text-micro font-semibold uppercase tracking-[0.18em] text-ink-faint">
@@ -266,6 +383,8 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                     key={loc}
                     href={switchLocalePath(pathname, loc)}
                     hrefLang={loc}
+                    lang={loc}
+                    aria-current={locale === loc ? "true" : undefined}
                     onClick={() => setPanelOpen(false)}
                     className={cn(
                       "rounded-lg px-3 py-2 text-caption font-medium ring-1 ring-inset transition",

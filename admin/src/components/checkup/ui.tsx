@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
@@ -61,7 +62,10 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {crumbs?.length ? (
-          <nav className="mb-1.5 flex flex-wrap items-center gap-1.5 text-caption text-ink-faint">
+          <nav
+            aria-label="Gezinti izi"
+            className="mb-1.5 flex flex-wrap items-center gap-1.5 text-caption text-ink-faint"
+          >
             {crumbs.map((c) => (
               <span key={c.href} className="flex items-center gap-1.5">
                 <Link href={c.href} className="transition hover:text-brand">
@@ -236,7 +240,8 @@ export function Field({
       </label>
       {children}
       {error ? (
-        <p role="alert" className="mt-1.5 text-micro text-bad">
+        // data-alan-hatasi: form kaydedilemeyince ilk hatalı alana kaydırmak için.
+        <p role="alert" data-alan-hatasi className="mt-1.5 text-micro text-bad">
           {error}
         </p>
       ) : hint ? (
@@ -340,7 +345,7 @@ export function Pagination({
 }) {
   if (pages <= 1) return null;
   return (
-    <nav className="mt-5 flex items-center justify-between gap-4 text-caption">
+    <nav aria-label="Sayfalar" className="mt-5 flex items-center justify-between gap-4 text-caption">
       {page > 1 ? (
         <Link href={href(page - 1)} className={buttonClass("outline", "sm")}>
           ← Önceki
@@ -371,3 +376,120 @@ export function qs(base: string, params: Record<string, string | number | undefi
   const s = u.toString();
   return s ? base + "?" + s : base;
 }
+
+// ─── Süzgeç sekmeleri ──────────────────────────────────────────
+
+/**
+ * Bağlantı sekmeleri (sınav, bulgu türü…). Seçim adreste durur: paylaşılabilir,
+ * geri tuşu çalışır. Dar ekranda yana kayar.
+ */
+export function FilterTabs({
+  label,
+  items,
+  className,
+}: {
+  /** Ekran okuyucu için: "Sınav süzgeci" gibi. */
+  label: string;
+  items: { href: string; label: ReactNode; active: boolean; count?: number; tone?: Tone }[];
+  className?: string;
+}) {
+  return (
+    // py-1: yatay kaydırma kabı dikeyde kırpıyor; odak halkası kesilmesin.
+    <nav aria-label={label} className={clsx("scroll-x -mx-1 flex gap-1 px-1 py-1", className)}>
+      {items.map((i) => (
+        <Link
+          key={i.href}
+          href={i.href}
+          aria-current={i.active ? "page" : undefined}
+          className={clsx(
+            "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-caption font-medium transition",
+            i.active ? "bg-brand-wash text-brand" : "text-ink-soft hover:bg-surface-hover hover:text-ink"
+          )}
+        >
+          {i.label}
+          {i.count !== undefined ? (
+            <span
+              className={clsx(
+                "tabular rounded-full px-1.5 text-micro",
+                i.active ? "bg-surface text-brand" : i.count > 0 && i.tone ? PILL_TONE[i.tone] : "bg-surface-sunk text-ink-faint"
+              )}
+            >
+              {i.count}
+            </span>
+          ) : null}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+// ─── Sıralanabilir tablo başlığı ───────────────────────────────
+
+/** Bağlantı olarak sıralama (sunucuda). `aria-sort` ekran okuyucuya yönü söyler. */
+export function SortHeader({
+  label,
+  href,
+  active,
+  dir,
+  align = "start",
+  title,
+}: {
+  label: string;
+  href: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  align?: "start" | "end";
+  title?: string;
+}) {
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : undefined}
+      className={align === "end" ? "text-end" : undefined}
+      title={title}
+    >
+      <Link
+        href={href}
+        className={clsx(
+          "inline-flex items-center gap-1 transition hover:text-ink [&_svg]:size-3",
+          active && "text-ink"
+        )}
+      >
+        {label}
+        {active ? dir === "asc" ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden /> : <ArrowUpDown aria-hidden className="opacity-40" />}
+      </Link>
+    </th>
+  );
+}
+
+// ─── Hedefe ilerleme ───────────────────────────────────────────
+
+/** "32 / 50" + çubuk. Hazırlık sayaçları için (kazanım, soru). */
+export function ProgressLine({
+  label,
+  value,
+  target,
+}: {
+  label: ReactNode;
+  value: number;
+  target: number;
+}) {
+  const oran = target > 0 ? value / target : 0;
+  const tone: Tone = value === 0 ? "bad" : oran >= 1 ? "ok" : "warn";
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-micro">
+        <span className="truncate text-ink-soft">{label}</span>
+        <span className="tabular shrink-0 font-semibold text-ink">
+          {value}
+          {/* Hedef aşıldıysa "373 / 25" kesir gibi okunmasın. */}
+          <span className="font-normal text-ink-faint">{value >= target ? " · hedef " + target : " / " + target}</span>
+        </span>
+      </div>
+      <Meter ratio={oran} tone={tone} />
+    </div>
+  );
+}
+
+/** Paket havuz durumu → rozet tonu (pool.ts PackageState). */
+export const PACKAGE_STATE_TONE: Record<string, Tone> = { ready: "ok", narrow: "warn", blocked: "bad" };

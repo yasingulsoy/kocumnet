@@ -19,8 +19,15 @@ html {
    */
   scroll-behavior: smooth;
 
-  /* Çapaya (#anchor) gidince başlık sticky header'ın altında kalmasın. */
-  scroll-padding-top: 6rem;
+  /*
+   * Çapaya (#anchor) gidince başlık sticky header'ın altında kalmasın.
+   * Header = marka şeridi (48px: py-2 + 32px dil düğmesi) + ana çubuk
+   * (72px, lg'de 80px) = 120-128px. Eskiden 6rem (96px) idi: footer'dan
+   * /hizmetlerimiz#tercih-danismanligi'ya gelen kullanıcı başlığın üst
+   * yarısını header'ın altında görüyordu. Header yüksekliği değişirse bunu da
+   * güncelle.
+   */
+  scroll-padding-top: 8.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -34,6 +41,56 @@ body {
   color: var(--ink-soft);
 }
 
+/* ── Kaydırınca belirme (components/Reveal.tsx + RevealObserver) ── */
+
+/*
+ * Gizleme YALNIZCA şu üçü birlikteyken: ekran (baskıda her şey görünür),
+ * hareket azaltma kapalı ve <html>'de `reveal-on` (RevealObserver ekler —
+ * JavaScript yoksa ya da hata verirse hiçbir şey gizlenmez). Ekranda olan
+ * öğeleri gözlemci sınıfı eklemeden ÖNCE "belirmiş" sayar; yanıp sönme olmaz.
+ * Geçiş yalnızca belirirken çalışır; gizlenme anlık (görünmeyen öğede).
+ */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .reveal-on [data-reveal]:not([data-revealed]),
+  .reveal-on [data-reveal-group]:not([data-revealed]) > [data-reveal-item] {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 18px));
+  }
+
+  .reveal-on [data-reveal][data-revealed],
+  .reveal-on [data-reveal-group][data-revealed] > [data-reveal-item] {
+    transition:
+      opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0s),
+      transform 0.55s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0s);
+  }
+
+  /* Sıralı beliriş: 50 ms + her çocuk için 70 ms; dokuzuncudan sonra sabit. */
+  [data-reveal-group] > [data-reveal-item] {
+    --reveal-delay: 50ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(2) {
+    --reveal-delay: 120ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(3) {
+    --reveal-delay: 190ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(4) {
+    --reveal-delay: 260ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(5) {
+    --reveal-delay: 330ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(6) {
+    --reveal-delay: 400ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(7) {
+    --reveal-delay: 470ms;
+  }
+  [data-reveal-group] > [data-reveal-item]:nth-child(n + 8) {
+    --reveal-delay: 540ms;
+  }
+}
+
 /* ── Arapça (RTL) ───────────────────────────────────────────── */
 
 [dir="rtl"] {
@@ -42,6 +99,12 @@ body {
 
 [dir="rtl"] .prose {
   direction: rtl;
+}
+
+/* "İçeriğe geç" bağlantısı (tokens.css) sağdan sola sayfada sağ köşede çıksın. */
+[dir="rtl"] .skip-link:focus {
+  left: auto;
+  right: 1rem;
 }
 
 /* ── Blog içeriği ───────────────────────────────────────────── */

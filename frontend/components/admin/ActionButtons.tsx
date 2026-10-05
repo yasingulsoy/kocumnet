@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { FormState } from "@/lib/admin/types";
 import { buttonClass, cn, type ButtonStyleProps } from "@/components/ui";
@@ -40,7 +40,16 @@ export function ActionButton({
           if (confirm && !window.confirm(confirm)) return;
           setMesaj(null);
           start(async () => {
-            const r = await action();
+            let r: FormState | void;
+            try {
+              r = await action();
+            } catch (e) {
+              // Yönlendirme (ör. silindikten sonra listeye) Next'e kalır; ağ
+              // kopması sayfayı hata ekranına düşürmesin, düğmenin altında yazsın.
+              unstable_rethrow(e);
+              setMesaj({ tone: "bad", text: "Sunucuya ulaşılamadı. Biraz sonra tekrar dene." });
+              return;
+            }
             if (r && r.error) setMesaj({ tone: "bad", text: r.error });
             else if (r && r.message) setMesaj({ tone: "ok", text: r.message });
             onDone?.(r);

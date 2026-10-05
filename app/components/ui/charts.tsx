@@ -90,14 +90,29 @@ export interface TrendPoint {
   title: string;
 }
 
-export function TrendChart({ points, className }: { points: TrendPoint[]; className?: string }) {
+export function TrendChart({
+  points,
+  className,
+  compact = false,
+}: {
+  points: TrendPoint[];
+  className?: string;
+  /**
+   * Telefon çizimi. Aynı 640 birimlik çizim 310 piksellik karta sığdırılınca
+   * her şey yarıya ölçekleniyordu: 11 birimlik eksen yazısı ~5 piksel, noktalar
+   * iğne başı. Dar çizimde ölçek ~1, yazılar gerçek boyutunda kalıyor.
+   */
+  compact?: boolean;
+}) {
   const id = useId();
 
   // Sabit en-boy oranı: viewBox ölçeklenirken noktalar yuvarlak kalsın
   // (preserveAspectRatio="none" daireleri elips yapıyordu).
-  const W = 640;
-  const H = 220;
-  const pad = { top: 16, right: 16, bottom: 30, left: 36 };
+  const W = compact ? 340 : 640;
+  const H = compact ? 200 : 220;
+  const pad = compact
+    ? { top: 26, right: 14, bottom: 28, left: 30 }
+    : { top: 26, right: 18, bottom: 30, left: 36 };
   const iw = W - pad.left - pad.right;
   const ih = H - pad.top - pad.bottom;
 
@@ -112,14 +127,23 @@ export function TrendChart({ points, className }: { points: TrendPoint[]; classN
       : "";
 
   // Çok nokta varsa eksen etiketlerini seyrelt — üst üste binmesinler.
-  const step = Math.max(1, Math.ceil(points.length / 6));
+  const step = Math.max(1, Math.ceil(points.length / (compact ? 4 : 6)));
+
+  // Son ölçüm doğrudan etiketli: dokunmatik ekranda <title> ipucu açılmıyor,
+  // öğrencinin bakacağı tek sayı "şu an neredeyim".
+  const son = points[points.length - 1];
+  const ilk = points[0];
+  const ozet =
+    points.length > 1
+      ? `Başarı oranın: ${points.length} test, ilki %${Math.round(ilk.value)}, sonuncusu %${Math.round(son.value)}`
+      : `Başarı oranın: %${Math.round(son?.value ?? 0)}`;
 
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
       className={cn("h-auto w-full", className)}
       role="img"
-      aria-label="Başarı oranının zaman içindeki değişimi"
+      aria-label={ozet}
     >
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
@@ -162,9 +186,27 @@ export function TrendChart({ points, className }: { points: TrendPoint[]; classN
         />
       ) : null}
 
+      {son ? (
+        <text
+          x={x(points.length - 1) + (points.length > 1 ? 6 : 0)}
+          y={y(son.value) - 11}
+          textAnchor={points.length > 1 ? "end" : "middle"}
+          className="fill-ink text-[12px] font-semibold"
+        >
+          %{Math.round(son.value)}
+        </text>
+      ) : null}
+
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={x(i)} cy={y(p.value)} r="5" fill="white" stroke="#1a5fb4" strokeWidth="2.5">
+          <circle
+            cx={x(i)}
+            cy={y(p.value)}
+            r={i === points.length - 1 ? 5.5 : 4.5}
+            fill={i === points.length - 1 ? "#1a5fb4" : "white"}
+            stroke="#1a5fb4"
+            strokeWidth="2.5"
+          >
             <title>{p.title}</title>
           </circle>
           {i % step === 0 || i === points.length - 1 ? (

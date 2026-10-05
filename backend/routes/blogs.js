@@ -13,7 +13,7 @@ const { CONTENT_ROLES } = require('../utils/roles');
 const { writeLimiter, viewLimiter } = require('../middleware/rateLimits');
 const { parseId, escapeLike, asyncHandler, toBool } = require('../utils/http');
 const { sequelize } = require('../config/database');
-const { Blog, User } = require('../models');
+const { Blog, BlogRevision, User } = require('../models');
 const {
   normalizeBlogHtml,
   persistInlineImagesToBlogsWall,
@@ -21,6 +21,7 @@ const {
 } = require('../utils/blogContent');
 const { convertToWebp } = require('../utils/imageConverter');
 const { sniffImageFile } = require('../utils/imageSignature');
+const { denetle, tirnak } = require('../utils/audit');
 
 const router = express.Router();
 
@@ -37,9 +38,12 @@ const GUNCELLENEBILIR_ALANLAR = [
   'meta_title',
   'meta_description',
   'locale',
+  'image_alt',
 ];
 
 const META_TITLE_MAX = 255;
+/** Kapak alt metni sütunu 200; ekran okuyucular için ~125 karakter yeter. */
+const IMAGE_ALT_MAX = 200;
 const IZINLI_DILLER = new Set(['tr', 'en', 'ar']);
 
 /**
@@ -116,6 +120,131 @@ async function benzersizSlug(baslik, haricId = null) {
   return `${temel}-${Date.now()}`;
 }
 
+const ALAN_ADLARI = {
+  title: 'başlık',
+  slug: 'adres',
+  content: 'içerik',
+  excerpt: 'özet',
+  tags: 'etiketler',
+  meta_title: 'meta başlık',
+  meta_description: 'meta açıklama',
+  locale: 'dil',
+  image: 'kapak',
+  image_alt: 'kapak açıklaması',
+};
+
+/** Denetim karşılaştırması için yazının alanları (etiketler tek metin). */
+function blogDurumu(blog) {
+  return {
+    title: blog.title,
+    slug: blog.slug,
+    content: blog.content,
+    excerpt: blog.excerpt,
+    tags: (blog.tags || []).join(','),
+    meta_title: blog.meta_title,
+    meta_description: blog.meta_description,
+    locale: blog.locale,
+    image: blog.image,
+    image_alt: blog.image_alt,
+    is_published: blog.is_published,
+  };
+}
+
+/**
+ * Güncellemenin denetim kaydı: yayınlama/kaldırma ayrı eylem, diğer
+ * değişiklikler tek satırda alan adlarıyla ("başlık, içerik güncellendi").
+ * Hiçbir şey değişmediyse (aynı formu yeniden kaydetmek) kayıt yazılmaz.
+ */
+async function blogGuncellemeDenetimi(req, blog, once) {
+  const simdi = blogDurumu(blog);
+  const degisen = Object.keys(ALAN_ADLARI).filter((k) => (simdi[k] ?? null) !== (once[k] ?? null));
+  const alanlar = degisen.map((k) => ALAN_ADLARI[k]).join(', ');
+  const ad = tirnak(blog.title);
+
+  if (simdi.is_published !== once.is_published) {
+    await denetle(req, simdi.is_published ? 'blog.publish' : 'blog.unpublish', {
+      hedefTur: 'blog',
+      hedefId: blog.id,
+      ozet: `${ad} yazısını ${simdi.is_published ? 'yayınladı' : 'yayından kaldırdı'}${alanlar ? ` (ayrıca güncellendi: ${alanlar})` : ''}`,
+    });
+    return;
+  }
+  if (degisen.length) {
+    const adresNotu =
+      degisen.includes('slug') && once.is_published ? ` — yayındaki adres değişti: /${once.slug} → /${simdi.slug}` : '';
+    await denetle(req, 'blog.update', { hedefTur: 'blog', hedefId: blog.id, ozet: `${ad}: ${alanlar} güncellendi${adresNotu}` });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sürümler (models/BlogRevision.js)
+// ─────────────────────────────────────────────────────────────
+
+/** Yazı başına tutulan en fazla sürüm. */
+const SURUM_SINIRI = 30;
+/** Sürümde saklanan (ve geri yüklenen) alanlar. Adres, kapak, yayın, dil HARİÇ. */
+const SURUM_ALANLARI = ['title', 'content', 'excerpt', 'meta_title', 'meta_description', 'tags', 'image_alt'];
+
+function surumDegerleri(kaynak) {
+  return {
+    title: kaynak.title,
+    content: kaynak.content || '',
+    excerpt: kaynak.excerpt ?? null,
+    meta_title: kaynak.meta_title ?? null,
+    meta_description: kaynak.meta_description ?? null,
+    tags: Array.isArray(kaynak.tags) ? kaynak.tags : [],
+    image_alt: kaynak.image_alt ?? null,
+  };
+}
+
+function surumAlanlariDegisti(a, b) {
+  return SURUM_ALANLARI.some((k) =>
+    k === 'tags' ? (a.tags || []).join('\u0000') !== (b.tags || []).join('\u0000') : (a[k] ?? null) !== (b[k] ?? null)
+  );
+}
+
+/**
+ * Sürüm kaydı; yazı başına son SURUM_SINIRI tanesi kalır. Hata kaydı
+ * DÜŞÜRMEZ: sürüm yan üründür, asıl kayıt yapıldı.
+ */
+async function surumKaydet(blogId, degerler, kullaniciId, zaman) {
+  try {
+    await BlogRevision.create({
+      blog_id: blogId,
+      ...degerler,
+      created_by: kullaniciId || null,
+      // Önceki hâlin sürümü, yazının o hâliyle son kaydedildiği zamanı taşır.
+      ...(zaman ? { created_at: zaman } : {}),
+    });
+    const fazlalar = await BlogRevision.findAll({
+      where: { blog_id: blogId },
+      attributes: ['id'],
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      offset: SURUM_SINIRI,
+    });
+    if (fazlalar.length) await BlogRevision.destroy({ where: { id: fazlalar.map((r) => r.id) } });
+  } catch (e) {
+    console.error('Yazı sürümü kaydedilemedi:', blogId, '—', e.message);
+  }
+}
+
+/**
+ * Kullanılmayan içerik görsellerini siler — ESKİ SÜRÜMLERİN görsellerini de
+ * kullanılıyor sayarak: yoksa bir sürüme dönüldüğünde görselleri kırık çıkardı.
+ */
+async function gorselTemizligi(blog) {
+  try {
+    const surumler = await BlogRevision.findAll({ where: { blog_id: blog.id }, attributes: ['content'] });
+    cleanupUnreferencedContentImages({
+      html: [blog.content || '', ...surumler.map((s) => s.content || '')].join('\n'),
+      blogId: blog.id,
+      blogsDir: uploadsDir,
+    });
+  } catch (e) {
+    console.error('İçerik görseli temizliği atlandı:', blog.id, '—', e.message);
+  }
+}
+
 /** Elle girilen adres: küçük harf, rakam, tire. 3-120 karakter. */
 const SLUG_DESENI = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -131,7 +260,7 @@ router.get(
   '/',
   optionalAdmin,
   asyncHandler(async (req, res) => {
-    const { is_published, include_drafts, search, locale, page, limit: limitParam } = req.query;
+    const { is_published, include_drafts, search, locale, sort, page, limit: limitParam } = req.query;
     const where = {};
 
     if (include_drafts === 'true' && req.isStaff) {
@@ -178,7 +307,8 @@ router.get(
           required: false,
         },
       ],
-      order: [['created_at', 'DESC']],
+      // Site yönetiminin "son düzenlenenler" listesi için; herkese açık liste değişmez.
+      order: sort === 'updated' && req.isStaff ? [['updated_at', 'DESC']] : [['created_at', 'DESC']],
       limit,
       offset,
     });
@@ -269,11 +399,15 @@ router.post(
   requireRole(...CONTENT_ROLES),
   writeLimiter,
   asyncHandler(async (req, res) => {
-    const { title, content, excerpt, tags, is_published, meta_title, meta_description, locale } =
+    const { title, content, excerpt, tags, is_published, meta_title, meta_description, locale, image_alt } =
       req.body || {};
 
     if (!title || !content) {
       return res.status(400).json({ success: false, error: 'Başlık ve içerik gerekli' });
+    }
+    // Nesne/dizi gelirse sanitize-html'i atlayıp veritabanına kadar gidiyor, orada 500 veriyordu.
+    if (typeof title !== 'string' || typeof content !== 'string') {
+      return res.status(400).json({ success: false, error: 'Başlık ve içerik metin olmalı' });
     }
 
     const baslik = duzMetin(title, 500);
@@ -290,10 +424,14 @@ router.post(
       tags: Array.isArray(tags) ? tags.map((t) => duzMetin(t, 60)).filter(Boolean).slice(0, 30) : [],
       is_published: published,
       published_at: published ? new Date() : null,
-      // meta_title sütunu 255; başlık 500 olabiliyor ve taşma kaydı 500
-      // hatasıyla düşürüyordu.
-      meta_title: duzMetin(meta_title, META_TITLE_MAX) || baslik.slice(0, META_TITLE_MAX),
-      meta_description: duzMetin(meta_description, 320) || ozet,
+      /*
+       * Meta alanları BOŞSA boş kalır. Eskiden başlık ve özet buraya
+       * kopyalanıyordu: yazar sonra başlığı değiştirince Google'daki başlık
+       * eski hâlinde donuyordu (site zaten boş meta için başlığa/özete düşüyor).
+       */
+      meta_title: duzMetin(meta_title, META_TITLE_MAX),
+      meta_description: duzMetin(meta_description, 320),
+      image_alt: duzMetin(image_alt, IMAGE_ALT_MAX),
       locale: dilNormalize(locale, 'tr'),
       author_id: req.userId,
       view_count: 0,
@@ -324,6 +462,15 @@ router.post(
       console.error('İçerik görsel dönüştürme hatası (create):', e);
       // Blog kaydını tümden başarısız yapmıyoruz; kullanıcı tekrar güncelleyebilir.
     }
+
+    // İlk sürüm: yazının oluşturulduğu hâl.
+    await surumKaydet(blog.id, surumDegerleri(blog), req.userId);
+
+    await denetle(req, published ? 'blog.publish' : 'blog.create', {
+      hedefTur: 'blog',
+      hedefId: blog.id,
+      ozet: `${tirnak(blog.title)} yazısını ${published ? 'oluşturup yayınladı' : 'taslak olarak oluşturdu'}`,
+    });
 
     res.status(201).json({ success: true, data: blog, message: 'Blog oluşturuldu.' });
   })
@@ -375,6 +522,11 @@ router.post(
         const imageUrl = `/uploads/blogsWall/${blog.id}/${newFilename}`;
         blog.image = imageUrl;
         await blog.save();
+        await denetle(req, 'blog.cover', {
+          hedefTur: 'blog',
+          hedefId: blog.id,
+          ozet: `${tirnak(blog.title)}: kapak görselini ${eskiGorsel ? 'değiştirdi' : 'ekledi'}`,
+        });
 
         // Eski kapak ancak YENİSİ kaydedildikten sonra siliniyor: eski sürüm
         // önce siliyordu, yükleme reddedilince blog kaybolmuş bir dosyayı
@@ -423,7 +575,9 @@ router.delete(
     }
 
     blog.image = null;
+    blog.image_alt = null;
     await blog.save();
+    await denetle(req, 'blog.cover', { hedefTur: 'blog', hedefId: blog.id, ozet: `${tirnak(blog.title)}: kapak görselini kaldırdı` });
 
     return res.json({ success: true, data: { image: null }, message: 'Blog kapağı silindi' });
   })
@@ -454,6 +608,18 @@ router.put(
       if (gelen[alan] !== undefined) updateData[alan] = gelen[alan];
     }
 
+    if (updateData.content !== undefined && updateData.content !== null && typeof updateData.content !== 'string') {
+      return res.status(400).json({ success: false, error: 'İçerik metin olmalı' });
+    }
+    if (updateData.title !== undefined && typeof updateData.title !== 'string') {
+      return res.status(400).json({ success: false, error: 'Başlık metin olmalı' });
+    }
+
+    // Denetim kaydı ve sürüm için önceki hâl (güncellemeden sonra blog nesnesi değişiyor).
+    const once = blogDurumu(blog);
+    const onceSurum = surumDegerleri(blog);
+    const onceZaman = blog.updated_at;
+
     if (updateData.title !== undefined) {
       updateData.title = duzMetin(updateData.title, 500);
       if (!updateData.title) return res.status(400).json({ success: false, error: 'Başlık boş olamaz' });
@@ -465,6 +631,7 @@ router.put(
     if (updateData.meta_description !== undefined) {
       updateData.meta_description = duzMetin(updateData.meta_description, 320);
     }
+    if (updateData.image_alt !== undefined) updateData.image_alt = duzMetin(updateData.image_alt, IMAGE_ALT_MAX);
     if (updateData.tags !== undefined) {
       updateData.tags = Array.isArray(updateData.tags)
         ? updateData.tags.map((t) => duzMetin(t, 60)).filter(Boolean).slice(0, 30)
@@ -500,6 +667,8 @@ router.put(
         }
       }
       updateData.image = null;
+      // Görsel yoksa açıklaması da anlamsız; sonraki kapak eski açıklamayı devralmasın.
+      updateData.image_alt = null;
     }
 
     /*
@@ -550,11 +719,93 @@ router.put(
       });
     }
 
-    if (updateData.content !== undefined) {
-      cleanupUnreferencedContentImages({ html: blog.content, blogId: blog.id, blogsDir: uploadsDir });
+    // Metin alanları değiştiyse sürüm. Bu özellikten önce oluşturulmuş yazının
+    // hiç sürümü yoksa önce ESKİ hâlini kaydet: ilk düzenleme de geri alınabilsin.
+    const yeniSurum = surumDegerleri(blog);
+    if (surumAlanlariDegisti(onceSurum, yeniSurum)) {
+      if ((await BlogRevision.count({ where: { blog_id: blog.id } })) === 0) {
+        await surumKaydet(blog.id, onceSurum, blog.author_id, onceZaman);
+      }
+      await surumKaydet(blog.id, yeniSurum, req.userId);
     }
 
+    if (updateData.content !== undefined) await gorselTemizligi(blog);
+
+    await blogGuncellemeDenetimi(req, blog, once);
+
     res.json({ success: true, data: blog, message: 'Blog güncellendi.' });
+  })
+);
+
+// ─── Sürümler ────────────────────────────────────────────────
+
+const SURUM_YAZARI = { model: User, as: 'author', attributes: ['id', 'first_name', 'last_name'], required: false };
+
+/** Sürüm listesi (içeriksiz): en yeni önce; ilk satır yazının şu anki hâli. */
+router.get(
+  '/:id/revisions',
+  authenticateAdmin,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const blog = id ? await Blog.findByPk(id, { attributes: ['id'] }) : null;
+    if (!blog) return res.status(404).json({ success: false, error: 'Blog bulunamadı' });
+    const rows = await BlogRevision.findAll({
+      where: { blog_id: id },
+      attributes: ['id', 'title', 'created_at', 'created_by', [fn('length', col('BlogRevision.content')), 'content_length']],
+      include: [SURUM_YAZARI],
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      limit: SURUM_SINIRI,
+    });
+    res.json({ success: true, data: rows });
+  })
+);
+
+/** Tek sürüm, tam içerikle (önizleme için). */
+router.get(
+  '/:id/revisions/:rid',
+  authenticateAdmin,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const rid = parseId(req.params.rid);
+    const surum = id && rid ? await BlogRevision.findOne({ where: { id: rid, blog_id: id }, include: [SURUM_YAZARI] }) : null;
+    if (!surum) return res.status(404).json({ success: false, error: 'Sürüm bulunamadı' });
+    res.json({ success: true, data: surum });
+  })
+);
+
+/**
+ * Sürüme dön: metin alanları (başlık, içerik, özet, meta, etiketler, kapak
+ * açıklaması) o sürümdeki hâline gelir. Adres, kapak, yayın durumu ve dil
+ * DEĞİŞMEZ. Geri dönüş de yeni bir sürüm olarak kaydedilir (geri alınabilir).
+ */
+router.post(
+  '/:id/revisions/:rid/restore',
+  authenticateAdmin,
+  requireRole(...CONTENT_ROLES),
+  writeLimiter,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const rid = parseId(req.params.rid);
+    const blog = id ? await Blog.findByPk(id) : null;
+    if (!blog) return res.status(404).json({ success: false, error: 'Blog bulunamadı' });
+    const surum = rid ? await BlogRevision.findOne({ where: { id: rid, blog_id: id } }) : null;
+    if (!surum) return res.status(404).json({ success: false, error: 'Sürüm bulunamadı' });
+
+    const hedef = surumDegerleri(surum);
+    if (!surumAlanlariDegisti(surumDegerleri(blog), hedef)) {
+      return res.json({ success: true, data: blog, message: 'Yazı zaten bu sürümle aynı.' });
+    }
+    await blog.update(hedef);
+    await surumKaydet(blog.id, surumDegerleri(blog), req.userId);
+    await gorselTemizligi(blog);
+
+    const tarih = new Date(surum.created_at).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'medium', timeStyle: 'short' });
+    await denetle(req, 'blog.restore', {
+      hedefTur: 'blog',
+      hedefId: blog.id,
+      ozet: `${tirnak(blog.title)}: ${tarih} tarihli sürüme döndü`,
+    });
+    res.json({ success: true, data: blog, message: 'Yazı seçilen sürüme döndü.' });
   })
 );
 
@@ -578,6 +829,11 @@ router.delete(
 
     deleteBlogFolder(blog.id);
     deleteBlogWallFolder(blog.id);
+    await denetle(req, 'blog.delete', {
+      hedefTur: 'blog',
+      hedefId: blog.id,
+      ozet: `${tirnak(blog.title)} yazısını sildi${blog.is_published ? ' (yayındaydı)' : ''}`,
+    });
 
     res.json({ success: true, message: 'Blog ve tüm resimleri silindi.' });
   })

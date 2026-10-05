@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BACKEND_URL } from "@/lib/api";
 import { BackendError, BackendUnreachable, backend, backendRaw, oturumJetonu } from "./backend";
-import { oturumSil, oturumYaz, staffForAction } from "./auth";
+import { guvenliSonraki, oturumSil, oturumYaz, staffForAction } from "./auth";
+import { basarisizDenemeSay, denemeSayaciniSifirla, denemeSiniriAsildi, denemeSiniriDolu } from "./limiter";
 import {
   CONTENT_ROLES,
   MANAGE_ROLES,
+  isContentLocale,
   isMessageStatus,
   isStaffRole,
   type AdminBlog,
@@ -22,7 +24,13 @@ import {
 
 function hataDurumu(e: unknown, varsayilan = "Bir şeyler ters gitti."): FormState {
   if (e instanceof BackendError) return { error: e.message, fields: e.fields };
-  if (e instanceof BackendUnreachable) return { error: "Sunucuya ulaşılamadı. Biraz sonra tekrar dene." };
+  if (e instanceof BackendUnreachable) {
+    // Sunucu yanıt verdi ama hata oldu: kod, backend günlüğündeki satırı bulmaya yarar.
+    if (e.status && e.requestId) {
+      return { error: `Sunucuda bir hata oluştu. Tekrar dene; sürerse bu kodu teknik ekibe ilet: ${e.requestId}` };
+    }
+    return { error: "Sunucuya ulaşılamadı. Biraz sonra tekrar dene." };
+  }
   console.error("[admin action]", e);
   return { error: varsayilan };
 }
@@ -32,8 +40,8 @@ const metin = (fd: FormData, ad: string, enFazla = 10_000) =>
     .trim()
     .slice(0, enFazla);
 
-const guvenliSonraki = (v: unknown) =>
-  typeof v === "string" && v.startsWith("/admin") && !v.startsWith("//") ? v : "/admin";
+const COK_DENEME = "Çok fazla deneme. 15 dakika sonra tekrar dene.";
+const ON_BES_DK = 15 * 60_000;
 
 // ─────────────────────────────────────────────────────────────
 // Kimlik
@@ -42,9 +50,15 @@ const guvenliSonraki = (v: unknown) =>
 export async function loginAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const kimlik = metin(fd, "kimlik", 255);
   const parola = String(fd.get("parola") ?? "");
-  const sonraki = guvenliSonraki(fd.get("next"));
+  const sonraki = guvenliSonraki(fd.get("next")) ?? "/admin";
 
   if (!kimlik || !parola) return { error: "E-posta ve parola gerekli." };
+
+  // İstemci başına, yalnızca BAŞARISIZ denemeler: bütün hesaplar için 30, aynı hesap için 10 / 15 dk.
+  const hesapAnahtari = `giris:${kimlik.toLowerCase()}`;
+  if ((await denemeSiniriDolu("giris", 30)) || (await denemeSiniriDolu(hesapAnahtari, 10))) {
+    return { error: COK_DENEME };
+  }
 
   let token: string | null = null;
   try {
@@ -53,8 +67,10 @@ export async function loginAction(_prev: FormState, fd: FormData): Promise<FormS
       auth: false,
       body: { usernameOrEmail: kimlik, password: parola },
     });
-    if (res.status === 429) return { error: "Çok fazla deneme. 15 dakika sonra tekrar dene." };
+    if (res.status === 429) return { error: COK_DENEME };
     if (!res.ok || !json?.success) {
+      await basarisizDenemeSay("giris", ON_BES_DK);
+      await basarisizDenemeSay(hesapAnahtari, ON_BES_DK);
       return { error: String(json?.error ?? "E-posta veya parola hatalı.") };
     }
     token = oturumJetonu(res);
@@ -63,6 +79,7 @@ export async function loginAction(_prev: FormState, fd: FormData): Promise<FormS
   }
 
   if (!token) return { error: "Oturum çerezi alınamadı. Backend sürümünü kontrol et." };
+  await denemeSayaciniSifirla(hesapAnahtari);
   await oturumYaz(token);
   redirect(sonraki);
 }
@@ -80,6 +97,9 @@ export async function logoutAction() {
 export async function forgotAction(_prev: FormState, fd: FormData): Promise<FormState> {
   const email = metin(fd, "email", 255).toLowerCase();
   if (!email) return { fields: { email: "E-posta adresini yaz." } };
+  if (await denemeSiniriAsildi("sifremi-unuttum", 10, 60 * 60_000)) {
+    return { error: "Çok fazla istek. Bir saat sonra tekrar dene." };
+  }
   try {
     const r = await backend<{ message?: string }>("/api/admin/auth/forgot", {
       method: "POST",
@@ -99,6 +119,7 @@ export async function resetAction(_prev: FormState, fd: FormData): Promise<FormS
   const parola = String(fd.get("parola") ?? "");
   const tekrar = String(fd.get("parola2") ?? "");
   if (parola !== tekrar) return { fields: { parola2: "Parolalar aynı değil." } };
+  if (await denemeSiniriAsildi("parola-belirle", 20, ON_BES_DK)) return { error: COK_DENEME };
   try {
     await backend("/api/admin/auth/reset", { method: "POST", auth: false, body: { token, password: parola } });
   } catch (e) {
@@ -122,6 +143,19 @@ export async function changePasswordAction(_prev: FormState, fd: FormData): Prom
     const token = oturumJetonu(res);
     if (token) await oturumYaz(token);
     return { ok: true, message: String(json.message ?? "Parolan değiştirildi.") };
+  } catch (e) {
+    return hataDurumu(e);
+  }
+}
+
+/** Diğer bütün cihazlardaki oturumları kapat; bu cihaz yeni çerezle açık kalır. */
+export async function logoutOthersAction(): Promise<FormState> {
+  try {
+    const { res, json } = await backendRaw("/api/admin/auth/logout-all", { method: "POST" });
+    if (!res.ok || !json?.success) return { error: String(json?.error ?? "Oturumlar kapatılamadı.") };
+    const token = oturumJetonu(res);
+    if (token) await oturumYaz(token);
+    return { ok: true, message: String(json.message ?? "Diğer cihazlardaki oturumlar kapatıldı.") };
   } catch (e) {
     return hataDurumu(e);
   }
@@ -163,6 +197,16 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
   if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
     return { fields: { slug: "Yalnızca küçük harf, rakam ve tire. Örnek: tyt-matematik-plani" } };
   }
+
+  /*
+   * Yayın durumu, basılan düğmeden gelir ("yayin" = "1" yayınla, "0" taslağa
+   * al). Düğmesiz gönderim (Ctrl+S) durumu KORUR: eskiden bir kutucuktu ve
+   * kaydet'e basmak yanlışlıkla yayına almanın en kısa yoluydu.
+   * Yeni yazı düğmesiz kaydedilirse taslaktır.
+   */
+  const yayinIstegi = fd.get("yayin");
+  const yayin = yayinIstegi === "1" ? true : yayinIstegi === "0" ? false : id ? undefined : false;
+
   const payload = {
     title,
     // Yalnızca düzenlemede ve dolu ise gönderilir: yeni yazıda adres başlıktan üretilir.
@@ -174,13 +218,24 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
       .map((t) => t.trim())
       .filter(Boolean)
       .slice(0, 30),
-    is_published: fd.get("is_published") === "on",
+    ...(yayin === undefined ? {} : { is_published: yayin }),
     meta_title: metin(fd, "meta_title", 255) || null,
     meta_description: metin(fd, "meta_description", 320) || null,
+    // Alan yalnızca kapak varken formda; yoksa dokunma (kapak silinince backend temizler).
+    ...(fd.has("image_alt") ? { image_alt: metin(fd, "image_alt", 200) || null } : {}),
     locale: ["tr", "en", "ar"].includes(locale) ? locale : "tr",
   };
 
+  // Boyut denetimi kayıttan ÖNCE: eskiden yazı oluşturulduktan sonra
+  // yapılıyordu; yeni yazıda hata dönünce kullanıcı yeniden kaydediyor ve
+  // aynı yazının ikinci kopyası oluşuyordu.
+  const kapak = fd.get("cover");
+  if (kapak instanceof File && kapak.size > 10 * 1024 * 1024) {
+    return { fields: { cover: "Kapak görseli 10 MB'ı aşıyor." }, error: "Kapak görseli 10 MB'ı aşıyor." };
+  }
+
   let blogId = id;
+  let kaydedildi = false;
   try {
     if (id) {
       await backend(`/api/blogs/${id}`, { method: "PUT", body: payload });
@@ -188,11 +243,10 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
       const r = await backend<{ data: AdminBlog }>("/api/blogs", { method: "POST", body: payload });
       blogId = r.data.id;
     }
+    kaydedildi = true;
 
     // Kapak: önce kayıt, sonra görsel — backend iki ayrı uç.
-    const kapak = fd.get("cover");
     if (kapak instanceof File && kapak.size > 0) {
-      if (kapak.size > 10 * 1024 * 1024) return { error: "Kapak görseli 10 MB'ı aşıyor." };
       const mp = new FormData();
       mp.append("image", kapak, kapak.name);
       await backend(`/api/blogs/${blogId}/image`, { method: "POST", formData: mp });
@@ -200,17 +254,23 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
       await backend(`/api/blogs/${blogId}/image`, { method: "DELETE" });
     }
   } catch (e) {
-    // Yazı kaydedildi ama kapak takıldıysa kullanıcıyı düzenleme sayfasında
-    // bırak: yeniden yazmak zorunda kalmasın.
-    if (blogId && !id) {
+    // Yazı kaydedildi ama kapak takıldıysa düzenleme sayfasına "kapak
+    // yüklenemedi" uyarısıyla dön: metin kayıtlı, yalnızca kapak yeniden seçilir.
+    // (Yeni yazıda bu, kullanıcının yeniden kaydedip İKİNCİ kopya açmasını da önler.)
+    if (kaydedildi && blogId) {
+      console.error("[admin] kapak yüklenemedi:", e instanceof Error ? e.message : e);
       blogSayfalariniYenile(blogId);
-      redirect(`/admin/blog/${blogId}?hata=kapak`);
+      redirect(`/admin/blog/${blogId}?hata=kapak&k=${Date.now().toString(36)}`);
     }
     return hataDurumu(e, "Yazı kaydedilemedi.");
   }
 
   blogSayfalariniYenile(blogId ?? undefined);
-  redirect(`/admin/blog/${blogId}?kaydedildi=1`);
+  // Sayfadaki bildirim neyin olduğunu söylesin: kaydedildi / yayınlandı / taslağa alındı.
+  // `k`: her kayıtta farklı; sayfa formu bununla yeniden bağlar (hiçbir alan
+  // değişmediyse updated_at da değişmiyor, "kaydedilmedi" izi takılı kalıyordu).
+  const sonuc = yayin === true ? "yayinlandi" : yayin === false && fd.get("yayin") === "0" ? "taslak" : "1";
+  redirect(`/admin/blog/${blogId}?kaydedildi=${sonuc}&k=${Date.now().toString(36)}`);
 }
 
 export async function setBlogPublishedAction(id: number, published: boolean): Promise<FormState> {
@@ -223,6 +283,22 @@ export async function setBlogPublishedAction(id: number, published: boolean): Pr
   }
   blogSayfalariniYenile(id);
   return { ok: true, message: published ? "Yazı yayınlandı." : "Yazı taslağa alındı." };
+}
+
+/**
+ * Yazıyı bir sürüme döndür. Adres, kapak, yayın durumu değişmez; dönüş de
+ * yeni bir sürüm olarak kaydedilir. Editör yeniden bağlansın diye `k`.
+ */
+export async function restoreRevisionAction(blogId: number, revisionId: number): Promise<FormState> {
+  const yetki = await staffForAction(CONTENT_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  try {
+    await backend(`/api/blogs/${blogId}/revisions/${revisionId}/restore`, { method: "POST" });
+  } catch (e) {
+    return hataDurumu(e, "Sürüme dönülemedi.");
+  }
+  blogSayfalariniYenile(blogId);
+  redirect(`/admin/blog/${blogId}?kaydedildi=geri&k=${Date.now().toString(36)}`);
 }
 
 export async function deleteBlogAction(id: number): Promise<FormState> {
@@ -241,6 +317,20 @@ export async function deleteBlogAction(id: number): Promise<FormState> {
 // Mesajlar
 // ─────────────────────────────────────────────────────────────
 
+function mesajSayfalariniYenile(id?: number) {
+  revalidatePath("/admin/mesajlar");
+  if (id) revalidatePath(`/admin/mesajlar/${id}`);
+  revalidatePath("/admin");
+}
+
+const DURUM_SONUCU: Record<string, string> = {
+  new: "Okunmadı olarak işaretlendi.",
+  read: "Okundu olarak işaretlendi.",
+  answered: "Yanıtlandı olarak işaretlendi.",
+  archived: "Arşivlendi.",
+  spam: "Spam olarak işaretlendi.",
+};
+
 export async function setMessageStatusAction(id: number, status: string): Promise<FormState> {
   const yetki = await staffForAction(MANAGE_ROLES);
   if (!yetki.ok) return { error: yetki.error };
@@ -250,10 +340,106 @@ export async function setMessageStatusAction(id: number, status: string): Promis
   } catch (e) {
     return hataDurumu(e);
   }
-  revalidatePath("/admin/mesajlar");
-  revalidatePath(`/admin/mesajlar/${id}`);
-  revalidatePath("/admin");
-  return { ok: true };
+  mesajSayfalariniYenile(id);
+  return { ok: true, message: DURUM_SONUCU[status] };
+}
+
+/** Listeden seçilen mesajlara tek seferde durum (en fazla 100). */
+export async function bulkMessageStatusAction(ids: number[], status: string): Promise<FormState> {
+  const yetki = await staffForAction(MANAGE_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  if (!isMessageStatus(status)) return { error: "Geçersiz durum." };
+  const temiz = [...new Set(ids.filter((i) => Number.isInteger(i) && i > 0))].slice(0, 100);
+  if (temiz.length === 0) return { error: "Mesaj seçilmedi." };
+  let guncellenen = 0;
+  try {
+    const r = await backend<{ updated?: number }>("/api/admin/contact-messages", {
+      method: "PATCH",
+      body: { ids: temiz, status },
+    });
+    guncellenen = Number(r.updated) || 0;
+  } catch (e) {
+    return hataDurumu(e);
+  }
+  mesajSayfalariniYenile();
+  return { ok: true, message: `${guncellenen} mesaj: ${DURUM_SONUCU[status].toLocaleLowerCase("tr-TR")}` };
+}
+
+/** Ekip içi not (gönderen görmez). Boş kaydedilirse not silinir. */
+export async function saveMessageNoteAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const yetki = await staffForAction(MANAGE_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  const id = Number(fd.get("id"));
+  if (!Number.isInteger(id) || id <= 0) return { error: "Mesaj bulunamadı." };
+  const not = String(fd.get("note") ?? "").trim().slice(0, 2000);
+  try {
+    await backend(`/api/admin/contact-messages/${id}`, { method: "PATCH", body: { note: not || null } });
+  } catch (e) {
+    return hataDurumu(e, "Not kaydedilemedi.");
+  }
+  mesajSayfalariniYenile(id);
+  return { ok: true, message: not ? "Not kaydedildi." : "Not silindi." };
+}
+
+// ─── Hazır yanıt şablonları ──────────────────────────────────
+
+function sablonSayfalariniYenile() {
+  revalidatePath("/admin/mesajlar/sablonlar");
+  revalidatePath("/admin/mesajlar/[id]", "page");
+}
+
+/** Şablon ekle (id yoksa) ya da güncelle. */
+export async function saveReplyTemplateAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  const yetki = await staffForAction(MANAGE_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+
+  const id = Number(fd.get("id")) || null;
+  const title = metin(fd, "title", 80);
+  const locale = metin(fd, "locale", 5);
+  // Gövdede satır sonları korunur; yalnızca uçlar kırpılır.
+  const body = String(fd.get("body") ?? "").replace(/\r\n/g, "\n").trim().slice(0, 3000);
+
+  const fields: Record<string, string> = {};
+  if (!title) fields.title = "Şablona bir ad ver.";
+  if (!isContentLocale(locale)) fields.locale = "Dil seç.";
+  if (!body) fields.body = "Şablon metni boş olamaz.";
+  if (Object.keys(fields).length) return { fields };
+
+  try {
+    const r = await backend<{ message?: string }>(id ? `/api/admin/reply-templates/${id}` : "/api/admin/reply-templates", {
+      method: id ? "PUT" : "POST",
+      body: { title, locale, body },
+    });
+    sablonSayfalariniYenile();
+    return { ok: true, message: r.message ?? "Kaydedildi." };
+  } catch (e) {
+    return hataDurumu(e, "Şablon kaydedilemedi.");
+  }
+}
+
+export async function deleteReplyTemplateAction(id: number): Promise<FormState> {
+  const yetki = await staffForAction(MANAGE_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  try {
+    await backend(`/api/admin/reply-templates/${id}`, { method: "DELETE" });
+  } catch (e) {
+    return hataDurumu(e);
+  }
+  sablonSayfalariniYenile();
+  return { ok: true, message: "Şablon silindi." };
+}
+
+/** Boş listeye başlangıç örnekleri (TR/EN/AR genel metinler). */
+export async function addSampleTemplatesAction(): Promise<FormState> {
+  const yetki = await staffForAction(MANAGE_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  try {
+    const r = await backend<{ message?: string }>("/api/admin/reply-templates/samples", { method: "POST" });
+    sablonSayfalariniYenile();
+    return { ok: true, message: r.message ?? "Örnek şablonlar eklendi." };
+  } catch (e) {
+    return hataDurumu(e);
+  }
 }
 
 export async function deleteMessageAction(id: number): Promise<FormState> {
@@ -264,8 +450,7 @@ export async function deleteMessageAction(id: number): Promise<FormState> {
   } catch (e) {
     return hataDurumu(e);
   }
-  revalidatePath("/admin/mesajlar");
-  revalidatePath("/admin");
+  mesajSayfalariniYenile();
   redirect("/admin/mesajlar?silindi=1");
 }
 
@@ -343,7 +528,22 @@ export async function resendInviteAction(id: number): Promise<FormState> {
   if (!yetki.ok) return { error: yetki.error };
   try {
     const r = await backend<{ message?: string }>(`/api/admin/users/${id}/invite`, { method: "POST" });
+    // Davet bitiş tarihi değişti: liste ve ayrıntı yeni süreyi göstersin.
+    revalidatePath("/admin/personel");
+    revalidatePath(`/admin/personel/${id}`);
     return { ok: true, message: r.message ?? "Gönderildi." };
+  } catch (e) {
+    return hataDurumu(e);
+  }
+}
+
+/** Yönetici: başka bir personelin bütün oturumlarını kapatır (iki panelde de). */
+export async function revokeSessionsAction(id: number): Promise<FormState> {
+  const yetki = await staffForAction(["admin"]);
+  if (!yetki.ok) return { error: yetki.error };
+  try {
+    const r = await backend<{ message?: string }>(`/api/admin/users/${id}/revoke-sessions`, { method: "POST" });
+    return { ok: true, message: r.message ?? "Oturumlar kapatıldı." };
   } catch (e) {
     return hataDurumu(e);
   }

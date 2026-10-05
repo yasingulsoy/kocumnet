@@ -11,6 +11,8 @@ import {
   Target,
 } from "lucide-react";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/Reveal";
+// Başlığın son kelimesi fosforlu kalemle çizilir — logodaki "net" gibi.
+import { fosforla } from "@/components/Marker";
 import {
   Badge,
   Card,
@@ -26,30 +28,19 @@ import { isLocale } from "@/lib/i18n/config";
 import { localizedPath } from "@/lib/routes";
 import { SERVICES, ilkCumle } from "@/lib/services";
 import { PRODUCTS } from "@/lib/products";
+// Check-up uygulamasının adresi: tanımlı değilse check-up bölümü HİÇ ÇIKMAZ
+// (ana sayfada 404'e giden bir düğme, hiç düğme olmamasından kötü).
+import { CHECKUP_URL } from "@/lib/site";
 
 /**
- * Check-up uygulamasının adresi.
- *
- * Tanımlı değilse check-up bölümü HİÇ ÇIKMAZ. Uygulama henüz yayına
- * alınmadığı için varsayılan vermiyoruz: ana sayfada 404'e giden bir düğme,
- * hiç düğme olmamasından kötü.
+ * Hero CSS animasyonuyla belirir (tokens.css `rise`), framer-motion ile DEĞİL.
+ * framer-motion başlangıç durumunu (opacity:0) sunucu HTML'ine yazıyor ve
+ * öğe ancak JavaScript yüklenip sayfa hidrasyonu bitince görünüyordu:
+ * sayfanın en büyük öğesi (LCP: başlık, alt başlık, fotoğraf) yavaş telefonda
+ * saniyelerce boş kalıyordu. CSS animasyonu ilk boyamayla başlar.
+ * Fotoğraf bilerek canlandırılmıyor: yüklendiği an görünsün.
  */
-const CHECKUP_URL = process.env.NEXT_PUBLIC_CHECKUP_URL?.trim();
-
-/**
- * Başlığın son kelimesi fosforlu kalemle çizilir — logodaki "net" gibi.
- * Kelime sırası mantıksal; Arapçada da son kelime doğru yerde vurgulanır.
- */
-function fosforla(baslik: string) {
-  const i = baslik.trimEnd().lastIndexOf(" ");
-  if (i < 0) return <span className="marker">{baslik}</span>;
-  return (
-    <>
-      {baslik.slice(0, i + 1)}
-      <span className="marker">{baslik.slice(i + 1)}</span>
-    </>
-  );
-}
+const HERO_GIRIS = "animate-rise motion-reduce:animate-none";
 
 export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
@@ -88,58 +79,62 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
         />
         <Container className="relative grid items-center gap-12 py-16 sm:py-20 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:py-24">
           <div>
-            <Reveal y={20}>
-              <Eyebrow>{h.heroEyebrow}</Eyebrow>
-            </Reveal>
-            <Reveal y={20} delay={0.06}>
-              <h1 className="font-display mt-4 text-display font-semibold tracking-tight text-ink text-balance">
-                {fosforla(h.heroTitle)}
-              </h1>
-            </Reveal>
-            <Reveal y={20} delay={0.12}>
-              <p className="mt-5 max-w-xl text-body text-ink-soft sm:mt-6 sm:text-lead">{h.heroSubtitle}</p>
-            </Reveal>
-            <Reveal y={20} delay={0.18}>
-              <div className="mt-9 flex flex-wrap items-center gap-3">
-                {CHECKUP_URL ? (
-                  <ExternalButton href={CHECKUP_URL} size="lg">
-                    {h.checkupCta} <ArrowRight />
-                  </ExternalButton>
-                ) : (
-                  <LinkButton href={localizedPath("services", lang)} size="lg">
-                    {h.heroCtaPrimary} <ArrowRight />
-                  </LinkButton>
-                )}
-                <LinkButton href={localizedPath("contact", lang)} variant="secondary" size="lg">
-                  {h.heroCtaSecondary}
+            <Eyebrow className={HERO_GIRIS}>{h.heroEyebrow}</Eyebrow>
+            <h1
+              className={`font-display mt-4 text-display font-semibold tracking-tight text-ink text-balance ${HERO_GIRIS}`}
+              style={{ animationDelay: "50ms" }}
+            >
+              {fosforla(h.heroTitle)}
+            </h1>
+            <p
+              className={`mt-5 max-w-xl text-body text-ink-soft sm:mt-6 sm:text-lead ${HERO_GIRIS}`}
+              style={{ animationDelay: "100ms" }}
+            >
+              {h.heroSubtitle}
+            </p>
+            <div
+              className={`mt-9 flex flex-wrap items-center gap-3 ${HERO_GIRIS}`}
+              style={{ animationDelay: "150ms" }}
+            >
+              {CHECKUP_URL ? (
+                <ExternalButton href={CHECKUP_URL} size="lg">
+                  {h.checkupCta} <ArrowRight className="rtl:rotate-180" />
+                </ExternalButton>
+              ) : (
+                <LinkButton href={localizedPath("services", lang)} size="lg">
+                  {h.heroCtaPrimary} <ArrowRight className="rtl:rotate-180" />
                 </LinkButton>
-              </div>
-            </Reveal>
-            <Reveal y={20} delay={0.24}>
-              <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-caption text-ink-faint">
-                {[h.heroBadge1, h.heroBadge2, h.heroBadge3].map((badge) => (
-                  <li key={badge} className="inline-flex items-center gap-2">
-                    <span className="size-1.5 rounded-full bg-brand-bright" aria-hidden />
-                    {badge}
-                  </li>
-                ))}
-              </ul>
-            </Reveal>
+              )}
+              <LinkButton href={localizedPath("contact", lang)} variant="secondary" size="lg">
+                {h.heroCtaSecondary}
+              </LinkButton>
+            </div>
+            <ul
+              className={`mt-10 flex flex-wrap gap-x-6 gap-y-2 text-caption text-ink-faint ${HERO_GIRIS}`}
+              style={{ animationDelay: "200ms" }}
+            >
+              {[h.heroBadge1, h.heroBadge2, h.heroBadge3].map((badge) => (
+                <li key={badge} className="inline-flex items-center gap-2">
+                  <span className="size-1.5 rounded-full bg-brand-bright" aria-hidden />
+                  {badge}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <Reveal y={24} delay={0.12} className="relative">
+          <div className="relative">
             <div className="overflow-hidden rounded-3xl shadow-pop">
               <Image
                 src="/images/hero-student.webp"
                 alt={h.heroImageAlt}
                 width={1200}
                 height={780}
-                priority
+                preload
                 className="h-full w-full object-cover"
                 sizes="(min-width: 1024px) 560px, 100vw"
               />
             </div>
-          </Reveal>
+          </div>
         </Container>
       </section>
 
@@ -155,7 +150,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
               <SectionHead light eyebrow={h.checkupEyebrow} title={h.checkupTitle} description={h.checkupDesc} />
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <ExternalButton href={CHECKUP_URL} variant="white" size="lg">
-                  {h.checkupCta} <ArrowRight />
+                  {h.checkupCta} <ArrowRight className="rtl:rotate-180" />
                 </ExternalButton>
                 <Badge tone="light">{h.checkupNote}</Badge>
               </div>
@@ -205,7 +200,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
                     <Icon className="size-5" />
                   </span>
                   <h3 className="font-display mt-5 text-h3 font-semibold text-ink text-balance">{title}</h3>
-                  <p className="mt-4 text-micro font-semibold uppercase tracking-[0.18em] text-ink-muted">
+                  <p className="mt-4 text-micro font-semibold uppercase tracking-[0.18em] text-ink-faint">
                     {h.problemLabel}
                   </p>
                   <p className="mt-1.5 text-body text-ink-faint">{problem}</p>
@@ -227,7 +222,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             <div className="flex flex-wrap items-end justify-between gap-6">
               <SectionHead eyebrow={h.servicesEyebrow} title={h.servicesTitle} description={h.servicesDesc} />
               <LinkButton href={localizedPath("services", lang)} variant="secondary" className="max-sm:w-full">
-                {h.servicesCta} <ArrowRight />
+                {h.servicesCta} <ArrowRight className="rtl:rotate-180" />
               </LinkButton>
             </div>
           </Reveal>
@@ -246,7 +241,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
                     <p className="mt-2 flex-1 text-caption text-ink-faint">
                       {ilkCumle(s[service.leadKey])}
                     </p>
-                    <ArrowRight className="mt-4 size-4 text-brand transition group-hover:translate-x-1 rtl:rotate-180" />
+                    <ArrowRight className="mt-4 size-4 text-brand transition group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
                   </Card>
                 </Link>
               </StaggerItem>
@@ -305,7 +300,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             <div className="flex flex-wrap items-end justify-between gap-6">
               <SectionHead eyebrow={h.productsEyebrow} title={h.productsTitle} description={h.productsDesc} />
               <LinkButton href={localizedPath("products", lang)} variant="secondary" className="max-sm:w-full">
-                {h.productsCta} <ArrowRight />
+                {h.productsCta} <ArrowRight className="rtl:rotate-180" />
               </LinkButton>
             </div>
           </Reveal>
@@ -346,6 +341,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           src="/images/cta-ekip.webp"
           alt={h.ctaImageAlt}
           fill
+          quality={40}
           className="object-cover object-center"
           sizes="100vw"
         />
@@ -358,7 +354,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             <p className="mt-4 text-lead text-white/75">{h.ctaDesc}</p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               <LinkButton href={localizedPath("contact", lang)} variant="white" size="lg">
-                {t.nav.contact} <ArrowRight />
+                {t.nav.contact} <ArrowRight className="rtl:rotate-180" />
               </LinkButton>
               <LinkButton href={localizedPath("services", lang)} variant="outlineLight" size="lg">
                 {t.nav.services}

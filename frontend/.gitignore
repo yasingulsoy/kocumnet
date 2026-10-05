@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Örnek dosya depoda kalmalı: değişken adları ve açıklamaları burada (değer yok).
+!.env.example
 
 # vercel
 .vercel

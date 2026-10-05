@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { GRADE_LABEL, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
+import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
+import { loadRiskliOgrenciler } from "@/lib/checkup/risk-data";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import {
   Card,
   EmptyState,
   INPUT_CLASS,
+  LinkButton,
   PageHeader,
   Pagination,
   Pill,
@@ -34,7 +36,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
   const sp = await searchParams;
   const ara = typeof sp.ara === "string" ? sp.ara.trim().slice(0, 100) : "";
   const sirala: SiralamaKey =
-    typeof sp.sirala === "string" && sp.sirala in SIRALAMA ? (sp.sirala as SiralamaKey) : "yeni";
+    typeof sp.sirala === "string" && Object.hasOwn(SIRALAMA, sp.sirala) ? (sp.sirala as SiralamaKey) : "yeni";
   const sayfa = Math.max(1, Math.floor(Number(typeof sp.sayfa === "string" ? sp.sayfa : 1)) || 1);
 
   const where = {
@@ -51,7 +53,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
 
   const now = new Date();
 
-  const [toplam, ogrenciler] = await Promise.all([
+  const [toplam, ogrenciler, risk] = await Promise.all([
     db.user.count({ where }),
     db.user.findMany({
       where,
@@ -82,6 +84,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
         },
       },
     }),
+    loadRiskliOgrenciler(now),
   ]);
 
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
@@ -95,13 +98,21 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
           trNumber(toplam) + (ara ? " öğrenci aramaya uyuyor." : " kayıtlı öğrenci.") +
           " Kişisel veri: yalnızca yönetici ve müdür görür."
         }
+        actions={
+          <LinkButton href="/checkup/ogrenciler/riskli" variant="outline">
+            Riskli öğrenciler
+            <Pill tone={risk.liste.length ? "warn" : "neutral"} className="tabular">
+              {trNumber(risk.liste.length)}
+            </Pill>
+          </LinkButton>
+        }
       />
 
       <Card>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-line p-5 sm:px-6">
           <label className="min-w-0 flex-1 basis-64">
             <span className="mb-1.5 block text-micro font-medium text-ink-faint">Ara</span>
-            <input name="ara" defaultValue={ara} placeholder="Ad veya e-posta…" className={INPUT_CLASS} />
+            <input name="ara" type="search" defaultValue={ara} placeholder="Ad veya e-posta…" className={INPUT_CLASS} />
           </label>
           <label className="min-w-0 basis-48">
             <span className="mb-1.5 block text-micro font-medium text-ink-faint">Sırala</span>
@@ -132,7 +143,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-sm">
+            <table className="w-full min-w-[52rem] text-caption">
               <thead>
                 <tr className="border-b border-line bg-surface-sunk text-left text-micro text-ink-faint">
                   <th className="px-5 py-3 font-medium sm:px-6">Öğrenci</th>
@@ -164,8 +175,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
                         </Link>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-ink-soft">
-                        {o.grade ? GRADE_LABEL[o.grade] : "—"}
-                        {o.targetExam ? <span className="text-ink-faint"> · {o.targetExam}</span> : null}
+                        {gradeLabel(o.grade) ?? "—"}
+                        {o.targetExam ? <span className="text-ink-faint"> · {examLabel(o.targetExam)}</span> : null}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-ink-soft" title={trDate(o.createdAt, { time: true })}>
                         {trDate(o.createdAt)}

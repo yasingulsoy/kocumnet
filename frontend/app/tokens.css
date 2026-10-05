@@ -55,8 +55,9 @@
   /* ── Metin ────────────────────────────────────────────────── */
   --ink: #111834;
   --ink-soft: #4b5471;
-  /* 4.67:1 — WCAG AA. Tarih, etiket, yardım metni. */
-  --ink-faint: #6b7392;
+  /* Tarih, etiket, yardım metni. WCAG AA her zeminde: beyaz 5.17, --canvas 4.78,
+     kâğıt 5.08. Eski #6b7392 uygulama ve panelin --canvas zemininde 4.32 kalıyordu. */
+  --ink-faint: #646c8c;
   /* Yalnızca DEKORATİF (ayırıcı, ikon konturu). Metin için kullanma. */
   --ink-muted: #8990a8;
 

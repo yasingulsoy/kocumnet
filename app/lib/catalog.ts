@@ -3,12 +3,19 @@ import { accessiblePackageSlugs } from "@/lib/entitlements";
 import type { PackageCardData } from "@/components/PackageCard";
 
 /**
+ * Katalogda görünen ve paket akışıyla (startCheckup) başlatılabilen türler.
+ *
+ * Konu tekrar testleri (RETEST) planındaki konudan, seviyeli check-up (LEVEL)
+ * kendi sayfasından başlar; ikisinin de konu dağılımı yok. Seviyeli paket
+ * katalogda kalmıştı: panoda "sıradaki adım" diye öneriliyor, başlatılınca
+ * sıfır soruluk bir oturum açılıp sınav ekranı çöküyordu.
+ */
+export const KATALOG_TURLERI = ["STANDARD", "INTRO"] as const;
+
+/**
  * Öğrenciye özel paket listesi: kilitli mi, yarım testi var mı, kaç kez
  * çözdü. Pano ve katalog aynı veriyi kullanıyor — tek yerde hesaplanıyor
  * ki "kilitli" ile "açık" iki ekranda farklı çıkmasın.
- *
- * Konu tekrar testleri (kind: RETEST) burada GÖRÜNMEZ: onlar katalogdan
- * değil, çalışma planındaki konudan başlatılır.
  */
 export async function loadCatalog(
   userId: string,
@@ -19,7 +26,7 @@ export async function loadCatalog(
     prisma.package.findMany({
       where: {
         status: "PUBLISHED",
-        kind: { not: "RETEST" },
+        kind: { in: [...KATALOG_TURLERI] },
         ...(opts.scope ? { examScope: opts.scope as never } : {}),
       },
       orderBy: [{ examScope: "asc" }, { sortOrder: "asc" }],
@@ -63,6 +70,20 @@ export async function loadCatalog(
     inProgress: yarimSet.has(p.id),
     timesTaken: bitenSayisi.get(p.id) ?? 0,
   }));
+}
+
+/**
+ * Öğrenciye önerilecek sıradaki paketler: açık ve yarım olmayanlar; en az
+ * çözülen önce, eşitlikte tanışma testi. Pano ve gelişim sayfası aynı sırayı
+ * kullanır ki iki ekran farklı "ilk adım" göstermesin.
+ */
+export function siradakiPaketler(katalog: PackageCardData[], adet = 2): PackageCardData[] {
+  return katalog
+    .filter((p) => !p.locked && !p.inProgress)
+    .sort(
+      (a, b) => (a.timesTaken ?? 0) - (b.timesTaken ?? 0) || Number(b.isIntro) - Number(a.isIntro)
+    )
+    .slice(0, adet);
 }
 
 /**
@@ -111,7 +132,7 @@ export function groupCatalog(items: PackageCardData[]): CatalogGroup[] {
 export async function availableExamScopes(): Promise<string[]> {
   const rows = await prisma.package.groupBy({
     by: ["examScope"],
-    where: { status: "PUBLISHED", kind: { not: "RETEST" } },
+    where: { status: "PUBLISHED", kind: { in: [...KATALOG_TURLERI] } },
     _count: { _all: true },
   });
   return rows.map((r) => r.examScope);

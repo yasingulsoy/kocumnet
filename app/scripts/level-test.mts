@@ -10,6 +10,7 @@ import {
   aktifKosu,
   telafiyiAc,
 } from "../lib/level-run";
+import { kazanimBasinaBirSoru, seviyeSorulari, sinavinKazanimlari } from "../lib/level-selection";
 import { ayarGetir } from "../lib/levels";
 
 /**
@@ -31,17 +32,20 @@ function check(label: string, ok: boolean, detail = "") {
 
 const EMAIL_A = "level-test-a@kocum.local";
 const EMAIL_B = "level-test-b@kocum.local";
+const EMAIL_C = "level-test-c@kocum.local";
 const SINAV = "TYT" as const;
+/** Kapsam testinin fikstür kazanım/soru kodu öneki (yarıda kalan koşudan artarsa silinir). */
+const FIKSTUR_ONEKI = "TEST-KAPSAM-";
 
-async function kullanici(email: string) {
+async function kullanici(email: string, sinav: "TYT" | "LGS" = SINAV) {
   const u = await prisma.user.upsert({
     where: { email },
     create: {
       email,
       name: "Seviye Testi",
       passwordHash: await hashPassword("test-1234"),
-      grade: "GRADE_12",
-      targetExam: SINAV,
+      grade: sinav === "LGS" ? "GRADE_8" : "GRADE_12",
+      targetExam: sinav,
       onboardedAt: new Date(),
     },
     update: {},
@@ -49,7 +53,7 @@ async function kullanici(email: string) {
   });
 
   const paket = await prisma.package.findFirstOrThrow({
-    where: { kind: "LEVEL", examScope: SINAV },
+    where: { kind: "LEVEL", examScope: sinav },
     select: { id: true },
   });
   await prisma.entitlement.deleteMany({ where: { userId: u.id } });
@@ -274,16 +278,208 @@ async function main() {
   }
   check("kilitli seviye açılamıyor", kilitCalisti);
 
+  // ── Sınav kapsamı (LGS) ──────────────────────────────────
+  const userC = await kullanici(EMAIL_C, "LGS");
+  try {
+    await kapsamDenetimi(userC);
+  } finally {
+    // Fikstür soru, oturum kalemlerinde dururken silinemez (Restrict):
+    // önce bu kullanıcının oturumları, sonra fikstürler.
+    await prisma.levelRun.deleteMany({ where: { userId: userC } });
+    await prisma.checkupSession.deleteMany({ where: { userId: userC } });
+    await fiksturleriSil();
+  }
+
   // ── Temizlik ─────────────────────────────────────────────
-  const ids = [userA, userB];
+  const ids = [userA, userB, userC];
   await prisma.levelRun.deleteMany({ where: { userId: { in: ids } } });
   await prisma.checkupSession.deleteMany({ where: { userId: { in: ids } } });
   await prisma.questionExposure.deleteMany({ where: { userId: { in: ids } } });
   await prisma.entitlement.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.user.deleteMany({ where: { email: { in: [EMAIL_A, EMAIL_B] } } });
+  await prisma.user.deleteMany({ where: { email: { in: [EMAIL_A, EMAIL_B, EMAIL_C] } } });
 
   console.log(failed === 0 ? "\nTümü geçti.\n" : `\n${failed} kontrol BAŞARISIZ.\n`);
   process.exitCode = failed === 0 ? 0 : 1;
+}
+
+async function fiksturleriSil() {
+  await prisma.question.deleteMany({ where: { fingerprint: { startsWith: FIKSTUR_ONEKI.toLowerCase() } } });
+  await prisma.objective.deleteMany({ where: { code: { startsWith: FIKSTUR_ONEKI } } });
+}
+
+/**
+ * LGS seviyeli koşusuna (Seviye 1, telafi, Seviye 2, Seviye 3) LGS'de olmayan
+ * konudan soru ya da kazanım girmemeli.
+ *
+ * Kural (şema): kazanımın/sorunun sınav listesi DOLUYSA o liste karar verir;
+ * BOŞSA konusunun geçtiği sınavlar (Topic.examScopes; o da boşsa konunun ana
+ * sınavı). Eski seçim boş listeyi "her sınav" sayıyordu: kapsamı boş AYT/TYT
+ * soruları LGS Seviye 2-3'e aday oluyordu (dev veritabanında yüzlercesi).
+ *
+ * Kural burada seçim kodundan BAĞIMSIZ yazılı: denetimi aynı yardımcıyla
+ * yapmak, yardımcıdaki hatayı denetime de taşırdı.
+ */
+async function kapsamDenetimi(userId: string) {
+  console.log("");
+  console.log("Sınav kapsamı (LGS):");
+  const LGS = "LGS" as const;
+
+  const konular = await prisma.topic.findMany({
+    select: { id: true, examScope: true, examScopes: true, _count: { select: { children: true } } },
+  });
+  const konuHaritasi = new Map(konular.map((k) => [k.id, k]));
+  const konuLgs = (topicId: string) => {
+    const k = konuHaritasi.get(topicId);
+    if (!k) return false;
+    return k.examScopes.length ? k.examScopes.includes(LGS) : k.examScope === LGS;
+  };
+  const lgsde = (liste: string[], topicId: string) => (liste.length ? liste.includes(LGS) : konuLgs(topicId));
+
+  /** Verilen sorulardan LGS'de sorulamayanlar (soru ya da bağlı kazanım kapsam dışı). */
+  async function kapsamDisi(questionIds: string[]) {
+    const qs = await prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: {
+        id: true,
+        topicId: true,
+        examScopes: true,
+        objective: { select: { topicId: true, examScopes: true } },
+      },
+    });
+    return qs.filter(
+      (q) =>
+        !lgsde(q.examScopes, q.topicId) ||
+        (q.objective !== null && !lgsde(q.objective.examScopes, q.objective.topicId))
+    );
+  }
+
+  /*
+   * Fikstür: kapsamı BOŞ bir kazanım ve ona bağlı, kapsamı boş bir L1 sorusu;
+   * ikisi de LGS'de olmayan bir konuda. Dev verisinde bütün kazanımların
+   * kapsamı dolu olduğu için kazanım kuralı başka türlü sınanamıyor. Paket
+   * testlerine düşmesin diye yaprak olmayan bir konu tercih ediliyor.
+   */
+  await fiksturleriSil();
+  const disKonu =
+    konular.find((k) => !konuLgs(k.id) && k._count.children > 0) ?? konular.find((k) => !konuLgs(k.id));
+  if (!disKonu) throw new Error("LGS dışı konu bulunamadı.");
+  const kod = FIKSTUR_ONEKI + Date.now();
+  const icerik = (metin: string) => ({
+    version: 1,
+    blocks: [{ type: "paragraph", content: [{ type: "text", text: metin }] }],
+  });
+  const fikstur = await prisma.objective.create({
+    data: { code: kod, topicId: disKonu.id, name: "Kapsam testi kazanımı", examScopes: [], status: "PUBLISHED", sortOrder: -1 },
+    select: { id: true },
+  });
+  // İki soru: biri Seviye 1'de gösterilse bile telafide ikincisi aday kalsın
+  // (telafi aynı soruyu asla tekrar sormuyor).
+  for (const n of [1, 2]) {
+    await prisma.question.create({
+      data: {
+        topicId: disKonu.id,
+        stem: icerik(`Kapsam testi sorusu ${n}`),
+        stemText: `Kapsam testi sorusu ${n}`,
+        fingerprint: `${kod.toLowerCase()}-${n}`,
+        status: "PUBLISHED",
+        level: "L1_TEMEL",
+        examScopes: [],
+        objectiveId: fikstur.id,
+        choices: {
+          create: ["A", "B", "C", "D", "E"].map((label, i) => ({
+            label,
+            content: icerik(String(i + 1)),
+            isCorrect: i === 0,
+            sortOrder: i,
+          })),
+        },
+      },
+    });
+  }
+
+  // Aday havuzları — rastgele seçimden bağımsız, her koşuda aynı sonuç.
+  const kazanimlar = await sinavinKazanimlari(LGS);
+  const kayitlar = await prisma.objective.findMany({
+    where: { id: { in: kazanimlar.map((k) => k.id) } },
+    select: { id: true, topicId: true, examScopes: true },
+  });
+  const disKazanim = kayitlar.filter((o) => !lgsde(o.examScopes, o.topicId));
+  check("S1 kazanım listesinde LGS dışı kazanım yok", disKazanim.length === 0,
+    `${kazanimlar.length} kazanım, ${disKazanim.length} kapsam dışı`);
+
+  const l1 = await kazanimBasinaBirSoru([...kazanimlar.map((k) => k.id), fikstur.id], LGS, userId, []);
+  const l1Dis = await kapsamDisi(l1.questions.map((q) => q.id));
+  check("S1/telafi seçimi kapsam dışı kazanımdan soru getirmiyor", l1Dis.length === 0,
+    `${l1.questions.length} soru, ${l1Dis.length} kapsam dışı`);
+
+  for (const [level, ad] of [["L2_ORTA", "Seviye 2"], ["L3_ANALIZ", "Seviye 3"]] as const) {
+    const havuz = await seviyeSorulari(level, 100_000, LGS, userId, []);
+    const dis = await kapsamDisi(havuz.questions.map((q) => q.id));
+    check(`${ad} aday havuzunda LGS dışı soru yok`, dis.length === 0,
+      `${havuz.questions.length} aday, ${dis.length} kapsam dışı`);
+  }
+
+  await lgsKosusu(userId, fikstur.id, kapsamDisi);
+}
+
+/** Uçtan uca LGS koşusu: her aşamada oturuma GİREN sorular kapsam içinde mi. */
+async function lgsKosusu(
+  userId: string,
+  fiksturKazanim: string,
+  kapsamDisi: (ids: string[]) => Promise<unknown[]>
+) {
+  const LGS = "LGS" as const;
+  const ayarL = ayarGetir(LGS);
+  await prisma.levelRun.deleteMany({ where: { userId } });
+
+  const { runId, sessionId: s1 } = await seviyeliSinavBaslat(userId, LGS);
+  const a1 = await cevapAnahtari(s1);
+  const d1 = await kapsamDisi(a1.map((a) => a.questionId));
+  check("LGS Seviye 1: LGS dışı soru/kazanım yok", d1.length === 0,
+    `${a1.length} soru, ${d1.length} kapsam dışı`);
+
+  // Telafiyi açmak için barajın hemen altı (TYT yolundaki gibi).
+  const hedef = Math.max(0, Math.floor(a1.length * ayarL.seviye1.gecmeOrani) - 1);
+  await cevapla(s1, userId, hedef);
+  await submitCheckup(s1, userId);
+  const k1 = await asamaDegerlendir(s1, userId);
+  if (k1.tur === "TELAFI") {
+    // Düzeltmeden ÖNCE açılmış bir koşunun bekleyen listesinde kapsam dışı
+    // kazanım kalmış olabilir; telafi seçimi onu da süzmeli. Fikstürü listeye
+    // ekleyerek bu durumu her koşuda (rastgeleliğe bırakmadan) kuruyoruz.
+    const kosu = await prisma.levelRun.findUniqueOrThrow({
+      where: { id: runId },
+      select: { pendingRemedialIds: true },
+    });
+    if (!kosu.pendingRemedialIds.includes(fiksturKazanim)) {
+      await prisma.levelRun.update({
+        where: { id: runId },
+        data: { pendingRemedialIds: [...kosu.pendingRemedialIds, fiksturKazanim] },
+      });
+    }
+    const telafiId = await telafiyiAc(runId, userId);
+    const aT = await cevapAnahtari(telafiId);
+    const dT = await kapsamDisi(aT.map((a) => a.questionId));
+    check("LGS telafi turu: LGS dışı soru/kazanım yok", dT.length === 0,
+      `${aT.length} soru, ${dT.length} kapsam dışı`);
+    await submitCheckup(telafiId, userId);
+  } else {
+    check("LGS telafi turu açıldı", false, k1.tur);
+  }
+
+  // Kapı mantığı yukarıda (TYT) sınandı; burada yalnızca seçimin kapsamı.
+  await prisma.levelRun.update({
+    where: { id: runId },
+    data: { status: "IN_PROGRESS", unlockedLevel: 3, pendingRemedialIds: [] },
+  });
+  for (const seviye of [2, 3] as const) {
+    const { sessionId } = await asamaAc(runId, seviye, "MAIN");
+    const a = await cevapAnahtari(sessionId);
+    const d = await kapsamDisi(a.map((x) => x.questionId));
+    check(`LGS Seviye ${seviye}: LGS dışı soru yok`, d.length === 0,
+      `${a.length} soru, ${d.length} kapsam dışı`);
+    await submitCheckup(sessionId, userId);
+  }
 }
 
 main()

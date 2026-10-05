@@ -47,6 +47,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
     remotePatterns,
+    /*
+     * Next 16'da izinli kalite listesi zorunlu (varsayılan yalnızca 75).
+     * 40: ana sayfa kapanış bandının arka planı — %88 lacivert örtünün
+     * altında, kalite farkı görünmüyor; dosya ~%37 küçülüyor (1920px'te
+     * 96 KB → 61 KB, sharp ile ölçüldü).
+     */
+    qualities: [40, 75],
   },
   experimental: {
     /**

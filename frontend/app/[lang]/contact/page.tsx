@@ -4,10 +4,12 @@ import { Mail, MapPin, Phone } from "lucide-react";
 import { InstagramIcon } from "@/components/icons";
 import { Reveal } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
+import { SayfaYoluJsonLd } from "@/components/JsonLd";
 import { ContactForm } from "@/components/ContactForm";
 import { Card, Container, Section, SectionHead } from "@/components/ui";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { isLocale, LOCALE_OG } from "@/lib/i18n/config";
+import { isLocale } from "@/lib/i18n/config";
+import { sayfaMetadata } from "@/lib/seo";
 import { languageAlternates, localizedPath } from "@/lib/routes";
 import { SITE_BRAND } from "@/lib/site-brand";
 
@@ -19,21 +21,14 @@ export async function generateMetadata({
   const { lang } = await params;
   if (!isLocale(lang)) return {};
   const t = await getDictionary(lang);
-  const path = localizedPath("contact", lang);
 
-  return {
+  return sayfaMetadata({
+    lang,
     title: t.contact.title,
     description: t.contact.metaDescription,
-    alternates: { canonical: path, languages: languageAlternates("contact") },
-    openGraph: {
-      title: `${t.contact.title} | Koçum.Net`,
-      description: t.contact.metaDescription,
-      url: path,
-      type: "website",
-      locale: LOCALE_OG[lang],
-      siteName: "Koçum.Net",
-    },
-  };
+    path: localizedPath("contact", lang),
+    languages: languageAlternates("contact"),
+  });
 }
 
 export default async function ContactPage({ params }: { params: Promise<{ lang: string }> }) {
@@ -75,6 +70,7 @@ export default async function ContactPage({ params }: { params: Promise<{ lang: 
 
   return (
     <main>
+      <SayfaYoluJsonLd lang={lang} dict={t} sayfa="contact" />
       <PageHero eyebrow={t.nav.contact} title={c.heroTitle} description={c.heroSubtitle} />
 
       <Section>

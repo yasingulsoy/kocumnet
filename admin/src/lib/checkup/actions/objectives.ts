@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/checkup/db";
 import { CONTENT_ROLES, staffForAction } from "@/lib/checkup/staff";
+// Sınav listesi öğrenci uygulamasından (shared/exams.ts): yeni sınav burada ayrıca eklenmesin.
+import { EXAM_SCOPES } from "@/lib/checkup/format";
 
 /**
  * Kazanım (öğrenme çıktısı) yönetimi — seviyeli check-up'ın yapı taşı.
@@ -18,8 +20,6 @@ export interface ObjectiveFormState {
   error?: string;
   fields?: Record<string, string>;
 }
-
-const EXAM_SCOPES = ["LGS", "TYT", "AYT", "KPSS_LISANS", "KPSS_ONLISANS", "DGS", "ALES"] as const;
 
 const schema = z.object({
   topicId: z.string().min(1, "Konu seç."),

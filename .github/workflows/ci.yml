@@ -1,8 +1,9 @@
 name: CI
 
 # Her push ve PR'da dört proje: tip denetimi, lint, üretim derlemesi.
-# Veritabanı gerekmez: `next build` yalnızca `prisma generate` çalıştırır,
+# Derlemeler veritabanı istemez: `next build` yalnızca `prisma generate` çalıştırır,
 # site derlemesi backend'e ulaşamayınca boş liste ile devam eder.
+# Check-up'ın uçtan uca testleri (checkup-e2e) ise geçici bir Postgres'e karşı koşar.
 on:
   push:
     branches: [main]
@@ -54,6 +55,47 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx eslint .
       - run: npm run build
+
+  checkup-e2e:
+    # Öğrenciye giden veride cevap anahtarı var mı (test:leak) ve telafide soru
+    # tekrar ediyor mu (test:levels). İkisi de sessiz kusurlar: arayüz çalışmaya
+    # devam eder, ölçüm anlamsızlaşır. Gerçek bir Postgres'e karşı koşar.
+    name: Check-up uçtan uca (sızıntı + seviyeler)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: checkup
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d checkup"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults:
+      run:
+        working-directory: app
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/checkup?schema=public
+      NEXT_PUBLIC_APP_URL: https://checkup.kocum.net
+      NEXT_PUBLIC_SITE_URL: https://kocum.net
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - name: Şema
+        run: npx prisma migrate deploy
+      - name: Tohum (konu ağacı, paketler, demo sorular, seviyeler)
+        run: npm run db:seed && npm run db:seed:demo && npm run db:seed:levels
+      - run: npm run smoke
+      - run: npm run test:markup
+      - run: npm run test:leak
+      - run: npm run test:levels
 
   backend:
     name: backend

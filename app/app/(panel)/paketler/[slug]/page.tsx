@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ArrowLeft,
+  Bookmark,
   CircleCheck,
   Clock,
   Keyboard,
@@ -19,6 +20,7 @@ import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { checkPackageAccess } from "@/lib/entitlements";
 import { Badge, Card, trDate, trNumber } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { StartButton } from "./StartButton";
 
 export async function generateMetadata({
@@ -45,6 +47,7 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
     where: { slug },
     select: {
       id: true,
+      kind: true,
       name: true,
       summary: true,
       description: true,
@@ -62,6 +65,10 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
   });
 
   if (!pkg || pkg.status !== "PUBLISHED") notFound();
+  // Katalog dışı türler bu ekrandan başlatılmaz (lib/catalog.ts KATALOG_TURLERI):
+  // seviyeli check-up kendi sayfasına, gizli tekrar paketi hiçbir yere.
+  if (pkg.kind === "LEVEL") redirect("/seviyeli");
+  if (pkg.kind === "RETEST") notFound();
 
   const [erisim, yarim, gecmis] = await Promise.all([
     checkPackageAccess(user.id, pkg.id, pkg.isFree),
@@ -94,9 +101,16 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
     },
     { icon: Scale, t: "Puanlama", d: cezaMetni(Number(pkg.penaltyRatio)) },
     {
+      icon: Bookmark,
+      t: "Emin değilsen “Sonra bak”",
+      d: "Soruyu işaretle, devam et. Bitirmeden önce boşları ve işaretlediklerini tek listede görürsün.",
+    },
+    {
       icon: Keyboard,
       t: "Klavye kısayolları",
-      d: "A–E ile işaretle, ← → ile sorular arasında gez. Aynı şıkka tekrar basmak işareti kaldırır.",
+      d: "A–E ile işaretle, S ile sonra bak, ← → ile sorular arasında gez. Aynı şıkka tekrar basmak işareti kaldırır.",
+      // Telefonda klavye yok: kısayol bilgisi orada yalnızca yer kaplar.
+      cls: "[@media(pointer:coarse)]:hidden",
     },
   ];
 
@@ -110,8 +124,8 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
       </Link>
 
       <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
-        {/* Sol: paket bilgisi */}
-        <div className="space-y-6">
+        {/* Özet: rozet, başlık, sayılar */}
+        <div className="space-y-6 lg:col-start-1 lg:row-start-1">
           <div>
             <Badge tone={pkg.examScope === "AYT" ? "dark" : "brand"}>{pkg.examScope}</Badge>
             <h1 className="font-display mt-3 text-[28px] font-bold leading-tight tracking-tight text-ink sm:text-[32px]">
@@ -137,47 +151,12 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
               </Card>
             ))}
           </div>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="font-display text-[15px] font-semibold text-ink">Ölçülen konular</h2>
-            <p className="mt-0.5 text-[13px] text-ink-soft">
-              Her konudan en az 3 soru — tek soruya bakıp &quot;zayıfsın&quot; demiyoruz.
-            </p>
-            <ul className="mt-4 divide-y divide-line">
-              {pkg.topics.map((t) => (
-                <li key={t.topic.name} className="flex items-center justify-between gap-3 py-2.5">
-                  <span className="flex items-center gap-2.5 text-sm text-ink">
-                    <CircleCheck className="size-4 shrink-0 text-ok-fill" />
-                    {t.topic.name}
-                  </span>
-                  <span className="tabular shrink-0 text-xs text-ink-faint">
-                    {t.questionCount} soru
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="font-display text-[15px] font-semibold text-ink">Başlamadan önce</h2>
-            <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-              {kurallar.map(({ icon: Icon, t, d }) => (
-                <li key={t} className="flex gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft ring-1 ring-line">
-                    <Icon className="size-[18px]" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">{t}</p>
-                    <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{d}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
         </div>
 
-        {/* Sağ: başlat kartı — masaüstünde kaydırırken yerinde kalır */}
-        <div className="space-y-4 lg:sticky lg:top-10">
+        {/* Başlat kartı. Telefonda özetin hemen altında: eskiden ölçülen konular
+            ve kuralların ARDINDAN, iki ekran aşağıdaydı ve öğrenci düğmeyi
+            aramak zorunda kalıyordu. Masaüstünde sağda, kaydırırken yerinde kalır. */}
+        <div className="space-y-4 lg:sticky lg:top-10 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <Card className="p-5 sm:p-6">
             {erisim.allowed ? (
               <>
@@ -239,6 +218,46 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
               </ul>
             </Card>
           ) : null}
+        </div>
+
+        {/* Ayrıntı: ölçülen konular ve kurallar */}
+        <div className="space-y-6 lg:col-start-1 lg:row-start-2">
+          <Card className="p-5 sm:p-6">
+            <h2 className="font-display text-[15px] font-semibold text-ink">Ölçülen konular</h2>
+            <p className="mt-0.5 text-[13px] text-ink-soft">
+              Her konudan en az 3 soru — tek soruya bakıp &quot;zayıfsın&quot; demiyoruz.
+            </p>
+            <ul className="mt-4 divide-y divide-line">
+              {pkg.topics.map((t) => (
+                <li key={t.topic.name} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="flex items-center gap-2.5 text-sm text-ink">
+                    <CircleCheck className="size-4 shrink-0 text-ok-fill" />
+                    {t.topic.name}
+                  </span>
+                  <span className="tabular shrink-0 text-xs text-ink-faint">
+                    {t.questionCount} soru
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <h2 className="font-display text-[15px] font-semibold text-ink">Başlamadan önce</h2>
+            <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+              {kurallar.map(({ icon: Icon, t, d, cls }) => (
+                <li key={t} className={cn("flex gap-3", cls)}>
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft ring-1 ring-line">
+                    <Icon className="size-[18px]" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">{t}</p>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{d}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
         </div>
       </div>
     </div>

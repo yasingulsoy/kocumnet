@@ -13,6 +13,18 @@ export interface FormState {
   error?: string;
   /** Alan bazlı hatalar: { email: "…" } */
   fields?: Record<string, string>;
+  /**
+   * Gönderilen değerler (PAROLA HARİÇ). React 19 form eylemi bitince formu
+   * sıfırlıyor: yanlış parola yazan öğrencinin e-postası, "bu e-posta kayıtlı"
+   * uyarısı alanın bütün kayıt formu siliniyordu. Alanlar bunları
+   * defaultValue olarak geri yazar.
+   */
+  values?: Record<string, string>;
+}
+
+/** Hata dönüşlerinde forma geri yazılacak değerler — parola ASLA dönmez. */
+function geriDon(formData: FormData, alanlar: string[]): Record<string, string> {
+  return Object.fromEntries(alanlar.map((a) => [a, String(formData.get(a) ?? "").slice(0, 200)]));
 }
 
 const emailSchema = z
@@ -56,23 +68,25 @@ export async function registerAction(
     grade: formData.get("grade") || undefined,
   });
 
-  if (!parsed.success) return { fields: fieldErrors(parsed.error) };
+  const values = geriDon(formData, ["name", "email", "kvkk"]);
+
+  if (!parsed.success) return { fields: fieldErrors(parsed.error), values };
 
   // Saatte 10 kayıt/IP: her kayıt scrypt çalıştırır ve e-posta gönderir.
   if (await sinirAsildi("kayit", 10, 60 * 60_000)) {
-    return { error: "Çok fazla deneme yapıldı. Lütfen bir saat sonra tekrar dene." };
+    return { error: "Çok fazla deneme yapıldı. Lütfen bir saat sonra tekrar dene.", values };
   }
 
   // Onay kutusu tarayıcıda "required" ama bu atlatılabilir; asıl denetim burada.
   if (formData.get("kvkk") !== "on") {
-    return { error: "Devam etmek için aydınlatma metnini onaylaman gerekiyor." };
+    return { error: "Devam etmek için aydınlatma metnini onaylaman gerekiyor.", values };
   }
 
   const { name, email, password, grade } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {
-    return { fields: { email: "Bu e-posta ile bir hesap zaten var." } };
+    return { fields: { email: "Bu e-posta ile bir hesap zaten var." }, values };
   }
 
   let user: { id: string };
@@ -85,7 +99,7 @@ export async function registerAction(
     // İki sekmeden aynı anda kayıt: benzersiz e-posta kısıtı yarışı kaybedene
     // 500 yerine anlaşılır bir mesaj.
     if ((e as { code?: string }).code === "P2002") {
-      return { fields: { email: "Bu e-posta ile bir hesap zaten var." } };
+      return { fields: { email: "Bu e-posta ile bir hesap zaten var." }, values };
     }
     throw e;
   }
@@ -106,12 +120,14 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     .object({ email: emailSchema, password: z.string().min(1, "Parola gerekli.") })
     .safeParse({ email: formData.get("email"), password: formData.get("password") });
 
-  if (!parsed.success) return { fields: fieldErrors(parsed.error) };
+  const values = geriDon(formData, ["email"]);
+
+  if (!parsed.success) return { fields: fieldErrors(parsed.error), values };
 
   const { email, password } = parsed.data;
 
   if (await sinirAsildi(`giris:${email}`, 8, 10 * 60_000)) {
-    return { error: "Çok fazla deneme yapıldı. Lütfen 10 dakika sonra tekrar deneyin." };
+    return { error: "Çok fazla deneme yapıldı. Lütfen 10 dakika sonra tekrar deneyin.", values };
   }
 
   const user = await prisma.user.findUnique({
@@ -127,7 +143,7 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
   if (!user || !ok) {
     // Hangisinin yanlış olduğunu SÖYLEMİYORUZ.
-    return { error: "E-posta veya parola hatalı." };
+    return { error: "E-posta veya parola hatalı.", values };
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

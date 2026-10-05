@@ -78,16 +78,39 @@ export const staffDurumu = cache(async (): Promise<StaffDurumu> => {
 });
 
 /**
+ * Giriş sonrası dönülecek adres güvenli mi: yalnızca bu panelin kendi
+ * yolları ("/admin", "/admin/…", "/admin?…"). "//evil.com" ya da
+ * "/administrator" gibi değerler reddedilir.
+ */
+export function guvenliSonraki(v: unknown): string | null {
+  if (typeof v !== "string" || v.length > 500) return null;
+  return v === "/admin" || v.startsWith("/admin/") || v.startsWith("/admin?") ? v : null;
+}
+
+/** Giriş adresi; `nereden` verilirse girişten sonra oraya dönülür. */
+export function girisAdresi(nereden?: string | null) {
+  const sonraki = guvenliSonraki(nereden);
+  return sonraki && sonraki !== "/admin" ? `/admin/giris?next=${encodeURIComponent(sonraki)}` : "/admin/giris";
+}
+
+/**
  * Sayfalar için: oturum yoksa girişe yönlendirir, varsa personeli ve rol
  * izni sonucunu döndürür. Rol yetmezse sayfa "yetkin yok" kutusu çizer —
  * yönlendirme değil, çünkü kullanıcı nereye girmeye çalıştığını görmeli.
  *
+ * `nereden`: sayfanın kendi adresi. Oturumu düşmüş personel (ör. bildirim
+ * postasındaki "Panelde aç" bağlantısından gelen) girişten sonra genel
+ * bakışa değil, açmak istediği sayfaya döner.
+ *
  * ⚠️ Düzen (layout) seviyesindeki denetim YETMEZ: Next sayfayı düzenle
  * paralel çizebilir. Her sayfa bunu çağırır; cache sayesinde maliyeti yok.
  */
-export async function requireStaff(roles?: readonly StaffRole[]): Promise<{ staff: Staff; allowed: boolean }> {
+export async function requireStaff(
+  roles?: readonly StaffRole[],
+  nereden?: string
+): Promise<{ staff: Staff; allowed: boolean }> {
   const d = await staffDurumu();
-  if (d.kind === "none") redirect("/admin/giris");
+  if (d.kind === "none") redirect(girisAdresi(nereden));
   if (d.kind === "unreachable") redirect("/admin/giris?hata=backend");
   return { staff: d.staff, allowed: !roles || roles.includes(d.staff.role) };
 }

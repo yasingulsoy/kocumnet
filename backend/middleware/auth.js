@@ -10,14 +10,23 @@ function getAdminJwt(req) {
 }
 
 /**
- * Jeton, parolanın son değiştiği andan önce imzalanmışsa geçersiz. 1 saniye
- * pay: parola değiştirilip hemen yeni çerez verildiğinde iat aynı saniyeye
- * düşebiliyor.
+ * Jeton, parolanın son değiştiği ya da "bütün oturumları kapat" denildiği
+ * andan önce imzalanmışsa geçersiz.
+ *
+ * Yeni jetonlar milisaniyelik imza anını taşır (`ims`): karşılaştırma kesin.
+ * Eski jetonlarda yalnızca saniyelik `iat` var; onlara 1 saniye pay tanınır
+ * (parola değişip hemen yeni çerez verildiğinde iat aynı saniyeye düşebiliyor)
+ * — o payın içinde kapatılmadan hemen önce açılmış oturum ayakta kalıyordu.
  */
 function jetonEskimis(decoded, user) {
-  if (!user.password_changed_at) return false;
+  const sinirlar = [user.password_changed_at, user.sessions_revoked_at]
+    .filter(Boolean)
+    .map((t) => new Date(t).getTime());
+  if (sinirlar.length === 0) return false;
+  const sinir = Math.max(...sinirlar);
+  if (Number.isFinite(decoded.ims)) return decoded.ims < sinir;
   const iatMs = Number(decoded.iat || 0) * 1000;
-  return iatMs + 1000 < new Date(user.password_changed_at).getTime();
+  return iatMs + 1000 < sinir;
 }
 
 /**
