@@ -52,6 +52,11 @@ jobs:
       - name: Şema kopyası güncel mi (yalnızca admin)
         if: matrix.project == 'admin'
         run: npm run checkup:check
+      # PageProps, LayoutProps, RouteContext gibi rota tipleri next build sırasında
+      # .next/types altına üretiliyor. tsc derlemeden ÖNCE koştuğu için önce üret;
+      # yoksa yerelde (eski .next varken) geçen denetim CI'da "Cannot find name" verir.
+      - name: Rota tipleri
+        run: npx next typegen
       - run: npx tsc --noEmit
       - run: npx eslint .
       - run: npm run build

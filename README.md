@@ -51,6 +51,20 @@ cd admin && npm install && npm run dev               # :3001
 Geliştirmede posta göndermeden davet ve sıfırlama akışlarını denemek için
 backend ve app'te `SMTP_URL=log://console`: postalar sunucu günlüğüne yazılır.
 
+### Paket eklerken: kilit dosyası npm 10 ile
+
+CI (Node 22) ve Dokploy (Nixpacks, Node 20) **npm 10** kullanıyor. npm 11, isteğe
+bağlı paketlerin bazı bağımlılıklarını kilit dosyasına yazmıyor (`@floating-ui/dom`,
+`@emnapi/*` gibi). Yerelde her şey çalışır ama yayında `npm ci` şu hatayla düşer:
+`Missing: <paket> from lock file`. Paket eklerken ya da çıkarırken npm 10 kullanın:
+
+```bash
+npx npm@10.9.4 install <paket>
+```
+
+Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-only` ile
+çalıştırmak düzeltir. npm 10'un yazdığı kilidi npm 11 de sorunsuz okur.
+
 ## Doğrulama
 
 | Proje | Komutlar |
