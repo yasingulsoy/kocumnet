@@ -8,9 +8,10 @@ const { authenticateAdmin, requireRole, resolveStaff } = require('../middleware/
 const { setAdminAuthCookie, clearAdminAuthCookie } = require('../utils/authCookie');
 const { adminLoginLimiter, forgotLimiter, resetLimiter, writeLimiter } = require('../middleware/rateLimits');
 const { normalizeRole, isValidRole } = require('../utils/roles');
-const { JWT_SECRET } = require('../config/env');
+const { JWT_SECRET, IS_PRODUCTION } = require('../config/env');
 const { parseId, escapeLike, asyncHandler, toBool } = require('../utils/http');
 const { denetle } = require('../utils/audit');
+const { sahipsizMedyaTemizligi, VARSAYILAN_YAS_MS } = require('../utils/blogMedia');
 const {
   isMailConfigured,
   sendStaffInvite,
@@ -1027,6 +1028,31 @@ router.delete(
       ozet: `Hazır yanıt şablonunu sildi: “${sablon.title}” (${sablon.locale.toUpperCase()})`,
     });
     res.json({ success: true, message: 'Şablon silindi.' });
+  })
+);
+
+// ─────────────────────────────────────────────────────────────
+// Bakım
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Sahipsiz içerik görsellerini şimdi temizle (sunucu bunu zaten açılışta ve
+ * günde bir yapıyor). Hiçbir yazıda ve sürümde geçmeyen, 7 günden eski
+ * dosyalar silinir. Geliştirmede `min_age_hours` ile eşik küçültülebilir
+ * (duman testi); üretimde hep 7 gün.
+ */
+router.post(
+  '/maintenance/media-cleanup',
+  requireRole('admin'),
+  writeLimiter,
+  asyncHandler(async (req, res) => {
+    const saat = Number((req.body || {}).min_age_hours);
+    const enAzYasMs = !IS_PRODUCTION && Number.isFinite(saat) && saat >= 0 ? saat * 3_600_000 : VARSAYILAN_YAS_MS;
+    const sonuc = await sahipsizMedyaTemizligi({ enAzYasMs });
+    if (sonuc.silinen > 0) {
+      await denetle(req, 'blog.media_cleanup', { hedefTur: 'blog', ozet: `${sonuc.silinen} sahipsiz içerik görselini sildi` });
+    }
+    res.json({ success: true, data: sonuc });
   })
 );
 

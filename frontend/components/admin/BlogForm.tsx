@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
-import { Eye, EyeOff, ExternalLink, History, ImageOff, Loader2, Save, Send } from "lucide-react";
+import { Eye, EyeOff, ExternalLink, History, ImageOff, Loader2, RefreshCw, Save, Send } from "lucide-react";
 import { getImageUrl, PUBLIC_BACKEND_URL } from "@/lib/api";
 import { saveBlogAction } from "@/lib/admin/actions";
 import type { AdminBlog } from "@/lib/admin/types";
@@ -11,7 +11,7 @@ import { Editor } from "./Editor";
 import { useDraftBackup } from "./useDraftBackup";
 import { useFormAction } from "./useFormAction";
 import { useUnsavedGuard } from "./useUnsavedGuard";
-import { Button, CHECKBOX_CLASS, Card, Field, INPUT_CLASS, Notice, Pill, SELECT_CLASS, TEXTAREA_CLASS, cn } from "./ui";
+import { Button, CHECKBOX_CLASS, Card, Field, INPUT_CLASS, Notice, Pill, SELECT_CLASS, TEXTAREA_CLASS, cn, relative } from "./ui";
 
 const DIL: Record<string, string> = { tr: "Türkçe", en: "English", ar: "العربية" };
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
@@ -127,7 +127,13 @@ function AramaOnizlemesi({ baslik, aciklama, yol }: { baslik: string; aciklama: 
  * sunucudaki yeni değerlerle, "kaydedilmedi" izi temiz başlar.
  */
 export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; readOnly?: boolean; kaydedildi?: boolean }) {
-  const { state, pending, formRef, formProps } = useFormAction(saveBlogAction, { dogrula: boyutDenetimi });
+  // Süren görsel yüklemesi varken kaydedilmez: içerikte görsel henüz yok.
+  const [yuklenenGorsel, setYuklenenGorsel] = useState(0);
+  const { state, pending, formRef, formProps, yenidenGonder } = useFormAction(saveBlogAction, {
+    dogrula: (fd) => (yuklenenGorsel > 0 ? "Görsel yükleniyor; bitince kaydet." : boyutDenetimi(fd)),
+  });
+  /** Çakışmada "yenile": tarayıcının "ayrılıyor musun" sorusu bu kez çıkmasın. */
+  const [cikisSerbest, setCikisSerbest] = useState(false);
   const editorRef = useRef<TiptapEditor | null>(null);
   const [kapakSil, setKapakSil] = useState(false);
   const [onizleme, setOnizleme] = useState<string | null>(null);
@@ -161,9 +167,18 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
     !readOnly && !kaydedildi && !yedekKapandi && bulunan && (bulunan.icerik !== ilkIcerik || ALANLAR.some((a) => (bulunan.alanlar[a] ?? "") !== ilk[a]))
       ? bulunan
       : null;
-  const sunucuDahaYeni = Boolean(yedek && blog?.updated_at && new Date(blog.updated_at).getTime() > yedek.zaman);
+  // Yedek, yazının şimdikinden eski bir sürümüne dayanıyorsa arada başkası kaydetmiştir.
+  const sunucuDahaYeni = Boolean(
+    yedek &&
+      blog?.updated_at &&
+      (yedek.taban ? yedek.taban !== blog.updated_at : new Date(blog.updated_at).getTime() > yedek.zaman)
+  );
 
-  useUnsavedGuard(degisti && !pending && !readOnly);
+  useUnsavedGuard(degisti && !pending && !readOnly && !cikisSerbest);
+
+  useEffect(() => {
+    if (cikisSerbest) window.location.reload();
+  }, [cikisSerbest]);
 
   // Başarılı kayıt: yedeği sil, adres çubuğundaki ?kaydedildi'yi temizle
   // (yenilemede yeni yedek yanlışlıkla silinmesin).
@@ -184,10 +199,10 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
     if (!surum || readOnly) return;
     const t = window.setTimeout(() => {
       const icerik = editorRef.current?.getHTML() ?? "";
-      yaz({ alanlar: formDegerleri(formRef.current), icerik, zaman: Date.now() });
+      yaz({ alanlar: formDegerleri(formRef.current), icerik, zaman: Date.now(), taban: blog?.updated_at ?? null });
     }, 1000);
     return () => window.clearTimeout(t);
-  }, [surum, readOnly, yaz, formRef]);
+  }, [surum, readOnly, yaz, formRef, blog?.updated_at]);
 
   // Ctrl+S / ⌘S: kaydet, yayın durumunu değiştirme.
   useEffect(() => {
@@ -201,6 +216,21 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
     window.addEventListener("keydown", tus);
     return () => window.removeEventListener("keydown", tus);
   }, [readOnly, formRef]);
+
+  /**
+   * Çakışmada güvenli yol: yazdıklarını hemen yedekle, sayfayı yenile. Yeni
+   * sürüm açılır; "Bu tarayıcıda kaydedilmemiş bir sürüm var" kutusundan
+   * yazdıklarını geri getirip birleştirebilirsin.
+   */
+  function yedekleVeYenile() {
+    yaz({
+      alanlar: formDegerleri(formRef.current),
+      icerik: editorRef.current?.getHTML() ?? "",
+      zaman: Date.now(),
+      taban: blog?.updated_at ?? null,
+    });
+    setCikisSerbest(true);
+  }
 
   function degisiklik() {
     setDegisti(true);
@@ -235,6 +265,8 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
   return (
     <form {...formProps} onChange={readOnly ? undefined : degisiklik} className="grid gap-6 lg:grid-cols-[1fr_320px]">
       {blog ? <input type="hidden" name="id" value={blog.id} /> : null}
+      {/* Aynı anda düzenleme koruması: editörün açtığı sürüm (backend 409 için). */}
+      {blog?.updated_at ? <input type="hidden" name="acilan_surum" value={blog.updated_at} /> : null}
 
       <div className="min-w-0 space-y-5">
         {yedek ? (
@@ -242,7 +274,9 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
             <p>
               {new Date(yedek.zaman).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", dateStyle: "medium", timeStyle: "short" })}{" "}
               tarihli yazdıkların kaydedilmeden kalmış.
-              {sunucuDahaYeni ? " Yazı o zamandan sonra kaydedilmiş; geri yüklersen sonraki değişikliklerin üzerine yazarsın." : ""}
+              {sunucuDahaYeni
+                ? " Yazı bu yedekten sonra başkası tarafından (ya da başka sekmede) kaydedilmiş; geri yüklersen o değişikliklerin üzerine yazarsın. Önce Sürümler'den son hâline bakabilirsin."
+                : ""}
               {yedek.gorselsiz ? " Gömülü görseller yedeğe sığmadı, onları yeniden eklemen gerekecek." : ""}
             </p>
             <span className="mt-2 flex flex-wrap gap-2">
@@ -263,7 +297,40 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
             </span>
           </Notice>
         ) : null}
-        {state.error ? <Notice>{state.error}</Notice> : null}
+        {state.conflict ? (
+          <Notice tone="warn" title="Bu yazı sen açtıktan sonra değiştirildi">
+            <p>
+              {state.conflict.byMe ? "Sen (başka bir sekmede ya da cihazda)" : (state.conflict.by ?? "Başka biri")}{" "}
+              {relative(state.conflict.at)} kaydetti{state.conflict.what ? `: ${state.conflict.what}` : ""}. Onun
+              değişikliklerinin üzerine yazmamak için kayıt yapılmadı.
+            </p>
+            <span className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={yedekleVeYenile}>
+                <RefreshCw /> Yenile, yazdıklarım yedekte kalsın
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-bad hover:bg-bad-wash"
+                disabled={pending || yuklenenGorsel > 0}
+                onClick={() => {
+                  if (window.confirm("Araya giren değişiklikler silinecek, yazının senin hâlin kaydedilecek. Emin misin?")) {
+                    yenidenGonder({ zorla: "1" });
+                  }
+                }}
+              >
+                Yine de kaydet (üzerine yaz)
+              </Button>
+            </span>
+            <p className="mt-2 text-micro">
+              Yeniledikten sonra çıkan kutudan &quot;Geri yükle&quot; ile yazdıklarını getirip iki hâli birleştirebilirsin; eski
+              hâller Sürümler&apos;de duruyor.
+            </p>
+          </Notice>
+        ) : state.error ? (
+          <Notice>{state.error}</Notice>
+        ) : null}
 
         <Field label="Başlık" error={state.fields?.title}>
           <input
@@ -292,6 +359,7 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
             onReady={(e) => {
               editorRef.current = e;
             }}
+            onUploadingChange={setYuklenenGorsel}
           />
         </div>
 
@@ -372,7 +440,7 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
             <div className="mt-4 grid gap-2">
               {yayinda ? (
                 <>
-                  <Button type="submit" block disabled={pending}>
+                  <Button type="submit" block disabled={pending || yuklenenGorsel > 0}>
                     {pending ? <Loader2 className="animate-spin" /> : <Save />} Güncelle
                   </Button>
                   <Button
@@ -381,7 +449,7 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
                     value="0"
                     variant="ghost"
                     block
-                    disabled={pending}
+                    disabled={pending || yuklenenGorsel > 0}
                     onClick={(e) => {
                       if (!window.confirm("Yazı yayından kaldırılsın mı? Sitedeki adresi 404 verir.")) e.preventDefault();
                     }}
@@ -391,10 +459,10 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
                 </>
               ) : (
                 <>
-                  <Button type="submit" name="yayin" value="1" block disabled={pending}>
+                  <Button type="submit" name="yayin" value="1" block disabled={pending || yuklenenGorsel > 0}>
                     {pending ? <Loader2 className="animate-spin" /> : <Send />} Yayınla
                   </Button>
-                  <Button type="submit" variant="secondary" block disabled={pending}>
+                  <Button type="submit" variant="secondary" block disabled={pending || yuklenenGorsel > 0}>
                     <Save /> {blog ? "Taslağı kaydet" : "Taslak olarak kaydet"}
                   </Button>
                 </>
@@ -407,7 +475,7 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
                     <span aria-hidden className="size-1.5 rounded-full bg-warn-fill" /> Kaydedilmemiş değişiklikler
                   </>
                 ) : (
-                  "Kısayol: Ctrl+S / ⌘S kaydeder"
+                  yuklenenGorsel > 0 ? "Görsel yükleniyor…" : "Kısayol: Ctrl+S / ⌘S kaydeder"
                 )}
               </p>
             </div>

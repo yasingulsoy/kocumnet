@@ -4,6 +4,7 @@ const fs = require('fs');
 const { Op, fn, col } = require('sequelize');
 const {
   createBlogWallUploadMiddleware,
+  createMediaUploadMiddleware,
   uploadsDir,
   deleteBlogFolder,
   deleteBlogWallFolder,
@@ -13,15 +14,16 @@ const { CONTENT_ROLES } = require('../utils/roles');
 const { writeLimiter, viewLimiter } = require('../middleware/rateLimits');
 const { parseId, escapeLike, asyncHandler, toBool } = require('../utils/http');
 const { sequelize } = require('../config/database');
-const { Blog, BlogRevision, User } = require('../models');
+const { Blog, BlogRevision, User, AuditLog } = require('../models');
 const {
   normalizeBlogHtml,
   persistInlineImagesToBlogsWall,
   cleanupUnreferencedContentImages,
 } = require('../utils/blogContent');
 const { convertToWebp } = require('../utils/imageConverter');
-const { sniffImageFile } = require('../utils/imageSignature');
+const { sniffImage, sniffImageFile } = require('../utils/imageSignature');
 const { denetle, tirnak } = require('../utils/audit');
+const { gorseliIsle, gorseliKaydet } = require('../utils/blogMedia');
 
 const router = express.Router();
 
@@ -155,24 +157,30 @@ function blogDurumu(blog) {
  * değişiklikler tek satırda alan adlarıyla ("başlık, içerik güncellendi").
  * Hiçbir şey değişmediyse (aynı formu yeniden kaydetmek) kayıt yazılmaz.
  */
-async function blogGuncellemeDenetimi(req, blog, once) {
+async function blogGuncellemeDenetimi(req, blog, once, { ustuneYazdi = false } = {}) {
   const simdi = blogDurumu(blog);
   const degisen = Object.keys(ALAN_ADLARI).filter((k) => (simdi[k] ?? null) !== (once[k] ?? null));
   const alanlar = degisen.map((k) => ALAN_ADLARI[k]).join(', ');
   const ad = tirnak(blog.title);
+  // Çakışma uyarısına rağmen kaydedildiyse iz bıraksın: "kim kimin değişikliğini ezdi?"
+  const ustuneNotu = ustuneYazdi ? ' — araya giren kaydın üzerine bilerek yazdı' : '';
 
   if (simdi.is_published !== once.is_published) {
     await denetle(req, simdi.is_published ? 'blog.publish' : 'blog.unpublish', {
       hedefTur: 'blog',
       hedefId: blog.id,
-      ozet: `${ad} yazısını ${simdi.is_published ? 'yayınladı' : 'yayından kaldırdı'}${alanlar ? ` (ayrıca güncellendi: ${alanlar})` : ''}`,
+      ozet: `${ad} yazısını ${simdi.is_published ? 'yayınladı' : 'yayından kaldırdı'}${alanlar ? ` (ayrıca güncellendi: ${alanlar})` : ''}${ustuneNotu}`,
     });
     return;
   }
   if (degisen.length) {
     const adresNotu =
       degisen.includes('slug') && once.is_published ? ` — yayındaki adres değişti: /${once.slug} → /${simdi.slug}` : '';
-    await denetle(req, 'blog.update', { hedefTur: 'blog', hedefId: blog.id, ozet: `${ad}: ${alanlar} güncellendi${adresNotu}` });
+    await denetle(req, 'blog.update', {
+      hedefTur: 'blog',
+      hedefId: blog.id,
+      ozet: `${ad}: ${alanlar} güncellendi${adresNotu}${ustuneNotu}`,
+    });
   }
 }
 
@@ -243,6 +251,50 @@ async function gorselTemizligi(blog) {
   } catch (e) {
     console.error('İçerik görseli temizliği atlandı:', blog.id, '—', e.message);
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Aynı anda düzenleme koruması
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * İstemci, editörü açtığı andaki `updated_at`'i gönderir. Arada başkası
+ * (ya da aynı kişi başka sekmede) kaydettiyse 409: sessizce birbirinin
+ * değişikliğini ezmesinler. Sürüm göndermeyen istek (eski istemci)
+ * denetlenmez; `force` ile bilerek üzerine yazılır.
+ */
+function surumCakisiyor(blog, beklenen) {
+  if (beklenen === undefined || beklenen === null || beklenen === '') return false;
+  const t = new Date(beklenen).getTime();
+  return !Number.isFinite(t) || t !== new Date(blog.updated_at).getTime();
+}
+
+/** 409 yanıtı: son değişikliği kim, ne zaman, ne yaptı (denetim kaydından). */
+async function cakismaYaniti(req, res, blog) {
+  let son = null;
+  try {
+    son = await AuditLog.findOne({
+      where: { target_type: 'blog', target_id: blog.id },
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      include: [{ model: User, as: 'actor', attributes: ['id', 'first_name', 'last_name'], required: false }],
+    });
+  } catch (e) {
+    console.error('Çakışma bilgisi okunamadı:', e.message);
+  }
+  const ad = son && son.actor ? [son.actor.first_name, son.actor.last_name].filter(Boolean).join(' ').trim() : '';
+  return res.status(409).json({
+    success: false,
+    code: 'EDIT_CONFLICT',
+    error: 'Bu yazı sen açtıktan sonra değiştirildi.',
+    conflict: {
+      updated_at: blog.updated_at,
+      by: ad || null,
+      by_me: Boolean(son && son.actor_id === req.userId),
+      // Özetteki yazı adı tekrar etmesin: "“TYT planı”: içerik güncellendi" → "içerik güncellendi"
+      what: son ? String(son.summary).replace(/^“[^”]*”(: | yazısını )?/, '') : null,
+      at: son ? son.created_at : blog.updated_at,
+    },
+  });
 }
 
 /** Elle girilen adres: küçük harf, rakam, tire. 3-120 karakter. */
@@ -476,6 +528,57 @@ router.post(
   })
 );
 
+// ─── Yazı içi görsel: seçilir seçilmez yükleme ───────────────
+
+const medyaYukleyici = createMediaUploadMiddleware().single('image');
+
+/**
+ * Editör görseli seçer seçmez buraya yükler; dönen adres içeriğe girer.
+ * Denetim: uzantı + MIME (multer), ilk baytlar (sihirli sayı), 10 MB.
+ * SVG kabul edilmez (içinde betik taşıyabilir). Çıktı en fazla 1600 px WebP.
+ * Yazıya bağlı değil: yeni (henüz kaydedilmemiş) yazıda da çalışır;
+ * sahipsiz kalanları utils/blogMedia.js temizler.
+ */
+router.post(
+  '/media',
+  authenticateAdmin,
+  requireRole(...CONTENT_ROLES),
+  writeLimiter,
+  (req, res, next) =>
+    medyaYukleyici(req, res, (err) => {
+      if (!err) return next();
+      const mesaj =
+        err.code === 'LIMIT_FILE_SIZE'
+          ? "Görsel 10 MB'ı aşıyor. Daha küçük bir dosya seç."
+          : err.name === 'MulterError'
+            ? 'Görsel yüklenemedi (tek dosya, "image" alanında).'
+            : err.message;
+      return res.status(400).json({ success: false, code: 'BAD_IMAGE', error: mesaj });
+    }),
+  asyncHandler(async (req, res) => {
+    if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+      return res.status(400).json({ success: false, code: 'BAD_IMAGE', error: 'Görsel seçilmedi.' });
+    }
+    const tur = sniffImage(req.file.buffer);
+    if (!tur) {
+      return res
+        .status(400)
+        .json({ success: false, code: 'BAD_IMAGE', error: 'Dosya geçerli bir resim değil (JPEG, PNG, WebP, GIF).' });
+    }
+    let islenmis;
+    try {
+      islenmis = await gorseliIsle(req.file.buffer, tur);
+    } catch (e) {
+      console.error('Yazı görseli işlenemedi:', e.message);
+      return res
+        .status(400)
+        .json({ success: false, code: 'BAD_IMAGE', error: 'Görsel işlenemedi; dosya bozuk ya da çok büyük olabilir.' });
+    }
+    const url = gorseliKaydet(islenmis.data);
+    res.status(201).json({ success: true, data: { url, width: islenmis.width, height: islenmis.height } });
+  })
+);
+
 router.post(
   '/:id/image',
   authenticateAdmin,
@@ -596,6 +699,11 @@ router.put(
     if (!blog) {
       return res.status(404).json({ success: false, error: 'Blog bulunamadı' });
     }
+
+    // Aynı anda düzenleme: editörün açtığı sürüm eskidiyse yazmadan dön.
+    const zorla = toBool((req.body || {}).force);
+    const cakisma = surumCakisiyor(blog, (req.body || {}).expected_updated_at);
+    if (cakisma && !zorla) return cakismaYaniti(req, res, blog);
 
     /*
      * ALAN SINIRI (allowlist). Eskiden `{ ...req.body }` doğrudan update'e
@@ -731,7 +839,7 @@ router.put(
 
     if (updateData.content !== undefined) await gorselTemizligi(blog);
 
-    await blogGuncellemeDenetimi(req, blog, once);
+    await blogGuncellemeDenetimi(req, blog, once, { ustuneYazdi: cakisma && zorla });
 
     res.json({ success: true, data: blog, message: 'Blog güncellendi.' });
   })
@@ -790,6 +898,10 @@ router.post(
     if (!blog) return res.status(404).json({ success: false, error: 'Blog bulunamadı' });
     const surum = rid ? await BlogRevision.findOne({ where: { id: rid, blog_id: id } }) : null;
     if (!surum) return res.status(404).json({ success: false, error: 'Sürüm bulunamadı' });
+
+    // Sürüme dönüş de aynı korumadan geçer: sayfa açıldıktan sonra yazı değiştiyse 409.
+    const b = req.body || {};
+    if (!toBool(b.force) && surumCakisiyor(blog, b.expected_updated_at)) return cakismaYaniti(req, res, blog);
 
     const hedef = surumDegerleri(surum);
     if (!surumAlanlariDegisti(surumDegerleri(blog), hedef)) {

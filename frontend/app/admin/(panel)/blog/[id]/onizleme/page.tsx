@@ -95,7 +95,7 @@ export default async function OnizlemePage({
         <div className="flex flex-wrap items-center gap-2">
           {surum && yazar ? (
             <ActionButton
-              action={restoreRevisionAction.bind(null, blog.id, surum.id)}
+              action={restoreRevisionAction.bind(null, blog.id, surum.id, blog.updated_at)}
               variant="soft"
               size="sm"
               confirm="Yazı bu sürüme dönsün mü? Başlık, içerik, özet, meta alanları ve etiketler değişir; adres ve yayın durumu aynı kalır. Editörde kaydedilmemiş değişiklik varsa kaybolur."

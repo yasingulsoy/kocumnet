@@ -102,6 +102,18 @@ const createBlogWallUploadMiddleware = (blogId) => {
   });
 };
 
+/**
+ * Yazı içi görsel (seçilir seçilmez yükleme): bellekte tutulur, sharp ile
+ * işlenip uploads/media altına yazılır (utils/blogMedia.js). Ham dosya
+ * diske hiç inmez. SVG kabul edilmez (fileFilter: yalnızca JPEG/PNG/WebP/GIF).
+ */
+const createMediaUploadMiddleware = () =>
+  multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter,
+  });
+
 // Eski yapı için (blogId ile klasör oluşturan)
 const createBlogUploadMiddleware = (blogId) => {
   return multer({
@@ -138,6 +150,7 @@ const deleteBlogWallFolder = (blogId) => {
 module.exports = {
   createBlogUploadMiddleware,
   createBlogWallUploadMiddleware,
+  createMediaUploadMiddleware,
   deleteBlogFolder,
   deleteBlogWallFolder,
   uploadsDir,

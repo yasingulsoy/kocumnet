@@ -27,12 +27,21 @@ export class BackendError extends Error {
   status: number;
   code?: string;
   fields?: Record<string, string>;
-  constructor(message: string, status: number, code?: string, fields?: Record<string, string>) {
+  /** Yanıt gövdesinin tamamı (ör. 409'daki `conflict` ayrıntısı). */
+  body?: Record<string, unknown> | null;
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    fields?: Record<string, string>,
+    body?: Record<string, unknown> | null
+  ) {
     super(message);
     this.name = "BackendError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.body = body;
   }
 }
 
@@ -169,7 +178,8 @@ export async function backend<T = Record<string, unknown>>(path: string, istek: 
       String(json?.error ?? json?.message ?? `İstek başarısız (${res.status})`),
       res.status,
       typeof json?.code === "string" ? json.code : undefined,
-      (json?.fields as Record<string, string> | undefined) ?? undefined
+      (json?.fields as Record<string, string> | undefined) ?? undefined,
+      json
     );
   }
   return (json ?? {}) as T;

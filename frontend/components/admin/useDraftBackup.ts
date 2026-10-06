@@ -18,6 +18,11 @@ export interface YaziYedegi {
   icerik: string;
   /** ms */
   zaman: number;
+  /**
+   * Yedeğin dayandığı yazı sürümü (editör açıldığında updated_at). Sunucudaki
+   * sürüm farklıysa arada başkası kaydetmiştir: geri yükleme onun üzerine yazar.
+   */
+  taban?: string | null;
   /** Yer kalmadığı için gömülü görseller yedeğe alınamadı. */
   gorselsiz?: boolean;
 }

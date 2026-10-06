@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BACKEND_URL } from "@/lib/api";
+import { BACKEND_URL, PUBLIC_BACKEND_URL } from "@/lib/api";
 import { BackendError, BackendUnreachable, backend, backendRaw, oturumJetonu } from "./backend";
 import { guvenliSonraki, oturumSil, oturumYaz, staffForAction } from "./auth";
 import { basarisizDenemeSay, denemeSayaciniSifirla, denemeSiniriAsildi, denemeSiniriDolu } from "./limiter";
@@ -13,6 +13,7 @@ import {
   isMessageStatus,
   isStaffRole,
   type AdminBlog,
+  type EditConflict,
   type FormState,
   type StaffUser,
 } from "./types";
@@ -175,8 +176,42 @@ function blogSayfalariniYenile(id?: number) {
 }
 
 /** Editörde mutlak backend adresi kullanılan görselleri göreli hâle çevirir. */
+/**
+ * Editörde mutlak backend adresiyle duran görselleri göreli yapar. Sunucu
+ * ve tarayıcı adresleri farklı olabilir (BACKEND_URL / NEXT_PUBLIC_BACKEND_URL);
+ * ikisi de çevrilir.
+ */
 function gorselleriGorelilestir(html: string) {
-  return html.split(`${BACKEND_URL}/uploads/`).join("/uploads/");
+  let sonuc = html;
+  for (const kok of new Set([BACKEND_URL, PUBLIC_BACKEND_URL].filter(Boolean))) {
+    sonuc = sonuc.split(`${kok}/uploads/`).join("/uploads/");
+  }
+  return sonuc;
+}
+
+/** 409 yanıtından çakışma ayrıntısı; başka bir hataysa null. */
+function cakisma(e: unknown): EditConflict | null {
+  if (!(e instanceof BackendError) || e.status !== 409 || e.code !== "EDIT_CONFLICT") return null;
+  const c = (e.body?.conflict ?? {}) as Record<string, unknown>;
+  return {
+    by: typeof c.by === "string" && c.by ? c.by : null,
+    byMe: c.by_me === true,
+    at: typeof c.at === "string" ? c.at : typeof c.updated_at === "string" ? c.updated_at : new Date().toISOString(),
+    what: typeof c.what === "string" && c.what ? c.what : null,
+  };
+}
+
+/** "Ayşe Yılmaz 4 Eki 14:05'te" — çakışma mesajı için kısa özne. */
+function cakismaOzeti(c: EditConflict) {
+  const zaman = new Date(c.at).toLocaleString("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const kim = c.byMe ? "sen (başka bir sekmede ya da cihazda)" : (c.by ?? "başka biri");
+  return `${kim}, ${zaman}${c.what ? ` — ${c.what}` : ""}`;
 }
 
 export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -224,6 +259,10 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
     // Alan yalnızca kapak varken formda; yoksa dokunma (kapak silinince backend temizler).
     ...(fd.has("image_alt") ? { image_alt: metin(fd, "image_alt", 200) || null } : {}),
     locale: ["tr", "en", "ar"].includes(locale) ? locale : "tr",
+    // Aynı anda düzenleme koruması: editörün açtığı sürüm. Arada başkası
+    // kaydettiyse backend 409 döner; "zorla" ile bilerek üzerine yazılır.
+    ...(id && metin(fd, "acilan_surum", 40) ? { expected_updated_at: metin(fd, "acilan_surum", 40) } : {}),
+    ...(id && fd.get("zorla") === "1" ? { force: true } : {}),
   };
 
   // Boyut denetimi kayıttan ÖNCE: eskiden yazı oluşturulduktan sonra
@@ -262,6 +301,8 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
       blogSayfalariniYenile(blogId);
       redirect(`/admin/blog/${blogId}?hata=kapak&k=${Date.now().toString(36)}`);
     }
+    const c = cakisma(e);
+    if (c) return { error: `Bu yazı sen açtıktan sonra değiştirildi: ${cakismaOzeti(c)}.`, conflict: c };
     return hataDurumu(e, "Yazı kaydedilemedi.");
   }
 
@@ -271,6 +312,42 @@ export async function saveBlogAction(_prev: FormState, fd: FormData): Promise<Fo
   // değişmediyse updated_at da değişmiyor, "kaydedilmedi" izi takılı kalıyordu).
   const sonuc = yayin === true ? "yayinlandi" : yayin === false && fd.get("yayin") === "0" ? "taslak" : "1";
   redirect(`/admin/blog/${blogId}?kaydedildi=${sonuc}&k=${Date.now().toString(36)}`);
+}
+
+const GORSEL_TURLERI: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+/**
+ * Yazı içi görseli seçilir seçilmez yükler (editör → BFF → backend). Backend
+ * en fazla 1600 px WebP'ye çevirip göreli adres döndürür; editör onu içeriğe
+ * koyar. Eskiden görsel içeriğe base64 gömülüyor, 12 MB gövde sınırı ve
+ * tarayıcı yedeğinin kotası doluyordu. SVG kabul edilmez.
+ */
+export async function uploadBlogImageAction(fd: FormData): Promise<FormState & { url?: string; width?: number; height?: number }> {
+  const yetki = await staffForAction(CONTENT_ROLES);
+  if (!yetki.ok) return { error: yetki.error };
+  const dosya = fd.get("image");
+  if (!(dosya instanceof File) || dosya.size === 0) return { error: "Görsel seçilmedi." };
+  const uzanti = GORSEL_TURLERI[dosya.type];
+  if (!uzanti) return { error: "Yalnızca JPEG, PNG, WebP ya da GIF yüklenebilir." };
+  if (dosya.size > 10 * 1024 * 1024) return { error: "Görsel 10 MB'ı aşıyor. Daha küçük bir dosya seç." };
+
+  // Yapıştırılan görselin adı boş olabiliyor; backend uzantıyı da denetliyor.
+  const mp = new FormData();
+  mp.append("image", dosya, `gorsel.${uzanti}`);
+  try {
+    const r = await backend<{ data: { url: string; width?: number; height?: number } }>("/api/blogs/media", {
+      method: "POST",
+      formData: mp,
+    });
+    return { ok: true, url: r.data.url, width: r.data.width, height: r.data.height };
+  } catch (e) {
+    return hataDurumu(e, "Görsel yüklenemedi.");
+  }
 }
 
 export async function setBlogPublishedAction(id: number, published: boolean): Promise<FormState> {
@@ -289,12 +366,23 @@ export async function setBlogPublishedAction(id: number, published: boolean): Pr
  * Yazıyı bir sürüme döndür. Adres, kapak, yayın durumu değişmez; dönüş de
  * yeni bir sürüm olarak kaydedilir. Editör yeniden bağlansın diye `k`.
  */
-export async function restoreRevisionAction(blogId: number, revisionId: number): Promise<FormState> {
+export async function restoreRevisionAction(blogId: number, revisionId: number, beklenen?: string | null): Promise<FormState> {
   const yetki = await staffForAction(CONTENT_ROLES);
   if (!yetki.ok) return { error: yetki.error };
   try {
-    await backend(`/api/blogs/${blogId}/revisions/${revisionId}/restore`, { method: "POST" });
+    await backend(`/api/blogs/${blogId}/revisions/${revisionId}/restore`, {
+      method: "POST",
+      // Sayfa açıldıktan sonra yazı değiştiyse backend 409 döner (aynı koruma).
+      body: beklenen ? { expected_updated_at: beklenen } : {},
+    });
   } catch (e) {
+    const c = cakisma(e);
+    if (c) {
+      return {
+        error: `Bu sayfa açıldıktan sonra yazı değişti: ${cakismaOzeti(c)}. Sayfayı yenileyip sürümlere yeniden bak.`,
+        conflict: c,
+      };
+    }
     return hataDurumu(e, "Sürüme dönülemedi.");
   }
   blogSayfalariniYenile(blogId);

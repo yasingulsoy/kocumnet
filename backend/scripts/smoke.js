@@ -6,6 +6,11 @@
  *
  * Yazma denemeleri (blog oluştur/sil) yalnızca GELİŞTİRMEDE ve .env'de
  * ADMIN_EMAIL + ADMIN_PASSWORD varsa çalışır. Üretime karşı çalıştırılamaz.
+ *
+ * ⚠️ Görsel temizliği testi geliştirme sunucusunda yaş eşiğini 0'a indirip
+ * temizliği çalıştırır: o veritabanında hiçbir yazıda/sürümde geçmeyen
+ * (kaydedilmemiş taslaklardan kalan) içerik görselleri de silinir. Geçici
+ * bir test veritabanında koşun.
  */
 require('../config/env');
 const crypto = require('crypto');
@@ -308,6 +313,8 @@ async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
 
       await mesajTestleri(cerez, giris.json.user);
       await sablonTestleri(cerez);
+      await gorselTestleri(cerez);
+      await cakismaTestleri(cerez);
       await oturumTestleri(eposta, parola);
     }
   }
@@ -493,4 +500,125 @@ async function sablonTestleri(cerez) {
   } else {
     console.log('  · Şablon tablosu boş değil: örnek ekleme denemesi atlandı.');
   }
+}
+
+/** Çok parçalı görsel yükleme (yazı içi görsel ucu). */
+async function yukle(cerez, veri, ad, tur) {
+  const csrf = cerez.deger('csrf_token');
+  const fd = new FormData();
+  fd.append('image', new Blob([veri], { type: tur }), ad);
+  const res = await fetch(BASE + '/api/blogs/media', {
+    method: 'POST',
+    headers: { cookie: cerez.baslik(), ...(csrf ? { 'x-csrf-token': csrf } : {}) },
+    body: fd,
+  });
+  cerez.kaydet(res);
+  const json = await res.json().catch(() => null);
+  return { res, json };
+}
+
+const adresDurumu = async (u) => (await fetch(BASE + u)).status;
+
+/**
+ * Yazı içi görseller: seçilir seçilmez yükleme (1600 px WebP), tür/boyut
+ * denetimi, eski base64 içeriğin çalışması ve sahipsiz görsel temizliği
+ * (sürümlerde geçenler korunur).
+ */
+async function gorselTestleri(cerez) {
+  console.log('\nYazı içi görseller:');
+  const sharp = require('sharp');
+  const png = await sharp({ create: { width: 2400, height: 1200, channels: 3, background: { r: 26, g: 95, b: 180 } } })
+    .png()
+    .toBuffer();
+
+  const y = await yukle(cerez, png, 'deneme.png', 'image/png');
+  const url = y.json && y.json.data && y.json.data.url;
+  ok('görsel yükleniyor (/uploads/media/…/….webp)', y.res.status === 201 && /^\/uploads\/media\/\d{6}\/[a-f0-9]{24}\.webp$/.test(String(url)));
+  ok('en fazla 1600 px genişliğe indiriliyor', Boolean(y.json && y.json.data && y.json.data.width === 1600 && y.json.data.height === 800));
+  if (url) {
+    const dosya = await fetch(BASE + url);
+    ok('yüklenen görsel WebP olarak sunuluyor', dosya.status === 200 && dosya.headers.get('content-type') === 'image/webp');
+  }
+
+  const svg = await yukle(cerez, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'kotu.svg', 'image/svg+xml');
+  ok('SVG kabul edilmiyor', svg.res.status === 400);
+  const kilik = await yukle(cerez, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), 'kilik.png', 'image/png');
+  ok('PNG kılığındaki SVG reddediliyor (ilk baytlar)', kilik.res.status === 400);
+  const buyuk = Buffer.alloc(Math.round(10.5 * 1024 * 1024));
+  png.copy(buyuk, 0, 0, 16);
+  const cokBuyuk = await yukle(cerez, buyuk, 'buyuk.png', 'image/png');
+  ok('10 MB üstü reddediliyor', cokBuyuk.res.status === 400 && /10 MB/.test(String(cokBuyuk.json && cokBuyuk.json.error)));
+
+  // Eski yöntem: içerikte base64 gömülü görsel hâlâ dosyaya çevriliyor.
+  const eski = await iste('/api/blogs', {
+    method: 'POST',
+    body: { title: 'Base64 testi — silinecek', content: `<p>eski</p><img src="data:image/png;base64,${png.toString('base64')}" alt="eski">` },
+    cerez,
+  });
+  const eskiIcerik = String((eski.json && eski.json.data && eski.json.data.content) || '');
+  const eskiAdres = (eskiIcerik.match(/\/uploads\/blogs\/\d+\/content_[^"']+\.webp/) || [])[0];
+  ok('eski base64 içerik dosyaya çevriliyor', Boolean(eskiAdres) && !eskiIcerik.includes('base64,') && (await adresDurumu(eskiAdres)) === 200);
+  if (eski.json && eski.json.data) await iste(`/api/blogs/${eski.json.data.id}`, { method: 'DELETE', cerez });
+
+  // Temizlik: A sahipsiz, B yazıda, C yalnızca eski bir sürümde.
+  const a = (await yukle(cerez, png, 'a.png', 'image/png')).json.data.url;
+  const b = (await yukle(cerez, png, 'b.png', 'image/png')).json.data.url;
+  const c = (await yukle(cerez, png, 'c.png', 'image/png')).json.data.url;
+  const yazi = await iste('/api/blogs', {
+    method: 'POST',
+    body: { title: 'Görsel testi — silinecek', content: `<p>c</p><img src="${c}" alt="c">` },
+    cerez,
+  });
+  const id = yazi.json && yazi.json.data && yazi.json.data.id;
+  await iste(`/api/blogs/${id}`, { method: 'PUT', body: { content: `<p>b</p><img src="${b}" alt="b">` }, cerez });
+  const temizle = () => iste('/api/admin/maintenance/media-cleanup', { method: 'POST', body: { min_age_hours: 0 }, cerez });
+  const t1 = await temizle();
+  ok('temizlik çalışıyor', Boolean(t1.json && t1.json.data && t1.json.data.silinen >= 1));
+  ok('sahipsiz görsel silindi', (await adresDurumu(a)) === 404);
+  ok('yazıdaki görsel korundu', (await adresDurumu(b)) === 200);
+  ok('yalnızca sürüm geçmişindeki görsel korundu', (await adresDurumu(c)) === 200);
+  await iste(`/api/blogs/${id}`, { method: 'DELETE', cerez });
+  await temizle();
+  ok('yazı silinince görselleri de temizleniyor', (await adresDurumu(b)) === 404 && (await adresDurumu(c)) === 404);
+}
+
+/** Aynı anda düzenleme: eski sürümle kayıt 409, bilerek üzerine yazma, sürüme dönüşte de koruma. */
+async function cakismaTestleri(cerez) {
+  console.log('\nAynı anda düzenleme:');
+  const y = await iste('/api/blogs', { method: 'POST', body: { title: 'Çakışma testi — silinecek', content: '<p>a</p>' }, cerez });
+  const id = y.json && y.json.data && y.json.data.id;
+  if (!id) {
+    ok('çakışma testi yazısı oluşturuldu', false);
+    return;
+  }
+  const v1 = y.json.data.updated_at;
+  const p1 = await iste(`/api/blogs/${id}`, { method: 'PUT', body: { content: '<p>b</p>', expected_updated_at: v1 }, cerez });
+  ok('açılan sürümle kayıt geçiyor', p1.res.status === 200);
+  const p2 = await iste(`/api/blogs/${id}`, { method: 'PUT', body: { content: '<p>c</p>', expected_updated_at: v1 }, cerez });
+  const c = (p2.json && p2.json.conflict) || {};
+  ok(
+    'arada kaydedilmişse 409: kim, ne zaman, ne',
+    p2.res.status === 409 && p2.json.code === 'EDIT_CONFLICT' && Boolean(c.by) && c.by_me === true && Boolean(c.at) && Boolean(c.what),
+    JSON.stringify(c)
+  );
+  const sonra = await iste(`/api/blogs/${id}`, { cerez });
+  ok('409 yazıyı değiştirmedi', Boolean(sonra.json && sonra.json.data && sonra.json.data.content === '<p>b</p>'));
+  const p3 = await iste(`/api/blogs/${id}`, { method: 'PUT', body: { content: '<p>c</p>', expected_updated_at: v1, force: true }, cerez });
+  ok('bilerek üzerine yazılabiliyor', p3.res.status === 200 && p3.json.data.content === '<p>c</p>');
+
+  const surumler = (await iste(`/api/blogs/${id}/revisions`, { cerez })).json.data;
+  const ilk = surumler[surumler.length - 1];
+  const r1 = await iste(`/api/blogs/${id}/revisions/${ilk.id}/restore`, { method: 'POST', body: { expected_updated_at: v1 }, cerez });
+  ok('sürüme dönüş de eski sürümle 409', r1.res.status === 409);
+  const r2 = await iste(`/api/blogs/${id}/revisions/${ilk.id}/restore`, {
+    method: 'POST',
+    body: { expected_updated_at: p3.json.data.updated_at },
+    cerez,
+  });
+  ok('güncel sürümle sürüme dönülüyor', r2.res.status === 200 && r2.json.data.content === '<p>a</p>');
+  const eskiIstemci = await iste(`/api/blogs/${id}`, { method: 'PUT', body: { excerpt: 'sürümsüz' }, cerez });
+  ok('sürüm göndermeyen istek eskisi gibi kaydediyor', eskiIstemci.res.status === 200);
+  const iz = await iste(`/api/admin/audit?target_type=blog&target_id=${id}`, { cerez });
+  ok('bilerek üzerine yazma denetimde', ((iz.json && iz.json.data) || []).some((r) => String(r.summary).includes('üzerine bilerek')));
+  await iste(`/api/blogs/${id}`, { method: 'DELETE', cerez });
 }

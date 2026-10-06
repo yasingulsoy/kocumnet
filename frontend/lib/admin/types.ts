@@ -223,4 +223,17 @@ export interface FormState {
   message?: string;
   /** Alan bazlı hatalar: { email: "…" } */
   fields?: Record<string, string>;
+  /** Kayıtta 409: editör açıldıktan sonra yazıyı başkası (ya da başka sekme) kaydetti. */
+  conflict?: EditConflict;
+}
+
+/** Aynı anda düzenleme çakışması: son değişikliği kim, ne zaman, ne yaptı. */
+export interface EditConflict {
+  /** Son değişikliği yapanın adı; bilinmiyorsa null. */
+  by: string | null;
+  /** Değişikliği aynı hesap yapmış (başka sekme ya da cihaz). */
+  byMe: boolean;
+  at: string;
+  /** "içerik güncellendi", "yayından kaldırdı" gibi; bilinmiyorsa null. */
+  what: string | null;
 }

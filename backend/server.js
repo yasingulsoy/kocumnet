@@ -10,6 +10,7 @@ const { apiLimiter } = require('./middleware/rateLimits');
 const { requestLogger } = require('./middleware/requestLogger');
 const { clientIp, BFF_AKTIF } = require('./middleware/clientIp');
 const { eskiDenetimKayitlariniSil } = require('./utils/audit');
+const { sahipsizMedyaTemizligi } = require('./utils/blogMedia');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -146,6 +147,11 @@ async function start() {
   // Denetim kayıtları 365 gün tutulur; eskiler açılışta ve günde bir silinir.
   await eskiDenetimKayitlariniSil();
   setInterval(eskiDenetimKayitlariniSil, 24 * 60 * 60 * 1000).unref();
+  // Kaydedilmemiş yazılardan kalan sahipsiz içerik görselleri (7 günden eski): açılışta ve günde bir.
+  const medyaTemizligi = () =>
+    sahipsizMedyaTemizligi().catch((e) => console.error('Sahipsiz görsel temizliği yapılamadı:', e.message));
+  medyaTemizligi();
+  setInterval(medyaTemizligi, 24 * 60 * 60 * 1000).unref();
   server = app.listen(PORT, () => {
     console.log(`🚀 Kocumnet API http://127.0.0.1:${PORT}  (${IS_PRODUCTION ? 'üretim' : 'geliştirme'})`);
     console.log(`   Site yönetimi istemci IP'si (BFF_SHARED_SECRET): ${BFF_AKTIF ? 'açık' : 'kapalı — sunucu IP\'siyle sayılıyor'}`);

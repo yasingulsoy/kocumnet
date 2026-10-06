@@ -28,12 +28,15 @@ function SurumSatiri({
   baslik,
   blogId,
   geriAlabilir,
+  acilanSurum,
 }: {
   s: BlogRevisionSummary;
   guncel: boolean;
   baslik: string;
   blogId: number;
   geriAlabilir: boolean;
+  /** Sayfa açıldığında yazının updated_at'i: arada değiştiyse dönüş 409 alır. */
+  acilanSurum: string | null;
 }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
@@ -56,7 +59,7 @@ function SurumSatiri({
       </Link>
       {!guncel && geriAlabilir ? (
         <ActionButton
-          action={restoreRevisionAction.bind(null, blogId, s.id)}
+          action={restoreRevisionAction.bind(null, blogId, s.id, acilanSurum)}
           variant="ghost"
           size="sm"
           confirm="Yazı bu sürüme dönsün mü? Başlık, içerik, özet, meta alanları ve etiketler değişir; adres ve yayın durumu aynı kalır. Editörde kaydedilmemiş değişiklik varsa kaybolur."
@@ -132,7 +135,15 @@ export default async function BlogDuzenlePage({ params, searchParams }: PageProp
           </p>
           <ol className="mt-2 divide-y divide-line">
             {surumler.slice(0, 8).map((s, i) => (
-              <SurumSatiri key={s.id} s={s} guncel={i === 0} baslik={blog.title} blogId={blog.id} geriAlabilir={yazar} />
+              <SurumSatiri
+                key={s.id}
+                s={s}
+                guncel={i === 0}
+                baslik={blog.title}
+                blogId={blog.id}
+                geriAlabilir={yazar}
+                acilanSurum={blog.updated_at}
+              />
             ))}
           </ol>
           {surumler.length > 8 ? (
@@ -142,7 +153,15 @@ export default async function BlogDuzenlePage({ params, searchParams }: PageProp
               </summary>
               <ol className="divide-y divide-line">
                 {surumler.slice(8).map((s) => (
-                  <SurumSatiri key={s.id} s={s} guncel={false} baslik={blog.title} blogId={blog.id} geriAlabilir={yazar} />
+                  <SurumSatiri
+                    key={s.id}
+                    s={s}
+                    guncel={false}
+                    baslik={blog.title}
+                    blogId={blog.id}
+                    geriAlabilir={yazar}
+                    acilanSurum={blog.updated_at}
+                  />
                 ))}
               </ol>
             </details>
