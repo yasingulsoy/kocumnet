@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
+import { Plus } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import {
@@ -18,6 +19,7 @@ import {
   CardHeader,
   EmptyState,
   FilterTabs,
+  LinkButton,
   Notice,
   PACKAGE_STATE_TONE,
   PageHeader,
@@ -83,7 +85,14 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
           health.length +
           " paket · " +
           (ucretliSayisi ? ucretliSayisi + " ücretli" : "hepsi ücretsiz") +
-          ". Paket içeriği (konular, soru dağılımı) şimdilik seed'den geliyor."
+          ". Katalog paketleri panelden düzenlenir; tanışma, seviyeli ve tekrar paketleri sistemindir."
+        }
+        actions={
+          yonetebilir ? (
+            <LinkButton href="/checkup/paketler/yeni">
+              <Plus aria-hidden /> Yeni paket
+            </LinkButton>
+          ) : null
         }
       />
 
@@ -140,10 +149,25 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
                 {katalog.map((p) => (
                   <tr key={p.id} className="align-top">
                     <td className="min-w-56">
-                      <p className="font-medium text-ink">{p.name}</p>
+                      {yonetebilir && p.kind === "STANDARD" ? (
+                        <Link href={"/checkup/paketler/" + p.id} className="font-medium text-ink hover:text-brand">
+                          {p.name}
+                        </Link>
+                      ) : (
+                        <p className="font-medium text-ink">{p.name}</p>
+                      )}
                       <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
                         {p.kind === "INTRO" ? <Pill tone="info">Tanışma</Pill> : null}
                         {p.slug}
+                        {yonetebilir && p.kind === "STANDARD" ? (
+                          <Link
+                            href={"/checkup/paketler/" + p.id}
+                            className="font-medium text-brand hover:text-brand-hover"
+                            aria-label={p.name + " paketini düzenle"}
+                          >
+                            Düzenle
+                          </Link>
+                        ) : null}
                       </p>
                     </td>
                     <td className="whitespace-nowrap">

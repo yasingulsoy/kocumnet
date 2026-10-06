@@ -3,6 +3,7 @@ import { Prisma } from "./generated/client";
 import { db } from "./db";
 import { sqlKendisiYaDaKonusuSinavda, sqlKonuSinavda } from "./exam-scope";
 import { MIN_L1_PER_OBJECTIVE, levelSizes } from "./levels";
+import type { HavuzSayisi } from "./package-rules";
 
 /** Ham sorgulardaki sınav ifadeleri (sütun; kullanıcı girdisi değil). */
 const PAKET_SINAVI = Prisma.raw('p."examScope"');
@@ -18,7 +19,7 @@ const SEVIYELI_SINAV = Prisma.raw("lp.ex");
  *
  * Paket sayımları öğrenci uygulamasının seçimiyle (app/lib/question-selection.ts)
  * AYNI süzgeçten geçer: soru `examScopes` doluysa yalnızca listelediği
- * sınavlarda sorulur. Eskiden panel bunu saymıyordu — "yalnızca AYT"
+ * sınavlarda sorulur; boşsa konusunun sınavlarında (shared/exam-scope.ts). Eskiden panel bunu saymıyordu — "yalnızca AYT"
  * işaretli sorular LGS paketinin havuzunda görünüyor, havuzu yetmeyen paket
  * yayına alınabiliyordu.
  */
@@ -178,8 +179,8 @@ interface RawLevel {
  *
  * "Bu sınavda sorulabilir" kuralı öğrenci uygulamasının seviyeli seçimiyle
  * birebir aynı (lib/checkup/exam-scope.ts): soru/kazanım `examScopes`'u doluysa
- * o liste, boşsa konusunun sınavları. Paket dağılımında konu zaten paketin
- * konusu olduğundan orada yalnızca sorunun kendi listesine bakılır (`pick`).
+ * o liste, boşsa konusunun sınavları. Paket seçimi (`pick`) de aynı kuralı
+ * uyguluyor: konusu paketin sınavında değilse kapsamı boş soru gelmez.
  */
 export async function loadPackageHealth(): Promise<PackageHealth[]> {
   const [packages, blueprint, retest, level] = await Promise.all([
@@ -209,7 +210,7 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
       LEFT JOIN "Question" q
         ON q."topicId" = pt."topicId"
        AND q.status = 'PUBLISHED'
-       AND (cardinality(q."examScopes") = 0 OR p."examScope" = ANY(q."examScopes"))
+       AND ${sqlKendisiYaDaKonusuSinavda("q", "t", PAKET_SINAVI)}
       GROUP BY pt.id, t.id
       ORDER BY pt."packageId", pt."sortOrder"
     `,
@@ -222,7 +223,7 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
                SELECT count(*) FROM "Question" q
                WHERE q."topicId" = t.id
                  AND q.status = 'PUBLISHED'
-                 AND (cardinality(q."examScopes") = 0 OR p."examScope" = ANY(q."examScopes"))
+                 AND ${sqlKendisiYaDaKonusuSinavda("q", "t", PAKET_SINAVI)}
              ) >= p."questionCount")::int AS ready
       FROM "Package" p
       JOIN "Topic" t ON ${sqlKonuSinavda("t", PAKET_SINAVI)}
@@ -393,15 +394,58 @@ export function seviyeliHazirlikSorgusu(): Prisma.Sql {
   `;
 }
 
+// Zorluk bandı hedefleri saf kurallar modülünde (paket düzenleyici istemcide de kullanıyor).
+export { bandTargets } from "./package-rules";
+
 /**
- * Seçimin bir konudan istediği zorluk dağılımı: kolay %30 · orta %50 · zor %20
- * (app/lib/question-selection.ts bandTargets ile aynı yuvarlama). Bant
- * yetmezse seçim gevşer ve testin zorluğu kayar — engel değil, uyarı.
+ * Paket düzenleyicinin havuzu: her (sınav, yaprak konu) için paketin
+ * çekebileceği yayındaki soru ve zorluk bantları. Kural öğrenci uygulamasının
+ * paket seçimiyle (question-selection.ts `pick`) aynı: soru `examScopes` doluysa
+ * yalnızca listelediği sınavlarda; boşsa konusu o sınavdaysa. Paket sağlığındaki
+ * (loadPackageHealth) sayımla birebir aynı koşul.
  */
-export function bandTargets(total: number): { easy: number; medium: number; hard: number } {
-  const easy = Math.round(total * 0.3);
-  const hard = Math.round(total * 0.2);
-  return { easy, medium: Math.max(0, total - easy - hard), hard };
+export async function paketHavuzu(): Promise<Record<string, Record<string, HavuzSayisi>>> {
+  const rows = await db.$queryRaw<{ topicId: string; exam: string; have: number; easy: number; medium: number; hard: number }[]>`
+    SELECT q."topicId", e.ex::text AS exam,
+           count(*)::int                                  AS have,
+           count(*) FILTER (WHERE q.difficulty <= 2)::int AS easy,
+           count(*) FILTER (WHERE q.difficulty = 3)::int  AS medium,
+           count(*) FILTER (WHERE q.difficulty >= 4)::int AS hard
+    FROM "Question" q
+    JOIN "Topic" t ON t.id = q."topicId"
+    CROSS JOIN unnest(enum_range(NULL::"ExamScope")) AS e(ex)
+    WHERE q.status = 'PUBLISHED'
+      AND ${sqlKendisiYaDaKonusuSinavda("q", "t", Prisma.raw("e.ex"))}
+    GROUP BY q."topicId", e.ex
+  `;
+  const out: Record<string, Record<string, HavuzSayisi>> = {};
+  for (const r of rows) {
+    (out[r.exam] ??= {})[r.topicId] = {
+      have: Number(r.have),
+      easy: Number(r.easy),
+      medium: Number(r.medium),
+      hard: Number(r.hard),
+    };
+  }
+  return out;
+}
+
+/** Paket düzenleyicinin konu seçenekleri: yaprak konular, üst konu adıyla. */
+export async function paketKonulari(): Promise<
+  { id: string; name: string; parentName: string | null; examScope: string; examScopes: string[] }[]
+> {
+  const topics = await db.topic.findMany({
+    where: { children: { none: {} } },
+    orderBy: [{ examScope: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, examScope: true, examScopes: true, parent: { select: { name: true } } },
+  });
+  return topics.map((t) => ({
+    id: t.id,
+    name: t.name,
+    parentName: t.parent?.name ?? null,
+    examScope: t.examScope,
+    examScopes: t.examScopes as string[],
+  }));
 }
 
 export const PACKAGE_STATE_LABEL: Record<PackageState, string> = {

@@ -94,7 +94,7 @@ export async function GET(req: Request) {
   const ek = [s.sinav ? s.sinav.toLowerCase() : null, s.gun ? s.gun + "-gun" : null].filter(Boolean).join("-");
   const dosya = "madde-analizi-" + tarih + (ek ? "-" + ek : "") + ".csv";
 
-  return new Response("﻿" + [baslik.join(";"), ...satirlar].join("\r\n") + "\r\n", {
+  return new Response("\uFEFF" + [baslik.join(";"), ...satirlar].join("\r\n") + "\r\n", {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": 'attachment; filename="' + dosya + '"',

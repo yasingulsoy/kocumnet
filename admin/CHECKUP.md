@@ -14,6 +14,7 @@ bağlanır; backend yalnızca giriş ve oturum doğrulaması için kullanılır.
 | Öğrenciler + öğrenci detayı (test geçmişi, konu haritası, çalışma planı ve koç notu, seviyeli koşular, erişim hakları) | `/checkup/ogrenciler` | yönetici, müdür |
 | Riskli öğrenciler — pasif, düşüşte, planı yapmıyor, hiç başlamadı; eşikler `lib/checkup/risk.ts` | `/checkup/ogrenciler/riskli` | yönetici, müdür |
 | Paketler — türüne göre (katalog / seviyeli / konu tekrar testi) hazırlık, yayın durumu, ücretli/ücretsiz | `/checkup/paketler` | değiştirme: yönetici, müdür |
+| Paket oluştur / düzenle — katalog (STANDARD) paketinin adı, özeti, süresi ve konu dağılımı; konu başına canlı havuz yeterliliği | `/checkup/paketler/yeni`, `/[id]` | yönetici, müdür |
 | Kazanımlar — seviyeli check-up'ın öğrenme çıktıları; sınav başına seviye 1 hazırlık sayacı (kazanım × ≥2 L1 sorusu; LGS 35, diğerleri 50) | `/checkup/kazanimlar` | yazma: yönetici, müdür, editör |
 | Seviyeli koşular — kim hangi seviyede, kapıda duranlar, telafi bekleyenler | `/checkup/seviyeli` | tüm personel (öğrenci adları yönetici/müdür) |
 
@@ -37,6 +38,8 @@ src/lib/checkup/
   item-list.ts     Madde analizi listesi: süzgeç, sıralama, adres — sayfa ve CSV ortak
   risk.ts          Riskli öğrenci kuralları ve eşikleri (tek yer); risk-data.ts veriyi toplar
   coach-note.ts    Koç notu sınırı ve temizliği (düzenleyici ve eylem ortak)
+  package-rules.ts Paket düzenleme kuralları (MIN_PER_TOPIC, sınırlar, adres önerisi) — istemci ve sunucu ortak
+  package-save.ts  Katalog paketi doğrulama ve yazma (server-only; yetkiyi eylem denetler)
   format.ts        Etiketler (sınav, sınıf, durum), tarih/sayı biçimleri (Türkiye saati)
   actions/         Server action'lar: sorular (seviye, kazanım, hedef sınav; toplu durum; önerilen zorluk),
                    kazanımlar, şekil, erişim hakkı, paket, plan (koç notu)
@@ -142,6 +145,19 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   listenin kendi süzgeç/sırasını kullanır (`question-query.ts`). "Kaydet ve sonrakine
   geç" sıradakini kaydetmeden ÖNCEKİ listeye göre bilir; kaydedilen soru listenin başına
   zıplasa da zincir kopmaz.
+- **Paket düzenleyici yalnızca katalog (STANDARD) paketleri** için: tanışma, seviyeli ve
+  konu tekrar paketleri sistemindir, tohumdan gelir. Konu başına en az 3 soru (sunucuda
+  zorunlu); konu paketin sınavında olmalı; yayında kaydetmek için her konunun havuzu
+  (öğrenci uygulamasının kapsam kuralıyla) yetmeli — yetmiyorsa taslak kaydedilir.
+  Adres (slug) ve sınav oluştururken seçilir, sonra değişmez. Ücretli/ücretsiz burada
+  yazılmaz (açık karar). Ayarlar test başlarken oturuma kopyalandığı için düzenleme
+  yalnızca yeni testleri etkiler. Kim değiştirdi: Package'ta damga sütunu yok, sunucu
+  günlüğüne yazılıyor.
+- **Tohum katalog paketinin içeriğini ezmez.** `app/`'in `npm run db:seed`'i var olan
+  katalog paketinin adını, özetini, süresini ve konu dağılımını yazmaz; yalnızca
+  `-- --guncelle` ile yazar (paneldeki düzenlemeleri ezer). Sistem paketleri (tanışma,
+  konu tekrar) panelden düzenlenmediği için her çalıştırmada tohumdan yazılır.
+  Ayrıntı: `app/DEPLOY.md` §3.
 - **Görseller veritabanında** (`MediaAsset.data`); SVG kabul edilmiyor (script
   taşıyabilir), yükleme 8 MB / 1200 px / WebP.
 - Tek aralıklı yazı için `components/checkup/ui.tsx`'teki `MONO` (`font-mono`,

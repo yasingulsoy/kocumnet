@@ -1,14 +1,32 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { EXAMS, type ExamScopeValue } from "../lib/exams";
+import { soruSinavdaKosulu } from "../lib/exam-scope";
 
 /**
  * Konu ağacı ve paketler. Bunlar "referans veri": uygulamanın çalışması için
- * gerekli, kullanıcı üretmiyor. Seed idempotent (slug üzerinden upsert), tekrar
+ * gerekli, kullanıcı üretmiyor. Seed idempotent (slug üzerinden), tekrar
  * çalıştırmak güvenli.
  *
- *   npm run db:seed
+ *   npm run db:seed                  → eksik paketleri oluşturur, var olanların
+ *                                      İÇERİĞİNE dokunmaz
+ *   npm run db:seed -- --guncelle    → var olan paketlerin içeriğini de bu
+ *                                      dosyadaki hâline getirir
+ *
+ * Katalog (STANDARD) paketlerinin İÇERİĞİ (ad, özet, süre, soru sayısı, konu
+ * dağılımı) yönetim panelinden düzenlenebiliyor (admin.kocum.net → Paketler).
+ * Seed her çalıştığında bunları yeniden yazsaydı paneldeki düzenleme ilk
+ * deploy'da sessizce silinirdi. Bu yüzden var olan katalog paketinde içerik
+ * yalnızca `--guncelle` ile yazılır. Sistem paketleri (tanışma, konu tekrar)
+ * panelden düzenlenmiyor; onlar her çalıştırmada bu dosyadan yazılır — yoksa
+ * burada yapılan bir değişiklik için `--guncelle` gerekir, o da paneldeki
+ * düzenlemeleri ezerdi. Sınavdan türeyen alanlar (examScope, kind,
+ * penaltyRatio) ve katalog sırası her çalıştırmada senkron kalır: sınav sabiti
+ * (lib/exams.ts) değişince yayılsın. Konu ağacı her zaman bu dosyadan.
  */
+
+/** Var olan paketlerin içeriğini de bu dosyadaki hâline getir (panel düzenlemelerini ezer). */
+const GUNCELLE = process.argv.includes("--guncelle");
 
 type Scope = ExamScopeValue;
 
@@ -586,20 +604,41 @@ async function seedTopics(list: SeedTopic[], parentId: string | null, depth = 0)
   }
 }
 
+type PaketDagilimi = { topicId: string; questionCount: number }[];
+
+/**
+ * Bir sınavda paketin her konudan çekebileceği yayındaki soru — öğrenci
+ * uygulamasının paket seçimindeki kuralla (lib/exam-scope.ts soruSinavdaKosulu):
+ * soru kapsamı doluysa o liste, boşsa konusunun sınavları. Eskiden kapsama hiç
+ * bakılmıyordu; başka sınava kısıtlı sorular havuzda sayılıyordu.
+ */
+const havuzlar = new Map<Scope, Map<string, number>>();
+async function sinavHavuzu(sinav: Scope): Promise<Map<string, number>> {
+  let havuz = havuzlar.get(sinav);
+  if (!havuz) {
+    const sayimlar = await prisma.question.groupBy({
+      by: ["topicId"],
+      where: { status: "PUBLISHED", ...soruSinavdaKosulu(sinav) },
+      _count: { _all: true },
+    });
+    havuz = new Map(sayimlar.map((s) => [s.topicId, s._count._all]));
+    havuzlar.set(sinav, havuz);
+  }
+  return havuz;
+}
+
+async function eksikKonular(sinav: Scope, dagilim: PaketDagilimi): Promise<PaketDagilimi> {
+  const havuz = await sinavHavuzu(sinav);
+  return dagilim.filter((d) => (havuz.get(d.topicId) ?? 0) < d.questionCount);
+}
+
 async function seedPackages() {
   const topics = await prisma.topic.findMany({ select: { id: true, slug: true } });
   const idBySlug = new Map(topics.map((t) => [t.slug, t.id]));
-
-  // Hangi konuda kaç YAYINDA soru var — paketin gerçekten başlatılabilir
-  // olup olmadığına buna bakarak karar veriyoruz.
-  const sayimlar = await prisma.question.groupBy({
-    by: ["topicId"],
-    where: { status: "PUBLISHED" },
-    _count: { _all: true },
-  });
-  const soruSayisi = new Map(sayimlar.map((s) => [s.topicId, s._count._all]));
+  const slugById = new Map(topics.map((t) => [t.id, t.slug]));
 
   const hepsi = [...PACKAGES, ...RETEST_PACKAGES];
+  let korunan = 0;
 
   for (const [index, p] of hepsi.entries()) {
     const retest = p.kind === "RETEST";
@@ -611,7 +650,8 @@ async function seedPackages() {
     }
 
     // Kural: konu başına en az MIN_PER_TOPIC soru. Burada patlaması, üretimde
-    // "yeterli soru yok" yazan bir sonuç ekranından iyidir.
+    // "yeterli soru yok" yazan bir sonuç ekranından iyidir. (Panel aynı kuralı
+    // kendi kaydında uyguluyor.)
     const thin = p.dist.filter(([, n]) => n < MIN_PER_TOPIC);
     if (thin.length) {
       throw new Error(
@@ -621,60 +661,98 @@ async function seedPackages() {
       );
     }
 
-    /*
-     * Havuzu yetmeyen paket YAYINA ALINMAZ. Öğrencinin kataloğda görüp
-     * "Başla"ya bastığında "yeterli soru yok" hatası alması, paketi hiç
-     * görmemesinden kötü. Havuz dolunca panelden (Check-up → Paketler)
-     * yayına alınır.
-     */
-    const eksikKonular = p.dist.filter(
-      ([slug, n]) => (soruSayisi.get(idBySlug.get(slug)!) ?? 0) < n
-    );
-    const hazir = !retest && eksikKonular.length === 0;
+    const seedDagilimi: PaketDagilimi = p.dist.map(([slug, count]) => ({
+      topicId: idBySlug.get(slug)!,
+      questionCount: count,
+    }));
+
+    // Sınavdan türeyen alanlar: her çalıştırmada senkron (sınav sabiti değişince yayılsın).
+    const sinavdan = {
+      kind: p.kind ?? "STANDARD",
+      examScope: p.scope,
+      // Sınavın kendi puanlaması: LGS 3 yanlış 1 doğru, YKS 4 yanlış 1 doğru.
+      penaltyRatio: EXAMS[p.scope].penaltyRatio.toFixed(4),
+      sortOrder: index,
+    } as const;
+    // İçerik: yalnızca oluştururken ya da --guncelle ile.
+    const icerik = {
+      name: p.name,
+      summary: p.summary,
+      questionCount: total,
+      durationMinutes: p.durationMinutes,
+    };
 
     const mevcut = await prisma.package.findUnique({
       where: { slug: p.slug },
-      select: { id: true, status: true },
-    });
-
-    const ortak = {
-      name: p.name,
-      summary: p.summary,
-      kind: p.kind ?? "STANDARD",
-      examScope: p.scope,
-      questionCount: total,
-      durationMinutes: p.durationMinutes,
-      sortOrder: index,
-      // Sınavın kendi puanlaması: LGS 3 yanlış 1 doğru, YKS 4 yanlış 1 doğru.
-      penaltyRatio: EXAMS[p.scope].penaltyRatio.toFixed(4),
-    };
-
-    const pkg = await prisma.package.upsert({
-      where: { slug: p.slug },
-      create: {
-        slug: p.slug,
-        ...ortak,
-        // Konu tekrar testleri her zaman açık (katalogda görünmüyorlar).
-        status: retest || hazir ? "PUBLISHED" : "DRAFT",
-      },
-      update: {
-        ...ortak,
-        // Havuz yetmiyorsa yayından alıyoruz; yetiyorsa mevcut durumu
-        // ezmiyoruz (panelden bilerek taslağa çekilmiş olabilir).
-        ...(!retest && !hazir ? { status: "DRAFT" as const } : {}),
+      select: {
+        id: true,
+        status: true,
+        name: true,
+        summary: true,
+        questionCount: true,
+        durationMinutes: true,
+        topics: { orderBy: { sortOrder: "asc" }, select: { topicId: true, questionCount: true } },
       },
     });
 
-    await prisma.packageTopic.deleteMany({ where: { packageId: pkg.id } });
-    if (p.dist.length) {
-      await prisma.packageTopic.createMany({
-        data: p.dist.map(([slug, count], i) => ({
-          packageId: pkg.id,
-          topicId: idBySlug.get(slug)!,
-          questionCount: count,
-          sortOrder: i,
-        })),
+    /*
+     * Havuzu yetmeyen paket YAYINA ALINMAZ (ve yayındaysa taslağa çekilir).
+     * Öğrencinin katalogda görüp "Başla"ya bastığında "yeterli soru yok"
+     * hatası alması, paketi hiç görmemesinden kötü. Havuz dolunca panelden
+     * (Check-up → Paketler) yayına alınır. Bakılan dağılım paketin GEÇERLİ
+     * dağılımı: içerik korunuyorsa veritabanındaki (panelde değişmiş olabilir).
+     */
+    // Panelin düzenlediği tek tür katalog paketi; sistem paketleri hep bu dosyadan.
+    const panelPaketi = (p.kind ?? "STANDARD") === "STANDARD";
+    const icerikYaz = !mevcut || GUNCELLE || !panelPaketi;
+    const gecerliDagilim = icerikYaz ? seedDagilimi : mevcut.topics;
+    const eksik = retest ? [] : await eksikKonular(p.scope, gecerliDagilim);
+    const hazir = !retest && eksik.length === 0;
+
+    let notu: string;
+    if (!mevcut) {
+      await prisma.package.create({
+        data: {
+          slug: p.slug,
+          ...sinavdan,
+          ...icerik,
+          // Konu tekrar testleri her zaman açık (katalogda görünmüyorlar).
+          status: retest || hazir ? "PUBLISHED" : "DRAFT",
+          topics: { create: seedDagilimi.map((d, i) => ({ ...d, sortOrder: i })) },
+        },
       });
+      notu = "yeni";
+    } else {
+      await prisma.package.update({
+        where: { id: mevcut.id },
+        data: {
+          ...sinavdan,
+          ...(icerikYaz ? icerik : {}),
+          // Havuz yetmiyorsa yayından alıyoruz; yetiyorsa mevcut durumu
+          // ezmiyoruz (panelden bilerek taslağa çekilmiş olabilir).
+          ...(!retest && !hazir ? { status: "DRAFT" as const } : {}),
+        },
+      });
+      if (icerikYaz) {
+        await prisma.packageTopic.deleteMany({ where: { packageId: mevcut.id } });
+        if (seedDagilimi.length) {
+          await prisma.packageTopic.createMany({
+            data: seedDagilimi.map((d, i) => ({ ...d, packageId: mevcut.id, sortOrder: i })),
+          });
+        }
+        notu = panelPaketi ? "içerik bu dosyadan yazıldı" : "sistem paketi: içerik bu dosyadan";
+      } else {
+        // Hangi içerik alanı bu dosyadakinden farklı — panelde değiştirilmiş olabilir.
+        const farklar = [
+          mevcut.name !== icerik.name ? "ad" : null,
+          (mevcut.summary ?? "") !== icerik.summary ? "özet" : null,
+          mevcut.durationMinutes !== icerik.durationMinutes ? "süre" : null,
+          mevcut.questionCount !== icerik.questionCount ? "soru sayısı" : null,
+          JSON.stringify(mevcut.topics) !== JSON.stringify(seedDagilimi) ? "konu dağılımı" : null,
+        ].filter(Boolean);
+        if (farklar.length) korunan += 1;
+        notu = farklar.length ? "içerik korundu (" + farklar.join(", ") + " bu dosyadakinden farklı)" : "içerik aynı";
+      }
     }
 
     const durum = retest
@@ -683,8 +761,18 @@ async function seedPackages() {
         ? mevcut?.status === "DRAFT"
           ? "havuz yeterli — panelden yayına alınabilir"
           : "yayında"
-        : `TASLAK — eksik: ${eksikKonular.map(([s]) => s).join(", ")}`;
-    console.log(`  · ${p.name} — ${total} soru / ${p.durationMinutes} dk · ${durum}`);
+        : `TASLAK — eksik: ${eksik.map((d) => slugById.get(d.topicId) ?? d.topicId).join(", ")}`;
+    const ad = icerikYaz ? p.name : mevcut!.name;
+    const soru = icerikYaz ? total : mevcut!.questionCount;
+    const dakika = icerikYaz ? p.durationMinutes : mevcut!.durationMinutes;
+    console.log(`  · ${ad} — ${soru} soru / ${dakika} dk · ${durum} · ${notu}`);
+  }
+
+  if (korunan && !GUNCELLE) {
+    console.log(
+      `\n  ${korunan} paketin içeriği bu dosyadakinden farklı ve KORUNDU (panelde düzenlenmiş olabilir).` +
+        `\n  Bu dosyadaki hâline döndürmek için: npm run db:seed -- --guncelle`
+    );
   }
 }
 
@@ -696,7 +784,7 @@ async function main() {
   console.log("\nKonular:");
   await seedTopics(TOPICS, null);
 
-  console.log("\nPaketler:");
+  console.log(GUNCELLE ? "\nPaketler (--guncelle: içerik bu dosyadan yazılıyor):" : "\nPaketler:");
   await seedPackages();
 
   const [topicCount, packageCount, yayinda] = await Promise.all([

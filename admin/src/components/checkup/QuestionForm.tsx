@@ -13,6 +13,7 @@ import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "
 import { listeAdresi } from "@/lib/checkup/question-list";
 import { ContentPreview } from "./ContentPreview";
 import { ImageUploader } from "./ImageUploader";
+import { useUnsavedGuard } from "./useUnsavedGuard";
 import {
   Card,
   CardHeader,
@@ -88,8 +89,6 @@ const BOS: QuestionInitial = {
 const PREVIEW_BOX = "rounded-xl border border-line bg-surface-sunk p-4";
 const PREVIEW_LABEL = "mb-2 text-micro font-semibold uppercase tracking-wide text-ink-faint";
 const CODE = "rounded bg-surface-sunk px-1 py-0.5 text-micro " + MONO;
-
-const AYRILMA_UYARISI = "Kaydedilmemiş değişiklikler var. Sayfadan çıkarsan kaybolacak. Çıkılsın mı?";
 
 export function QuestionForm({
   topics,
@@ -223,37 +222,7 @@ export function QuestionForm({
   const [ilkOzet] = useState(ozet);
   const kirli = canEdit && ozet !== ilkOzet;
 
-  useEffect(() => {
-    if (!kirli) return;
-    // Sekmeyi kapatma, yenileme, başka siteye gitme: tarayıcının kendi uyarısı.
-    const kapanis = (e: BeforeUnloadEvent) => {
-      if (gonderiliyor.current) return;
-      e.preventDefault();
-      // Eski Chromium sürümleri uyarıyı yalnızca returnValue ile gösteriyor.
-      e.returnValue = "";
-    };
-    // Panel içi bağlantılar (kenar çubuğu, Vazgeç, gezinti izi) istemci tarafında
-    // gezdiği için beforeunload'a düşmez; tıklamayı yakalama evresinde soruyoruz.
-    const tiklama = (e: MouseEvent) => {
-      if (gonderiliyor.current || e.defaultPrevented || e.button !== 0) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // yeni sekme
-      const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
-      if (!(a instanceof HTMLAnchorElement) || a.target === "_blank" || a.hasAttribute("download")) return;
-      const hedef = new URL(a.href, window.location.href);
-      if (hedef.origin !== window.location.origin) return; // tam sayfa geçişi: beforeunload sorar
-      if (hedef.pathname === window.location.pathname && hedef.search === window.location.search) return;
-      if (!window.confirm(AYRILMA_UYARISI)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    window.addEventListener("beforeunload", kapanis);
-    document.addEventListener("click", tiklama, true);
-    return () => {
-      window.removeEventListener("beforeunload", kapanis);
-      document.removeEventListener("click", tiklama, true);
-    };
-  }, [kirli]);
+  useUnsavedGuard(kirli, gonderiliyor);
 
   // ── Klavye: Ctrl/⌘ + S ya da Ctrl/⌘ + Enter kaydeder ─────────
   useEffect(() => {

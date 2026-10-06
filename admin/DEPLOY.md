@@ -56,6 +56,13 @@ Değişiklikten sonra personelin bir kez çıkış yapıp yeniden girmesi gereki
 Geliştirmede gerekmez: panel `/api-backend` yeniden yazmasıyla istekleri kendi
 kökeninden geçirdiği için çerez zaten `localhost:3001`'de duruyor.
 
+## Paketler panelden düzenlenir
+
+Katalog paketlerinin içeriği (ad, özet, süre, konu dağılımı) panelden düzenleniyor.
+Check-up uygulamasının tohumu (`app/` → `npm run db:seed`) var olan paketin içeriğini
+artık yazmıyor; `-- --guncelle` bayrağı verilmedikçe paneldeki düzenleme deploy'da
+korunur. Deploy betiklerine `--guncelle` eklemeyin. Ayrıntı: `app/DEPLOY.md` §3.
+
 ## Şema ve dağıtım sırası
 
 - **Şemanın ve migration'ların sahibi check-up uygulaması** (`app/`). Panel

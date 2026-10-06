@@ -65,8 +65,33 @@ Görseller markdown'ın yanındaki `gorseller/` dizininden okunur ve veritabanı
 Servis ayağa kalktıktan sonra, konteyner içinde:
 
 ```bash
-npm run db:seed        # konu ağacı + paketler (idempotent, tekrar çalıştırmak güvenli)
+npm run db:seed        # konu ağacı + eksik paketler (idempotent, tekrar çalıştırmak güvenli)
 ```
+
+**Tohum var olan katalog paketinin İÇERİĞİNİ yazmaz.** Katalog (STANDARD) paketinin adı,
+özeti, süresi, soru sayısı ve konu dağılımı yönetim panelinden düzenleniyor
+(admin.kocum.net → Check-up → Paketler);
+tohum bunları her çalıştırmada yeniden yazsaydı paneldeki düzenleme ilk deploy'da
+sessizce silinirdi. Tohumun yaptığı:
+
+- **Olmayan paketi oluşturur** (konu dağılımıyla; havuz yetiyorsa yayında, yetmiyorsa taslak).
+- **Var olan katalog paketinde** yalnızca sınavdan türeyen alanları (sınav, tür, yanlış
+  götürme oranı) ve katalog sırasını eşitler: `lib/exams.ts`'teki bir sınav sabiti
+  değişince yayılsın.
+- **Sistem paketlerini** (tanışma, konu tekrar testi) her çalıştırmada bu dosyadan yazar:
+  panelden düzenlenmiyorlar, korunacak bir düzenleme yok. (Seviyeli paketler
+  `db:seed:levels`'tan.)
+- **Havuzu yetmeyen paketi taslağa çeker** — paketin o anki (panelde değişmiş olabilir)
+  dağılımına, öğrenci uygulamasının kapsam kuralıyla bakarak. Yetiyorsa durumu ezmez.
+- Konu ağacını her zaman bu dosyadan yazar.
+
+Katalog paketlerinin içeriğini `prisma/seed.ts`'teki hâline **bilerek** döndürmek için:
+
+```bash
+npm run db:seed -- --guncelle   # ⚠️ paneldeki paket düzenlemelerini ezer
+```
+
+Çıktı, içeriği tohumdakinden farklı (panelde düzenlenmiş) paketleri tek tek söyler.
 
 Bu uygulamada yönetici hesabı yok. Soru ekleme, öğrenciler ve erişim hakları
 `admin.kocum.net`'te; oraya backend'in personel hesaplarıyla girilir.
@@ -101,6 +126,7 @@ uygulamasının temel yolunu çakıştırır — ayrı alt alan adı daha basit.
       backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` tanımlı (bkz. `admin/DEPLOY.md`)
 - [ ] Gerçek soru havuzu girildi (demo sorular temizlendi)
 - [ ] Paketlerin ücretli/ücretsiz ayarı iş kararına göre yapıldı (panel → Check-up → Paketler)
+- [ ] Deploy betiğinde `db:seed -- --guncelle` YOK (paneldeki paket düzenlemelerini her deploy'da silerdi)
 - [ ] `/gizlilik` metni **hukukçu tarafından okundu** (taslak hâlde yazıldı)
 - [ ] Ücretli satış açılacaksa mesafeli satış sözleşmesi ve cayma hakkı metinleri eklendi
 - [ ] Veritabanı yedeği zamanlandı

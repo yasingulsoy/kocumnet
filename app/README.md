@@ -15,7 +15,8 @@ arasında PAYLAŞILIR (`Topic.examScopes`): aynı "Problemler" konusu hem TYT he
 ```bash
 npm install
 npm run db:migrate        # şema
-npm run db:seed           # konu ağacı + paketler (idempotent, tekrar çalıştırmak güvenli)
+npm run db:seed           # konu ağacı + eksik paketler (idempotent; var olan katalog paketinin içeriğine dokunmaz)
+npm run db:seed -- --guncelle   # paket içeriğini seed.ts'teki hâline döndür (panel düzenlemelerini ezer)
 npm run db:seed:demo      # ~2200 demo sorusu — SADECE geliştirme
 npm run db:seed:levels    # seviyeli check-up paketleri + demo kazanımlar
                           #   üretimde: -- --yalniz-paket
@@ -165,7 +166,13 @@ buradan.
 - **Betikler `.mts` uzantılı** olmak zorunda (`type: module` yok; tsx `.ts`'yi CJS
   sayıp top-level await'i reddediyor).
 - **Bir pakette bir konuya en az 3 soru** — tek soruyla konu seviyesi ölçülemez.
-  `seed.ts` bunu zorunlu kılıyor (PLAN §2).
+  `seed.ts` ve yönetim panelinin paket düzenleyicisi bunu zorunlu kılıyor (PLAN §2).
+- **Paket içeriği panelden düzenlenir; tohum onu ezmez.** `db:seed` var olan katalog
+  (STANDARD) paketinin adını, özetini, süresini ve konu dağılımını yazmaz (yalnızca
+  `--guncelle` ile); panelden düzenlenmeyen sistem paketlerini (tanışma, konu tekrar)
+  her seferinde bu dosyadan yazar;
+  sınavdan türeyen alanları (sınav, tür, yanlış götürme oranı) her seferinde eşitler,
+  havuzu yetmeyen paketi taslağa çeker. Ayrıntı: [DEPLOY.md](DEPLOY.md) §3.
 - **`"use server"` dosyalarından yalnızca async fonksiyon ihraç edilir.** Sabit bir
   nesne oradan dışa aktarılırsa istemciye BOŞ ulaşır ve hata sessizdir (açılır liste
   boş görünür). Bu yüzden `error-types.ts` ayrı duruyor.

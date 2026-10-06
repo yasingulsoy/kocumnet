@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/checkup/db";
-import { MANAGE_ROLES, staffForAction } from "@/lib/checkup/staff";
+import { MANAGE_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
 import { isQuestionStatus } from "@/lib/checkup/format";
 import { loadPackageHealth } from "@/lib/checkup/pool";
+import { paketiKaydet, type PaketKayitSonucu } from "@/lib/checkup/package-save";
 
 type Result = { ok: boolean; error?: string };
 
@@ -65,4 +66,28 @@ export async function setPackageFreeAction(id: string, isFree: boolean): Promise
   revalidatePackageScreens();
   revalidatePath("/checkup/ogrenciler");
   return { ok: true };
+}
+
+/**
+ * Katalog paketi oluştur / düzenle (yalnızca yönetici ve müdür). Kurallar ve
+ * yazma lib/checkup/package-save.ts içinde; burada yetki ve önbellek.
+ *
+ * Paket ayarları test başlarken oturuma kopyalanır (süre, yanlış götürme;
+ * sorular o anda seçilir): düzenleme yalnızca bundan sonra başlayan testleri
+ * etkiler. Kim değiştirdi: Package tablosunda personel damgası sütunu yok;
+ * sunucu günlüğüne yazılıyor.
+ */
+export async function savePackageAction(girdi: unknown): Promise<PaketKayitSonucu> {
+  const auth = await staffForAction(MANAGE_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const sonuc = await paketiKaydet(girdi);
+  if (sonuc.ok) {
+    console.info(
+      "[checkup] paket " + (sonuc.yeni ? "oluşturuldu" : "güncellendi") + " — " + sonuc.slug + " · " + staffStamp(auth.staff)
+    );
+    revalidatePackageScreens();
+    revalidatePath("/checkup/paketler/" + sonuc.id);
+  }
+  return sonuc;
 }
