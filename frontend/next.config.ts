@@ -68,6 +68,16 @@ const nextConfig: NextConfig = {
      * düzenleri atlayıp doğrudan çizilir.
      */
     globalNotFound: true,
+    /**
+     * İyimser yönlendirme KAPALI. İstemci /en ve /ar'dan kökte dinamik bir
+     * [lang] rotası olduğunu öğrenip görmediği her tek parçalı adresi
+     * (/urunlerimiz, /iletisim) "[lang] = urunlerimiz" sanıyor ve ana sayfanın
+     * parçasını (/$d$lang/__PAGE__) istiyordu. proxy.ts bu adresleri
+     * /tr/products'a yazdığı için o parça yok: ön yükleme 404, sayfaya geçiş
+     * ön yüklemesiz. Kapalıyken istemci önce rota ağacını sunucuya soruyor
+     * (yeni rota başına bir istek daha) ve doğru parçayı alıyor.
+     */
+    optimisticRouting: false,
   },
   async headers() {
     return [

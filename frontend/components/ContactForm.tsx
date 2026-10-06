@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { CircleCheck, Loader2, Send } from "lucide-react";
+import { CircleCheck, Loader2, Mail, Send } from "lucide-react";
 import { PUBLIC_BACKEND_URL } from "@/lib/api";
 import { SITE_BRAND } from "@/lib/site-brand";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -50,6 +50,29 @@ function dogrula(alan: Alan, deger: string, t: Dictionary["contact"]): string {
   return v.length < 10 ? t.errMessageShort : "";
 }
 
+/**
+ * Sunucu mesajı alamazsa yazılanlar kaybolmasın: aynı içerikle açılan bir
+ * e-posta bağlantısı. Backend kapalıyken, sınır aşılınca ya da ağ kopunca
+ * ziyaretçinin elinde yeniden yazmadan gönderebileceği bir yol kalır.
+ * Bazı posta programları ~2000 karakterden uzun mailto adreslerini kesiyor;
+ * mesaj gerekirse kısaltılır, sonuna "…" konur.
+ */
+const MAILTO_SINIRI = 1800;
+
+function postaBaglantisi(veri: Record<string, string>): string {
+  const konu = (veri.subject ?? "").trim() || SITE_BRAND.name;
+  const imza = [veri.name, veri.email].map((s) => (s ?? "").trim()).filter(Boolean).join("\n");
+  const adres = (mesaj: string) =>
+    `mailto:${SITE_BRAND.email}?subject=${encodeURIComponent(konu)}&body=${encodeURIComponent(`${mesaj}\n\n${imza}`)}`;
+
+  let mesaj = (veri.message ?? "").trim();
+  if (adres(mesaj).length <= MAILTO_SINIRI) return adres(mesaj);
+  while (mesaj.length > 0 && adres(`${mesaj}…`).length > MAILTO_SINIRI) {
+    mesaj = mesaj.slice(0, Math.floor(mesaj.length * 0.9));
+  }
+  return adres(`${mesaj.trimEnd()}…`);
+}
+
 export function ContactForm({
   dict,
   locale,
@@ -67,6 +90,8 @@ export function ContactForm({
   const [durum, setDurum] = useState<Durum>("idle");
   const [hatalar, setHatalar] = useState<Partial<Record<Alan, string>>>({});
   const [genelHata, setGenelHata] = useState<string | null>(null);
+  /** Gönderim başarısızsa: aynı mesajla açılan e-posta bağlantısı. */
+  const [yedekPosta, setYedekPosta] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const basariRef = useRef<HTMLDivElement>(null);
 
@@ -112,6 +137,7 @@ export function ContactForm({
     // okuyucu alanı hatasız okuyabilir; önce işle, sonra odaklan.
     flushSync(() => {
       setGenelHata(null);
+      setYedekPosta(null);
       setHatalar(yeniHatalar);
     });
     const ilkHata = ALANLAR.find((a) => yeniHatalar[a]);
@@ -137,6 +163,7 @@ export function ContactForm({
       setDurum("error");
       if (res.status === 429) {
         setGenelHata(t.formTooMany);
+        setYedekPosta(postaBaglantisi(veri));
         return;
       }
 
@@ -156,11 +183,16 @@ export function ContactForm({
         flushSync(() => setHatalar(sunucu));
         alanaOdaklan(ilkSunucuHatasi);
       } else {
-        setGenelHata(t.formError);
+        // Alan hatası değil: sunucu ya da yanlış adres (404, 5xx). Sorun
+        // ziyaretçinin bağlantısında değil; "bağlantınızı kontrol edin" demeyiz.
+        setGenelHata(t.formErrorServer);
+        setYedekPosta(postaBaglantisi(veri));
       }
     } catch {
+      // Ağ hatası: istek hiç ulaşmadı.
       setDurum("error");
       setGenelHata(t.formError);
+      setYedekPosta(postaBaglantisi(veri));
     }
   }
 
@@ -280,12 +312,30 @@ export function ContactForm({
       {genelHata ? (
         <div role="alert" className="rounded-xl bg-bad-wash px-4 py-3 text-caption text-bad">
           <p>{genelHata}</p>
-          <p className="mt-1 text-ink-soft">
-            {t.formFallback}{" "}
-            <a href={`mailto:${SITE_BRAND.email}`} className="font-medium text-brand underline-offset-2 hover:underline">
-              {SITE_BRAND.email}
-            </a>
-          </p>
+          {yedekPosta ? (
+            <>
+              <a
+                href={yedekPosta}
+                className="mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-lg bg-surface px-3.5 py-2 font-semibold text-brand ring-1 ring-line transition hover:bg-brand-wash"
+              >
+                <Mail className="size-4 shrink-0" aria-hidden />
+                {t.formMailCta}
+              </a>
+              <p className="mt-2 text-ink-soft">
+                {t.formMailHint}{" "}
+                <a href={`mailto:${SITE_BRAND.email}`} className="font-medium text-brand underline-offset-2 hover:underline">
+                  {SITE_BRAND.email}
+                </a>
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-ink-soft">
+              {t.formFallback}{" "}
+              <a href={`mailto:${SITE_BRAND.email}`} className="font-medium text-brand underline-offset-2 hover:underline">
+                {SITE_BRAND.email}
+              </a>
+            </p>
+          )}
         </div>
       ) : null}
 
