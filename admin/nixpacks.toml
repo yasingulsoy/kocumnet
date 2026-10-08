@@ -1,10 +1,13 @@
 providers = ["node"]
 
 [variables]
-NIXPACKS_NODE_VERSION = "20"
+NIXPACKS_NODE_VERSION = "22"
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_22"]
+# Prisma 7 en az Node 20.19 ya da 22.12 istiyor; Nixpacks'in kendi nixpkgs'inde
+# 20.18.1 ve 22.11.0 var. app/nixpacks.toml ile aynı commit (nixos-25.05 sonu).
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
 
 [phases.install]
 cmds = ["npm ci"]

@@ -71,6 +71,8 @@ korunur. Deploy betiklerine `--guncelle` eklemeyin. Ayrıntı: `app/DEPLOY.md` �
   `prisma migrate deploy` çalıştırıyor), sonra panel.
 - Üretilen client gitignore'da; `build` ve `postinstall` script'leri
   `prisma generate` ile başlıyor — kaldırmayın, deploy patlar.
+- Node 22 ve nixpkgs commit'i `nixpacks.toml`'da sabit: Prisma 7, Nixpacks'in
+  kendi Node sürümleriyle (20.18, 22.11) kurulmuyor. Ayrıntı: `app/DEPLOY.md` §4.
 - Şekil yükleme bir server action; `next.config.ts`'teki
   `serverActions.bodySizeLimit: "10mb"` ayarı kaldırılırsa telefon fotoğrafları
   1 MB sınırına takılıp sessizce reddedilir.

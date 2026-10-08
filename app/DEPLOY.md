@@ -101,8 +101,10 @@ sorular üretir; betik `NODE_ENV=production` altında zaten kendini durdurur.
 
 ## 4. Bilinmesi gerekenler
 
-- **Node 20+** zorunlu (Next 16). `nixpacks.toml` bunu sabitliyor; dosya olmadan
-  Nixpacks Node 18'e düşüyor ve build ölüyor.
+- **Node 22** (Prisma 7 en az 20.19 ya da 22.12 istiyor). `nixpacks.toml` hem sürümü
+  hem nixpkgs commit'ini sabitliyor: Nixpacks'in kendi nixpkgs'inde Node 20.18 ve
+  22.11 var, ikisinde de `npm ci` Prisma'nın kurulum denetiminde düşüyor. Dosya
+  olmadan Nixpacks Node 18'e düşüyor. Panel (`admin/`) aynı ayarı kullanıyor.
 - **`vips` paketi** `nixpacks.toml`'da: `sharp` onsuz çalışmaz, şekil yükleme kırılır.
 - **Üretilen Prisma client gitignore'da.** `build` script'i `prisma generate` ile
   başlıyor — kaldırmayın, deploy patlar.

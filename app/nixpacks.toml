@@ -4,11 +4,15 @@
 providers = ["node"]
 
 [variables]
-NIXPACKS_NODE_VERSION = "20"
+NIXPACKS_NODE_VERSION = "22"
 
 [phases.setup]
 # vips: sharp'ın görsel işleme bağımlılığı (şekil yükleme onsuz çalışmaz).
-nixPkgs = ["nodejs_20", "vips"]
+nixPkgs = ["nodejs_22", "vips"]
+# Prisma 7 en az Node 20.19 ya da 22.12 istiyor. Nixpacks'in kendi sabitlediği
+# nixpkgs'te nodejs_20 = 20.18.1, nodejs_22 = 22.11.0: `npm ci` prisma'nın kurulum
+# denetiminde düşüyor. Bu commit nixos-25.05'in sonuncusu (nodejs_22 = 22.20.0).
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
 
 [phases.install]
 cmds = ["npm ci"]

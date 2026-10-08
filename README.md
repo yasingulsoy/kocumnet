@@ -53,7 +53,7 @@ backend ve app'te `SMTP_URL=log://console`: postalar sunucu günlüğüne yazıl
 
 ### Paket eklerken: kilit dosyası npm 10 ile
 
-CI (Node 22) ve Dokploy (Nixpacks, Node 20) **npm 10** kullanıyor. npm 11, isteğe
+CI (Node 22) ve Dokploy (Nixpacks, Node 20 ve 22) **npm 10** kullanıyor. npm 11, isteğe
 bağlı paketlerin bazı bağımlılıklarını kilit dosyasına yazmıyor (`@floating-ui/dom`,
 `@emnapi/*` gibi). Yerelde her şey çalışır ama yayında `npm ci` şu hatayla düşer:
 `Missing: <paket> from lock file`. Paket eklerken ya da çıkarırken npm 10 kullanın:
