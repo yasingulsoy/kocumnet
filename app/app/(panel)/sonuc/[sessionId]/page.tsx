@@ -10,6 +10,7 @@ import {
   CalendarDays,
   ChevronDown,
   CircleCheck,
+  NotebookPen,
   RotateCcw,
   TrendingDown,
   TrendingUp,
@@ -32,15 +33,40 @@ import {
 import { examShort, hasPenalty } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { PRODUCTS, productUrl } from "@/lib/products";
-import { ScoreRing, TopicBar } from "@/components/ui/charts";
+import { KonuHaritasi } from "@/components/KonuHaritasi";
 import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
-import { Badge, Card, CardHeader, LinkButton, trNumber } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { KonuCalisButonu } from "@/components/AlistirmaButonlari";
+import { alistirmaHakki, benzerDurumlari } from "@/lib/practice";
+import { KONU_CALISMA_SORU } from "@/lib/review";
+import { trNumber } from "@/components/ui";
 import { PrintButton } from "@/components/PrintButton";
 import { MathContent } from "@/components/MathContent";
+import { RadialGauge } from "@/components/tailadmin/charts/RadialGauge";
+import { cx } from "@/components/tailadmin/cx";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
+import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { AnswerReview, type ReviewItemView } from "./AnswerReview";
 
 export const metadata: Metadata = { title: "Sonuç" };
+
+/*
+ * Koçun cümlesinin tonu → kitin anlam renkleri (zemin …-50, kenar …-200).
+ * Card'a renk sınıfı EKLENMİYOR: kitte className yalnızca ekler ve Card'ın
+ * kendi beyaz zemini/gri kenarı CSS sırasında kazanıyor; ton kutusu düz öğe.
+ */
+const TON = {
+  ok: { kutu: "border-success-200 bg-success-50", cizgi: "border-success-200" },
+  warn: { kutu: "border-warning-200 bg-warning-50", cizgi: "border-warning-200" },
+  bad: { kutu: "border-error-200 bg-error-50", cizgi: "border-error-200" },
+} as const;
+
+/** Başarı bandı — gelişim listesi ve grafiklerle aynı eşikler (%75 / %45). */
+function bant(oran: number) {
+  return oran >= 0.75 ? "success" : oran >= 0.45 ? "warning" : "error";
+}
 
 export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionId]">) {
   const { sessionId } = await params;
@@ -94,7 +120,8 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const buHafta = haftaBasi(new Date());
   const buHaftaninSonucu = !retest && result.computedAt >= buHafta;
 
-  const [onceki, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani] = await Promise.all([
+  const [onceki, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani, benzerler, alistirmaKalan, deftereGiren] =
+    await Promise.all([
     prisma.checkupResult.findFirst({
       where: {
         session: { userId: user.id, package: { slug: result.session.package.slug } },
@@ -131,6 +158,12 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           select: { sourceSessionId: true },
         })
       : Promise.resolve(null),
+    // "Benzerini çöz": her yanlış/boş sorunun havuzda benzeri var mı. Yoksa
+    // düğme yerine bunu söylüyoruz (ölü düğme yok).
+    benzerDurumlari(user.id, sessionId).catch(() => new Map<string, boolean>()),
+    alistirmaHakki(user.id),
+    // Bu testin yanlış/boşlarından kaçı yanlış defterine yazıldı (lib/notebook.ts).
+    prisma.notebookItem.count({ where: { userId: user.id, lastSessionId: sessionId, resolvedAt: null } }),
   ]);
 
   const oncekiOran = (() => {
@@ -205,6 +238,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
    */
   const inceleme: ReviewItemView[] | null = review
     ? review.map((item) => ({
+        questionId: item.questionId,
+        // Yalnızca yanlış ve boşlarda: true = benzeri var, false = havuzda yok.
+        benzer: item.isCorrect === true ? null : (benzerler.get(item.questionId) ?? false),
         order: item.order,
         topicName: item.topicName,
         stem: <MathContent content={item.stem} />,
@@ -223,356 +259,362 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       }))
     : null;
 
+  // Sunum yardımcıları.
+  const yuzde = Math.round(oran * 100);
+  const ilkKonular = breakdown.topics.slice(0, 3);
+  const kalanKonular = breakdown.topics.slice(3);
+
   return (
-    <div className="animate-fade space-y-5 sm:space-y-6">
-      <div className="flex items-center justify-between gap-3">
+    <div className="mx-auto w-full max-w-5xl animate-fade">
+      {/* Geri bağlantısı ve yazdırma tek satırda: telefonda iz + başlık +
+          ayrı satıra düşen düğme, koçun cümlesini ilk ekrandan itiyordu. */}
+      <div className="mb-2 flex items-center justify-between gap-3">
         <Link
           href="/gelisim"
-          className="inline-flex min-h-9 items-center gap-1.5 text-caption font-medium text-ink-soft transition hover:text-ink print:hidden"
+          className="inline-flex min-h-9 items-center gap-1.5 text-theme-sm font-medium text-gray-500 transition hover:text-gray-800 print:hidden"
         >
-          <ArrowLeft className="size-4" /> Gelişim
+          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> Gelişim
         </Link>
         <PrintButton />
       </div>
-
-      {/* ── Özet: telefonda yatay, halka küçük ───────────── */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center gap-4 p-4 max-sm:bg-brand-wash/40 sm:grid sm:grid-cols-[auto_1fr] sm:gap-0 sm:p-0">
-          <div className="flex shrink-0 items-center justify-center sm:bg-brand-wash/60 sm:p-8">
-            <ScoreRing
-              value={oran * 100}
-              size={112}
-              stroke={10}
-              label={`Yüzde ${Math.round(oran * 100)} başarı`}
-              className="sm:hidden"
-            >
-              <span className="font-display tabular text-num-sm font-bold leading-none text-ink">
-                %{Math.round(oran * 100)}
-              </span>
-            </ScoreRing>
-            <ScoreRing
-              value={oran * 100}
-              size={168}
-              label={`Yüzde ${Math.round(oran * 100)} başarı`}
-              className="max-sm:hidden"
-            >
-              <span className="font-display tabular text-num-lg font-bold leading-none text-ink">
-                %{Math.round(oran * 100)}
-              </span>
-              <span className="text-micro text-ink-faint">başarı</span>
-            </ScoreRing>
-          </div>
-
-          <div className="min-w-0 sm:p-8">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge tone="brand">{examShort(sinav)}</Badge>
-              {retest ? <Badge tone="ok">Kontrol testi</Badge> : null}
-            </div>
-            <h1 className="font-display mt-1.5 text-h2 font-bold tracking-tight text-ink text-balance sm:text-[28px]">
-              {baslik}
-            </h1>
-            <p className="mt-1.5 text-caption leading-relaxed text-ink-soft">
-              <strong className="font-semibold text-ink">{sonuc.baslik}</strong>
-            </p>
-          </div>
-        </div>
-
-        {/* Net + D/Y/B tek satır. Cezasız sınavda net = doğru sayısı olduğu
-            için "net" bloğunu hiç göstermiyoruz: yan yana iki aynı sayı
-            ekranda hata gibi duruyor. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line bg-surface-sunk px-4 py-3 sm:px-8">
-          {cezaVar ? (
-            <p className="flex items-baseline gap-1.5">
-              <span className="font-display tabular text-num-sm font-bold text-ink">
-                {trNumber(Number(result.netScore), 2)}
-              </span>
-              <span className="text-micro text-ink-faint">net</span>
-            </p>
-          ) : (
-            <p className="flex items-baseline gap-1.5">
-              <span className="font-display tabular text-num-sm font-bold text-ink">
-                {result.correctCount}/{toplam}
-              </span>
-              <span className="text-micro text-ink-faint">doğru</span>
-            </p>
-          )}
-          <div className="ms-auto flex gap-1.5">
-            <Badge tone="ok">{result.correctCount}D</Badge>
-            <Badge tone="bad">{result.wrongCount}Y</Badge>
-            <Badge tone="neutral">{result.blankCount}B</Badge>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Koçun cümlesi ───────────────────────────────── */}
-      <Card
-        className={cn(
-          "p-4 sm:p-6",
-          sonuc.ton === "ok" && "border-ok/30 bg-ok-wash/40",
-          sonuc.ton === "warn" && "border-warn/30 bg-warn-wash/40",
-          sonuc.ton === "bad" && "border-bad/30 bg-bad-wash/40"
-        )}
-      >
-        <p className="text-body leading-relaxed text-ink">{sonuc.metin}</p>
-        {bosNotu ? (
-          <p className="mt-3 border-t border-line pt-3 text-caption leading-relaxed text-ink-soft">
-            <strong className="font-semibold text-ink">Boş bırakma:</strong> {bosNotu}
-          </p>
-        ) : null}
-      </Card>
-
-      {/* ── Kontrol testi: plan döngüsü burada kapanıyor ── */}
-      {retest ? (
-        <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6 print:hidden">
-          <span
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-xl",
-              planDurumu ? "bg-ok-wash text-ok" : "bg-surface-sunk text-ink-soft"
-            )}
-          >
-            {planDurumu ? <CalendarCheck className="size-4" /> : <CalendarDays className="size-4" />}
+      <PageBreadcrumb
+        pageTitle={baslik}
+        badge={
+          <span className="flex flex-wrap items-center gap-1.5">
+            <Badge size="sm">{examShort(sinav)}</Badge>
+            {retest ? (
+              <Badge size="sm" color="success">
+                Kontrol testi
+              </Badge>
+            ) : null}
           </span>
-          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">
-            {planDurumu ? (
-              <>
-                <strong className="font-semibold text-ink">Planındaki kontrol testi kapandı.</strong>{" "}
-                <span className="tabular">
-                  Bu hafta {planDurumu.biten}/{planDurumu.toplam} iş tamam.
-                </span>
-              </>
-            ) : (
-              "Bu konu bu haftaki planında yoktu; sonucun konu haritana eklendi."
-            )}
-          </p>
-          <LinkButton
-            href="/panel"
-            variant={planDurumu ? "primary" : "secondary"}
-            className="max-sm:w-full"
-          >
-            {planDurumu ? "Planına dön" : "Ana sayfa"} <ArrowRight />
-          </LinkButton>
-        </Card>
-      ) : null}
+        }
+      />
 
-      {/* ── Şimdi ne çalışmalısın (öncelik sırası) ──────── */}
-      {/* Kontrol testinde yok: tek konuluk sonuçtan "bu hafta sadece bunlar"
-          demek, haftanın mevcut planıyla çelişiyordu. */}
-      {oncelikler.length > 0 && !retest ? (
-        <Card className="border-brand/25 shadow-raised">
-          <CardHeader
-            className="p-4 sm:p-6"
+      <div className="space-y-4 md:space-y-6">
+        {/* ── Özet: telefonda yatay, gösterge küçük ───────── */}
+        <Card className="flex items-center gap-4 p-4 sm:gap-6 sm:p-6">
+          <div className="w-28 shrink-0 sm:hidden">
+            <RadialGauge value={oran * 100} ariaLabel="Başarı oranı" tone={bant(oran)} size="sm" />
+          </div>
+          <div className="w-44 shrink-0 max-sm:hidden">
+            <RadialGauge
+              value={oran * 100}
+              ariaLabel="Başarı oranı"
+              tone={bant(oran)}
+              label={
+                <>
+                  %{yuzde}
+                  <span className="block font-sans text-theme-xs font-normal text-gray-500">başarı</span>
+                </>
+              }
+            />
+          </div>
+          <p className="min-w-0 flex-1 font-display text-base font-semibold text-balance text-gray-800 sm:text-lg">
+            {sonuc.baslik}
+          </p>
+        </Card>
+
+        {/* Net + D/Y/B kartları (telefonda sıkı: karar ve koçun cümlesi ilk
+            ekranda kalsın — PLAN §6). Cezasız sınavda net = doğru sayısı
+            olduğu için "net" kartını hiç göstermiyoruz, doğru kartı "12/20"
+            yazıyor: yan yana iki aynı sayı ekranda hata gibi duruyor. */}
+        <div className={cx("grid gap-4 md:gap-6", cezaVar ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+          {cezaVar ? <MetricCard compact label="Net" value={trNumber(Number(result.netScore), 2)} /> : null}
+          <MetricCard
+            compact
+            label="Doğru"
+            value={
+              <>
+                <span className="text-success-700">{result.correctCount}</span>
+                {cezaVar ? null : <span className="text-base font-semibold text-gray-500">/{toplam}</span>}
+              </>
+            }
+          />
+          <MetricCard compact label="Yanlış" value={<span className="text-error-700">{result.wrongCount}</span>} />
+          <MetricCard compact label="Boş" value={result.blankCount} />
+        </div>
+
+        {/* ── Koçun cümlesi ───────────────────────────────── */}
+        <div className={cx("rounded-2xl border p-4 sm:p-6", TON[sonuc.ton].kutu)}>
+          <p className="text-base leading-relaxed text-gray-800">{sonuc.metin}</p>
+          {bosNotu ? (
+            <p className={cx("mt-3 border-t pt-3 text-theme-sm leading-relaxed text-gray-700", TON[sonuc.ton].cizgi)}>
+              <strong className="font-semibold text-gray-800">Boş bırakma:</strong> {bosNotu}
+            </p>
+          ) : null}
+        </div>
+
+        {/* ── Kontrol testi: plan döngüsü burada kapanıyor ── */}
+        {retest ? (
+          <Card className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5 print:hidden">
+            <span
+              className={cx(
+                "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                planDurumu ? "bg-success-50 text-success-600" : "bg-gray-100 text-gray-500"
+              )}
+            >
+              {planDurumu ? (
+                <CalendarCheck className="size-5" aria-hidden />
+              ) : (
+                <CalendarDays className="size-5" aria-hidden />
+              )}
+            </span>
+            <p className="min-w-0 flex-1 text-theme-sm leading-relaxed text-gray-500">
+              {planDurumu ? (
+                <>
+                  <strong className="font-semibold text-gray-800">Planındaki kontrol testi kapandı.</strong>{" "}
+                  <span className="tabular">
+                    Bu hafta {planDurumu.biten}/{planDurumu.toplam} iş tamam.
+                  </span>
+                </>
+              ) : (
+                "Bu konu bu haftaki planında yoktu; sonucun konu haritana eklendi."
+              )}
+            </p>
+            <ButtonLink
+              href="/panel"
+              variant={planDurumu ? "primary" : "outline"}
+              endIcon={<ArrowRight className="rtl:rotate-180" />}
+              className="max-sm:w-full"
+            >
+              {planDurumu ? "Planına dön" : "Ana sayfa"}
+            </ButtonLink>
+          </Card>
+        ) : null}
+
+        {/* ── Şimdi ne çalışmalısın (öncelik sırası) ──────── */}
+        {/* Kontrol testinde yok: tek konuluk sonuçtan "bu hafta sadece bunlar"
+            demek, haftanın mevcut planıyla çelişiyordu. */}
+        {oncelikler.length > 0 && !retest ? (
+          <ComponentCard
             title="Bu hafta sadece bunlar"
-            description={`Sırayla. Her konu yaklaşık ${trNumber(
+            desc={`Sırayla. Her konu yaklaşık ${trNumber(
               Math.round(KONU_HAFTALIK_DAKIKA / 30) / 2,
               1
             )} saat: konu tekrarı, ${HAFTALIK_SORU} soru, yanlış analizi — sonunda 5 soruluk kontrol testi.`}
-          />
-          <ol className="divide-y divide-line">
-            {oncelikler.map((k, i) => (
-              <li key={k.topicId} className="flex items-start gap-3 px-4 py-4 sm:px-6">
-                <span className="font-display flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-caption font-bold text-white">
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-body font-semibold text-ink">{k.name}</p>
-                  <p className="tabular mt-0.5 text-caption text-ink-soft">
-                    {k.asked} soruda {k.correct} doğru · %{Math.round(k.ratio * 100)}
-                    {k.kayip !== null ? (
-                      <>
-                        {" · "}
-                        <span className="font-medium text-bad">
-                          sınavda ~{trNumber(k.kayip, k.kayip % 1 === 0 ? 0 : 1)} soru
-                        </span>
-                      </>
-                    ) : null}
-                  </p>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <KonuTekrarButonu topicId={k.topicId} topicName={k.name} />
-                    {(() => {
-                      const urunId = konuBilgileri.find((t) => t.id === k.topicId)
-                        ?.recommendedProductIds[0];
-                      const urun = urunId ? PRODUCTS[urunId] : null;
-                      return urun ? (
-                        <a
-                          href={productUrl(urun.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-micro font-medium text-ink-soft hover:text-brand"
-                        >
-                          {urun.name} <ArrowUpRight className="size-3.5" />
-                        </a>
-                      ) : null;
-                    })()}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-          {/* Eskiden "bunları bitirdiğinde plan kendini güncelleyecek" yazıyordu;
-              plan haftada bir, o haftanın ilk check-up'ından çıkıyor. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-4 py-3 sm:px-6">
-            <p className="min-w-0 flex-1 text-caption text-ink-soft">
-              Diğer konulara bu hafta bakma.
-              {haftaninPlani
-                ? haftaninPlani.sourceSessionId === sessionId
-                  ? " Bu konular haftalık planına eklendi."
-                  : " Bu haftanın planı önceki check-up'ından; yeni plan gelecek haftanın ilk check-up'ıyla çıkar."
-                : ""}
-            </p>
-            {haftaninPlani ? (
-              <LinkButton href="/panel" variant="soft" size="sm" className="print:hidden">
-                Planı gör <ArrowRight />
-              </LinkButton>
-            ) : null}
-          </div>
-        </Card>
-      ) : null}
-
-      {/* ── Hata deseni ─────────────────────────────────── */}
-      {hata ? (
-        <Card className="flex gap-3 border-warn/30 bg-warn-wash/40 p-4 sm:p-6">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-warn-wash text-warn">
-            <Brain className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-body font-semibold text-ink">{hata.baslik}</h2>
-            <p className="mt-1 text-caption leading-relaxed text-ink-soft">{hata.metin}</p>
-          </div>
-        </Card>
-      ) : null}
-
-      {/* ── Önceki denemeye göre ────────────────────────── */}
-      {!retest && ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
-        <Card className="p-4 sm:p-6">
-          <h2 className="text-body font-semibold text-ink">Geçen denemene göre</h2>
-          <ul className="mt-3 space-y-2">
-            {ilerleme.gelisen.map((t) => (
-              <li key={t.name} className="flex items-center gap-2 text-caption text-ink-soft">
-                <TrendingUp className="size-4 shrink-0 text-ok" />
-                <span className="min-w-0 flex-1 truncate text-ink">{t.name}</span>
-                <span className="tabular shrink-0 font-semibold text-ok">+{t.delta} puan</span>
-              </li>
-            ))}
-            {ilerleme.gerileyen.map((t) => (
-              <li key={t.name} className="flex items-center gap-2 text-caption text-ink-soft">
-                <TrendingDown className="size-4 shrink-0 text-bad" />
-                <span className="min-w-0 flex-1 truncate text-ink">{t.name}</span>
-                <span className="tabular shrink-0 font-semibold text-bad">{t.delta} puan</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      {/* ── Konu haritası ───────────────────────────────── */}
-      <Card>
-        <CardHeader
-          className="p-4 sm:p-6"
-          title="Konu haritası"
-          description={
-            olculemeyen > 0
-              ? `${olculemeyen} konuda seviye verilmedi: 3'ten az soru soruldu.`
-              : undefined
-          }
-        />
-        <div className="divide-y divide-line px-4 sm:px-6">
-          {breakdown.topics.slice(0, 3).map((t) => (
-            <TopicBar
-              key={t.topicId}
-              name={t.name}
-              ratio={t.ratio}
-              correct={t.correct}
-              asked={t.asked}
-              level={t.level}
-              slow={t.slow}
-            />
-          ))}
-        </div>
-        {breakdown.topics.length > 3 ? (
-          <details className="group">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 border-t border-line text-caption font-semibold text-brand [&::-webkit-details-marker]:hidden">
-              Tüm konuları gör ({breakdown.topics.length})
-              <ChevronDown className="size-4 transition group-open:rotate-180" />
-            </summary>
-            <div className="divide-y divide-line border-t border-line px-4 sm:px-6">
-              {breakdown.topics.slice(3).map((t) => (
-                <TopicBar
-                  key={t.topicId}
-                  name={t.name}
-                  ratio={t.ratio}
-                  correct={t.correct}
-                  asked={t.asked}
-                  level={t.level}
-                  slow={t.slow}
-                />
-              ))}
-            </div>
-          </details>
-        ) : null}
-      </Card>
-
-      {/* ── Sonraki ölçüm ───────────────────────────────── */}
-      {/* Kontrol testinde yok: katalogda görünmeyen "kontrol testi paketini
-          10 gün sonra tekrar çöz" diyordu. */}
-      {!retest ? (
-        <Card className="flex flex-wrap items-center gap-3 p-4 sm:p-6">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft">
-            <RotateCcw className="size-4" />
-          </span>
-          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">{tekrarNotu}</p>
-          <LinkButton href="/paketler" variant="secondary" className="max-sm:w-full">
-            Testler
-          </LinkButton>
-        </Card>
-      ) : null}
-
-      {/* ── Kaynak (en sonda, araç olarak) ──────────────── */}
-      {urunler.length > 0 ? (
-        <Card>
-          <CardHeader
-            className="p-4 sm:p-6"
-            title="Bu konuları çalışmak için elindeki kaynak yetmiyorsa"
-            description="Koçum.Net yayınları — zayıf çıkan konulara göre seçildi."
-          />
-          <ul className="divide-y divide-line">
-            {urunler.map((u) => (
-              <li key={u.id}>
-                <a
-                  href={productUrl(u.id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex min-h-14 items-center gap-3 px-4 py-3 transition active:bg-surface-sunk sm:px-6"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-body font-medium text-ink">{u.name}</span>
-                    <span className="block text-micro text-ink-faint">
-                      {u.questionCount} soru · {u.note}
+            tone="brand"
+            flush
+          >
+            <ol className="divide-y divide-gray-100">
+              {oncelikler.map((k, i) => {
+                const urunId = konuBilgileri.find((t) => t.id === k.topicId)?.recommendedProductIds[0];
+                const urun = urunId ? PRODUCTS[urunId] : null;
+                return (
+                  <li key={k.topicId} className="flex items-start gap-3 px-5 py-4 sm:px-6">
+                    <span className="tabular flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-theme-sm font-semibold text-white">
+                      {i + 1}
                     </span>
-                  </span>
-                  <ArrowUpRight className="size-4 shrink-0 text-ink-faint" />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold text-gray-800">{k.name}</p>
+                      <p className="tabular mt-0.5 text-theme-sm text-gray-500">
+                        {k.asked} soruda {k.correct} doğru · %{Math.round(k.ratio * 100)}
+                        {k.kayip !== null ? (
+                          <>
+                            {" · "}
+                            <span className="font-medium text-error-700">
+                              sınavda ~{trNumber(k.kayip, k.kayip % 1 === 0 ? 0 : 1)} soru
+                            </span>
+                          </>
+                        ) : null}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <KonuTekrarButonu topicId={k.topicId} topicName={k.name} />
+                        {alistirmaKalan > 0 ? (
+                          <KonuCalisButonu
+                            sessionId={sessionId}
+                            topicId={k.topicId}
+                            topicName={k.name}
+                            soruSayisi={Math.min(KONU_CALISMA_SORU, alistirmaKalan)}
+                          />
+                        ) : null}
+                        {urun ? (
+                          <a
+                            href={productUrl(urun.id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-theme-sm font-medium text-gray-500 transition hover:text-brand-500"
+                          >
+                            {urun.name} <ArrowUpRight className="size-3.5" aria-hidden />
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            {/* Eskiden "bunları bitirdiğinde plan kendini güncelleyecek" yazıyordu;
+                plan haftada bir, o haftanın ilk check-up'ından çıkıyor. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-3 sm:px-6">
+              <p className="min-w-0 flex-1 text-theme-sm text-gray-500">
+                Diğer konulara bu hafta bakma.
+                {haftaninPlani
+                  ? haftaninPlani.sourceSessionId === sessionId
+                    ? " Bu konular haftalık planına eklendi."
+                    : " Bu haftanın planı önceki check-up'ından; yeni plan gelecek haftanın ilk check-up'ıyla çıkar."
+                  : ""}
+              </p>
+              {haftaninPlani ? (
+                <ButtonLink
+                  href="/panel"
+                  variant="soft"
+                  size="xs"
+                  endIcon={<ArrowRight className="rtl:rotate-180" />}
+                  className="print:hidden"
+                >
+                  Planı gör
+                </ButtonLink>
+              ) : null}
+            </div>
+          </ComponentCard>
+        ) : null}
 
-      {/* ── Cevap incelemesi ────────────────────────────── */}
-      {inceleme ? (
-        <Card>
-          <CardHeader
-            className="p-4 sm:p-6"
+        {/* ── Hata deseni ─────────────────────────────────── */}
+        {hata ? (
+          <div className="flex gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 sm:gap-4 sm:p-6">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-warning-100 text-warning-600">
+              <Brain className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-semibold text-gray-800">{hata.baslik}</h2>
+              <p className="mt-1 text-theme-sm leading-relaxed text-gray-700">{hata.metin}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Önceki denemeye göre ────────────────────────── */}
+        {!retest && ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
+          <ComponentCard title="Geçen denemene göre" flush>
+            <ul className="divide-y divide-gray-100">
+              {ilerleme.gelisen.map((t) => (
+                <li key={t.name} className="flex items-center gap-3 px-5 py-3 sm:px-6">
+                  <TrendingUp className="size-4 shrink-0 text-success-600" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-theme-sm text-gray-800">{t.name}</span>
+                  <Badge size="sm" color="success">
+                    <span className="tabular">+{t.delta} puan</span>
+                  </Badge>
+                </li>
+              ))}
+              {ilerleme.gerileyen.map((t) => (
+                <li key={t.name} className="flex items-center gap-3 px-5 py-3 sm:px-6">
+                  <TrendingDown className="size-4 shrink-0 text-error-600" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-theme-sm text-gray-800">{t.name}</span>
+                  <Badge size="sm" color="error">
+                    <span className="tabular">{t.delta} puan</span>
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </ComponentCard>
+        ) : null}
+
+        {/* ── Konu haritası ───────────────────────────────── */}
+        {/* Liste yazdırılan biçim: ilk üç konu açık, gerisi katlı (telefonda kısa kalsın). */}
+        <ComponentCard
+          title="Konu haritası"
+          desc={olculemeyen > 0 ? `${olculemeyen} konuda seviye verilmedi: 3'ten az soru soruldu.` : undefined}
+          flush
+        >
+          <div className="p-5 sm:p-6">
+            <KonuHaritasi konular={ilkKonular} />
+          </div>
+          {kalanKonular.length > 0 ? (
+            <>
+              <details className="group border-t border-gray-100 print:hidden">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 text-theme-sm font-medium text-brand-500 transition hover:text-brand-600 [&::-webkit-details-marker]:hidden">
+                  Tüm konuları gör ({breakdown.topics.length})
+                  <ChevronDown className="size-4 transition group-open:rotate-180" aria-hidden />
+                </summary>
+                <div className="border-t border-gray-100 p-5 sm:p-6">
+                  <KonuHaritasi konular={kalanKonular} />
+                </div>
+              </details>
+              {/* Kâğıtta kalan konular da: tarayıcı kapalı <details>'in içini
+                  basmıyor (Chrome), konu haritasının tamamı PDF'te olmalı. */}
+              <div className="hidden border-t border-gray-100 p-5 sm:p-6 print:block">
+                <KonuHaritasi konular={kalanKonular} />
+              </div>
+            </>
+          ) : null}
+        </ComponentCard>
+
+        {/* ── Sonraki ölçüm ───────────────────────────────── */}
+        {/* Kontrol testinde yok: katalogda görünmeyen "kontrol testi paketini
+            10 gün sonra tekrar çöz" diyordu. */}
+        {!retest ? (
+          <Card className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+              <RotateCcw className="size-5" aria-hidden />
+            </span>
+            <p className="min-w-0 flex-1 text-theme-sm leading-relaxed text-gray-700">{tekrarNotu}</p>
+            <ButtonLink href="/paketler" variant="outline" className="max-sm:w-full">
+              Testler
+            </ButtonLink>
+          </Card>
+        ) : null}
+
+        {/* ── Kaynak (en sonda, araç olarak) ──────────────── */}
+        {urunler.length > 0 ? (
+          <ComponentCard
+            title="Bu konuları çalışmak için elindeki kaynak yetmiyorsa"
+            desc="Koçum.Net yayınları — zayıf çıkan konulara göre seçildi."
+            flush
+          >
+            <ul className="divide-y divide-gray-100">
+              {urunler.map((u) => (
+                <li key={u.id}>
+                  <a
+                    href={productUrl(u.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-h-14 items-center gap-3 px-5 py-3 transition hover:bg-gray-50 sm:px-6"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-theme-sm font-medium text-gray-800">{u.name}</span>
+                      <span className="block text-theme-xs text-gray-500">
+                        {u.questionCount} soru · {u.note}
+                      </span>
+                    </span>
+                    <ArrowUpRight className="size-4 shrink-0 text-gray-400" aria-hidden />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </ComponentCard>
+        ) : null}
+
+        {/* ── Cevap incelemesi ────────────────────────────── */}
+        {inceleme ? (
+          <ComponentCard
             title="Cevaplarını incele"
-            description="Her sorunun doğrusu, senin işaretin ve varsa adım adım çözümü."
-            action={
-              <span className="flex items-center gap-1 text-caption text-ok">
-                <CircleCheck className="size-4" /> {result.correctCount}
-              </span>
+            desc="Her sorunun doğrusu, senin işaretin ve varsa adım adım çözümü."
+            actions={
+              <Badge color="success" startIcon={<CircleCheck aria-hidden />}>
+                <span className="tabular">{result.correctCount}</span> doğru
+              </Badge>
             }
-          />
-          <AnswerReview items={inceleme} />
-        </Card>
-      ) : null}
+            flush
+          >
+            {deftereGiren > 0 ? (
+              <div className="mx-5 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-brand-25 px-3.5 py-2.5 sm:mx-6 sm:mt-5 print:hidden">
+                <NotebookPen className="size-4 shrink-0 text-brand-500" aria-hidden />
+                <p className="min-w-0 flex-1 text-theme-sm text-gray-700">
+                  Bu testten <span className="tabular font-semibold text-gray-800">{deftereGiren}</span> soru
+                  yanlış defterinde: aralıklarla benzerleriyle geri gelir.
+                </p>
+                <Link
+                  href="/defter"
+                  className="inline-flex min-h-9 items-center gap-1 text-theme-sm font-medium text-brand-500 transition hover:text-brand-600"
+                >
+                  Deftere git <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden />
+                </Link>
+              </div>
+            ) : null}
+            <AnswerReview items={inceleme} sessionId={sessionId} alistirmaAcik={alistirmaKalan > 0} />
+          </ComponentCard>
+        ) : null}
+      </div>
     </div>
   );
 }

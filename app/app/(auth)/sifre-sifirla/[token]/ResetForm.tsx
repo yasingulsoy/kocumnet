@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
-import { Loader2 } from "lucide-react";
 import { resetPasswordAction, type ResetState } from "@/lib/actions/password-reset";
-import { Alert, Button, Field } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/password-input";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
 
 const initial: ResetState = {};
 
@@ -17,11 +17,15 @@ export function ResetForm({ token }: { token: string }) {
       <input type="hidden" name="token" value={token} />
 
       {state.error ? (
-        <Alert>
-          {state.error}{" "}
-          <Link href="/sifremi-unuttum" className="font-semibold underline">
-            Yeni bağlantı iste
-          </Link>
+        <Alert
+          variant="error"
+          action={
+            <ButtonLink href="/sifremi-unuttum" variant="outline" size="xs">
+              Yeni bağlantı iste
+            </ButtonLink>
+          }
+        >
+          {state.error}
         </Alert>
       ) : null}
 
@@ -36,8 +40,7 @@ export function ResetForm({ token }: { token: string }) {
         />
       </Field>
 
-      <Button type="submit" size="lg" block disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" size="md" block loading={pending}>
         {pending ? "Kaydediliyor…" : "Parolayı değiştir"}
       </Button>
     </form>

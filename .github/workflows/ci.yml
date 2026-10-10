@@ -62,9 +62,10 @@ jobs:
       - run: npm run build
 
   checkup-e2e:
-    # Öğrenciye giden veride cevap anahtarı var mı (test:leak) ve telafide soru
-    # tekrar ediyor mu (test:levels). İkisi de sessiz kusurlar: arayüz çalışmaya
-    # devam eder, ölçüm anlamsızlaşır. Gerçek bir Postgres'e karşı koşar.
+    # Öğrenciye giden veride cevap anahtarı var mı (test:leak), telafide soru
+    # tekrar ediyor mu (test:levels) ve alıştırma cevabı yalnızca cevaplanan
+    # soruda mı açıyor, ölçümü kirletiyor mu (test:practice). Hepsi sessiz kusur:
+    # arayüz çalışmaya devam eder, ölçüm anlamsızlaşır. Gerçek bir Postgres'e karşı koşar.
     name: Check-up uçtan uca (sızıntı + seviyeler)
     runs-on: ubuntu-latest
     services:
@@ -99,8 +100,11 @@ jobs:
         run: npm run db:seed && npm run db:seed:demo && npm run db:seed:levels
       - run: npm run smoke
       - run: npm run test:markup
+      # Soru içe aktarma (komut satırı ve panel ortak): veritabanı istemez.
+      - run: npm run test:import
       - run: npm run test:leak
       - run: npm run test:levels
+      - run: npm run test:practice
 
   backend:
     name: backend

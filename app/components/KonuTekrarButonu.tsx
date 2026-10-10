@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { ClipboardCheck } from "lucide-react";
 import { konuTekrarBaslat } from "@/lib/actions/plan";
+import { Button } from "@/components/tailadmin/ui/Button";
 
 /**
  * "Kontrol testi" düğmesi — bir konuda 5 soruluk kısa test başlatır.
@@ -22,20 +23,18 @@ export function KonuTekrarButonu({
   const [pending, start] = useTransition();
 
   return (
-    <form
-      action={(fd) => start(() => konuTekrarBaslat(fd))}
-      className="shrink-0"
-    >
+    <form action={(fd) => start(() => konuTekrarBaslat(fd))} className="shrink-0">
       <input type="hidden" name="topicId" value={topicId} />
-      <button
+      <Button
         type="submit"
-        disabled={pending}
+        variant="outline"
+        size="xs"
+        loading={pending}
+        startIcon={<ClipboardCheck />}
         aria-label={`${topicName} konusunda 5 soruluk kontrol testi çöz`}
-        className="flex min-h-9 items-center gap-1.5 rounded-lg bg-surface-sunk px-3 text-micro font-semibold text-brand ring-1 ring-inset ring-line transition active:bg-brand-wash disabled:opacity-60"
       >
-        <ClipboardCheck className="size-3.5" />
         {pending ? "Hazırlanıyor…" : "5 soruluk test"}
-      </button>
+      </Button>
     </form>
   );
 }

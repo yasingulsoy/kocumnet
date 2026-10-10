@@ -3,7 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getStudentSession, CheckupError } from "@/lib/checkup";
 import { MathContent } from "@/components/MathContent";
-import { EmptyState, LinkButton } from "@/components/ui";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
 import { CircleAlert } from "lucide-react";
 import { CheckupRunner } from "./CheckupRunner";
 
@@ -23,6 +25,9 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
     throw e;
   }
 
+  // Alıştırmanın kendi ekranı var (süre yok, her cevaptan sonra geri bildirim).
+  if (session.kind === "PRACTICE") redirect(`/alistirma/${sessionId}`);
+
   // Bitmiş testin ekranını göstermek anlamsız — sonuca gönder. Seviyeli
   // check-up aşaması koçluk sonucuna değil kendi deneme sayfasına döner.
   if (session.status !== "IN_PROGRESS") {
@@ -35,13 +40,15 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
    */
   if (session.questions.length === 0) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <EmptyState
-          icon={<CircleAlert />}
-          title="Bu testte soru yok"
-          description="Test hazırlanırken bir sorun çıkmış. Testler sayfasından yeniden başlayabilirsin."
-          action={<LinkButton href="/paketler">Testlere dön</LinkButton>}
-        />
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <EmptyState
+            icon={<CircleAlert />}
+            title="Bu testte soru yok"
+            description="Test hazırlanırken bir sorun çıkmış. Testler sayfasından yeniden başlayabilirsin."
+            action={<ButtonLink href="/paketler">Testlere dön</ButtonLink>}
+          />
+        </Card>
       </main>
     );
   }

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   Bookmark,
   CircleCheck,
   Clock,
@@ -19,8 +18,14 @@ import { SUPPORT_EMAIL } from "@/lib/site";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { checkPackageAccess } from "@/lib/entitlements";
-import { Badge, Card, trDate, trNumber } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { examShort } from "@/lib/exams";
+import { trDate, trNumber } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { buttonClass } from "@/components/tailadmin/ui/Button";
+import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
+import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { StartButton } from "./StartButton";
 
 export async function generateMetadata({
@@ -68,7 +73,7 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
   // Katalog dışı türler bu ekrandan başlatılmaz (lib/catalog.ts KATALOG_TURLERI):
   // seviyeli check-up kendi sayfasına, gizli tekrar paketi hiçbir yere.
   if (pkg.kind === "LEVEL") redirect("/seviyeli");
-  if (pkg.kind === "RETEST") notFound();
+  if (pkg.kind === "RETEST" || pkg.kind === "PRACTICE") notFound();
 
   const [erisim, yarim, gecmis] = await Promise.all([
     checkPackageAccess(user.id, pkg.id, pkg.isFree),
@@ -115,149 +120,128 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
   ];
 
   return (
-    <div className="animate-rise">
-      <Link
-        href="/paketler"
-        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-soft transition hover:text-ink"
-      >
-        <ArrowLeft className="size-4" /> Testler
-      </Link>
+    <div className="animate-rise mx-auto w-full max-w-5xl">
+      {/* Başlık: ad + sınav rozeti (AYT dolu, ötekiler açık — paket kartıyla aynı dil), altında özet. */}
+      <PageBreadcrumb
+        crumbs={[{ href: "/paketler", label: "Testler" }]}
+        currentLabel={pkg.name}
+        pageTitle={pkg.name}
+        badge={<Badge variant={pkg.examScope === "AYT" ? "solid" : "light"}>{examShort(pkg.examScope)}</Badge>}
+        description={pkg.summary ? <span className="block max-w-2xl leading-relaxed">{pkg.summary}</span> : null}
+      />
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
-        {/* Özet: rozet, başlık, sayılar */}
-        <div className="space-y-6 lg:col-start-1 lg:row-start-1">
-          <div>
-            <Badge tone={pkg.examScope === "AYT" ? "dark" : "brand"}>{pkg.examScope}</Badge>
-            <h1 className="font-display mt-3 text-[28px] font-bold leading-tight tracking-tight text-ink sm:text-[32px]">
-              {pkg.name}
-            </h1>
-            {pkg.summary ? (
-              <p className="mt-2.5 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
-                {pkg.summary}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { icon: ListChecks, v: pkg.questionCount, l: "soru" },
-              { icon: Clock, v: pkg.durationMinutes, l: "dakika" },
-              { icon: Layers, v: pkg.topics.length, l: "konu" },
-            ].map(({ icon: Icon, v, l }) => (
-              <Card key={l} className="p-4 text-center">
-                <Icon className="mx-auto size-5 text-brand" />
-                <p className="font-display tabular mt-2 text-2xl font-bold text-ink">{v}</p>
-                <p className="text-xs text-ink-soft">{l}</p>
-              </Card>
-            ))}
-          </div>
+      <div className="grid gap-4 md:gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
+        {/* Özet: sayılar */}
+        <div className="grid grid-cols-3 gap-4 md:gap-6 lg:col-start-1 lg:row-start-1">
+          <MetricCard label="Soru" value={pkg.questionCount} icon={<ListChecks aria-hidden />} tone="brand" />
+          <MetricCard label="Dakika" value={pkg.durationMinutes} icon={<Clock aria-hidden />} tone="brand" />
+          <MetricCard label="Konu" value={pkg.topics.length} icon={<Layers aria-hidden />} tone="brand" />
         </div>
 
         {/* Başlat kartı. Telefonda özetin hemen altında: eskiden ölçülen konular
             ve kuralların ARDINDAN, iki ekran aşağıdaydı ve öğrenci düğmeyi
-            aramak zorunda kalıyordu. Masaüstünde sağda, kaydırırken yerinde kalır. */}
-        <div className="space-y-4 lg:sticky lg:top-10 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <Card className="p-5 sm:p-6">
-            {erisim.allowed ? (
-              <>
-                <h2 className="font-display text-base font-semibold text-ink">
-                  {yarim ? "Yarım kalan testin var" : "Hazır mısın?"}
-                </h2>
-                <p className="mt-1 text-sm text-ink-soft">
-                  {yarim
-                    ? `Süren işlemeye devam ediyor: ${kalanDk} dakika kaldı.`
-                    : `${pkg.questionCount} soru, ${pkg.durationMinutes} dakika. Sessiz bir yer ve kağıt kalem yeterli.`}
-                </p>
-                <div className="mt-5">
-                  <StartButton
-                    slug={slug}
-                    resume={Boolean(yarim)}
-                    durationMinutes={pkg.durationMinutes}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <span className="flex size-11 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft ring-1 ring-line">
-                  <Lock className="size-5" />
+            aramak zorunda kalıyordu. Masaüstünde sağda, kaydırırken yerinde
+            kalır (kitin yapışkan üst çubuğunun altında). */}
+        <div className="space-y-4 md:space-y-6 lg:sticky lg:top-[calc(var(--ta-header-h)+1.5rem)] lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          {erisim.allowed ? (
+            // Vurgulu kart (kitin Card'ı, marka kenarı).
+            <Card tone="brand" className="p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-500">
+                  <Timer className="size-5" aria-hidden />
                 </span>
-                <h2 className="font-display mt-4 text-base font-semibold text-ink">
-                  Bu paket kilitli
-                </h2>
-                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                  Bu pakete erişim için Koçum.Net ile iletişime geç; hesabına tanımlandığında
-                  burada açılacak.
-                </p>
-                <a
-                  href={`mailto:${SUPPORT_EMAIL}`}
-                  className="mt-5 flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-wash text-sm font-semibold text-brand transition hover:bg-brand-wash-strong"
-                >
-                  <Mail className="size-4" /> {SUPPORT_EMAIL}
-                </a>
-              </>
-            )}
-          </Card>
+                <div className="min-w-0">
+                  <h2 className="font-display text-base font-semibold text-gray-800">
+                    {yarim ? "Yarım kalan testin var" : "Hazır mısın?"}
+                  </h2>
+                  <p className="mt-1 text-theme-sm text-gray-500">
+                    {yarim
+                      ? `Süren işlemeye devam ediyor: ${kalanDk} dakika kaldı.`
+                      : `${pkg.questionCount} soru, ${pkg.durationMinutes} dakika. Sessiz bir yer ve kağıt kalem yeterli.`}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5">
+                <StartButton slug={slug} resume={Boolean(yarim)} durationMinutes={pkg.durationMinutes} />
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+                  <Lock className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="font-display text-base font-semibold text-gray-800">Bu paket kilitli</h2>
+                  <p className="mt-1 text-theme-sm leading-relaxed text-gray-500">
+                    Bu pakete erişim için Koçum.Net ile iletişime geç; hesabına tanımlandığında
+                    burada açılacak.
+                  </p>
+                </div>
+              </div>
+              <a href={`mailto:${SUPPORT_EMAIL}`} className={cx(buttonClass({ variant: "soft", block: true }), "mt-5")}>
+                <Mail aria-hidden />
+                {SUPPORT_EMAIL}
+              </a>
+            </Card>
+          )}
 
           {gecmis.length > 0 ? (
-            <Card className="p-5">
-              <h2 className="text-[13px] font-semibold text-ink">Önceki denemelerin</h2>
-              <ul className="-mx-2 mt-2">
+            <ComponentCard title="Önceki denemelerin" flush>
+              <ul className="p-2 sm:p-3">
                 {gecmis.map((g) => (
                   <li key={g.sessionId}>
                     <Link
                       href={"/sonuc/" + g.sessionId}
-                      className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm transition hover:bg-surface-hover"
+                      className="flex min-h-11 items-center justify-between gap-3 rounded-lg px-3 py-2 text-theme-sm transition hover:bg-gray-50"
                     >
-                      <span className="text-ink-soft">{trDate(g.computedAt, false)}</span>
-                      <span className="font-display tabular font-semibold text-ink">
+                      <span className="text-gray-500">{trDate(g.computedAt, false)}</span>
+                      <span className="tabular font-display font-semibold text-gray-800">
                         {trNumber(Number(g.netScore))} net
                       </span>
                     </Link>
                   </li>
                 ))}
               </ul>
-            </Card>
+            </ComponentCard>
           ) : null}
         </div>
 
         {/* Ayrıntı: ölçülen konular ve kurallar */}
-        <div className="space-y-6 lg:col-start-1 lg:row-start-2">
-          <Card className="p-5 sm:p-6">
-            <h2 className="font-display text-[15px] font-semibold text-ink">Ölçülen konular</h2>
-            <p className="mt-0.5 text-[13px] text-ink-soft">
-              Her konudan en az 3 soru — tek soruya bakıp &quot;zayıfsın&quot; demiyoruz.
-            </p>
-            <ul className="mt-4 divide-y divide-line">
+        <div className="space-y-4 md:space-y-6 lg:col-start-1 lg:row-start-2">
+          <ComponentCard
+            title="Ölçülen konular"
+            desc={<>Her konudan en az 3 soru — tek soruya bakıp &quot;zayıfsın&quot; demiyoruz.</>}
+            flush
+          >
+            <ul className="divide-y divide-gray-100 px-5 py-1 sm:px-6">
               {pkg.topics.map((t) => (
-                <li key={t.topic.name} className="flex items-center justify-between gap-3 py-2.5">
-                  <span className="flex items-center gap-2.5 text-sm text-ink">
-                    <CircleCheck className="size-4 shrink-0 text-ok-fill" />
+                <li key={t.topic.name} className="flex items-center justify-between gap-3 py-3">
+                  <span className="flex min-w-0 items-center gap-2.5 text-sm text-gray-800">
+                    <CircleCheck className="size-4 shrink-0 text-success-500" aria-hidden />
                     {t.topic.name}
                   </span>
-                  <span className="tabular shrink-0 text-xs text-ink-faint">
-                    {t.questionCount} soru
-                  </span>
+                  <span className="tabular shrink-0 text-theme-xs text-gray-500">{t.questionCount} soru</span>
                 </li>
               ))}
             </ul>
-          </Card>
+          </ComponentCard>
 
-          <Card className="p-5 sm:p-6">
-            <h2 className="font-display text-[15px] font-semibold text-ink">Başlamadan önce</h2>
-            <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+          <ComponentCard title="Başlamadan önce">
+            <ul className="grid gap-5 sm:grid-cols-2">
               {kurallar.map(({ icon: Icon, t, d, cls }) => (
-                <li key={t} className={cn("flex gap-3", cls)}>
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunk text-ink-soft ring-1 ring-line">
-                    <Icon className="size-[18px]" />
+                <li key={t} className={cx("flex gap-3", cls)}>
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700">
+                    <Icon className="size-5" aria-hidden />
                   </span>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">{t}</p>
-                    <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{d}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{t}</p>
+                    <p className="mt-0.5 text-theme-sm leading-relaxed text-gray-500">{d}</p>
                   </div>
                 </li>
               ))}
             </ul>
-          </Card>
+          </ComponentCard>
         </div>
       </div>
     </div>

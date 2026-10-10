@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { KeyRound, Trash2 } from "lucide-react";
 import {
   changePasswordAction,
   deleteAccountAction,
@@ -17,32 +17,51 @@ import {
   type GradeValue,
 } from "@/lib/exams";
 import { mailTercihAction, type AbonelikState } from "@/lib/actions/abonelik";
-import { Alert, Button, Field, INPUT_CLASS } from "@/components/ui";
-import { Dialog } from "@/components/ui/dialog";
 import { PasswordInput } from "@/components/ui/password-input";
-import { cn } from "@/lib/cn";
+import { cx } from "@/components/tailadmin/cx";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { hintClass, labelClass } from "@/components/tailadmin/form/styles";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { Modal, useModal } from "@/components/tailadmin/ui/Modal";
 
 const initial: ProfileState = {};
+
+/** Aç/kapa düğmeleri (sınav, aşama): seçili marka mavisi, seçilmemiş beyaz. 44 px dokunma hedefi. */
+function secimSinifi(secili: boolean) {
+  return secili
+    ? "border-brand-500 bg-brand-500 text-white"
+    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100";
+}
 
 export function ProfileForm({ name, email }: { name: string; email: string }) {
   const [state, formAction, pending] = useActionState(updateProfileAction, initial);
 
   return (
     <form action={formAction} className="space-y-5">
-      {state.ok ? <Alert tone="ok">{state.ok}</Alert> : null}
-      {state.error ? <Alert>{state.error}</Alert> : null}
+      {state.ok ? (
+        <Alert variant="success" compact>
+          {state.ok}
+        </Alert>
+      ) : null}
+      {state.error ? (
+        <Alert variant="error" compact>
+          {state.error}
+        </Alert>
+      ) : null}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Ad soyad" error={state.fields?.name}>
-          <input name="name" defaultValue={name} required className={INPUT_CLASS} />
+          <Input name="name" defaultValue={name} required />
         </Field>
         <Field label="E-posta" hint="E-posta değiştirilemez.">
-          <input value={email} disabled className={cn(INPUT_CLASS, "bg-surface-sunk text-ink-soft")} />
+          <Input value={email} disabled />
         </Field>
       </div>
 
-      <Button type="submit" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" loading={pending}>
         {pending ? "Kaydediliyor…" : "Kaydet"}
       </Button>
     </form>
@@ -95,41 +114,48 @@ export function HedefForm({
   }
 
   return (
-    <form action={formAction} className="space-y-5">
-      {state.ok ? <Alert tone="ok">{state.ok}</Alert> : null}
-      {state.error ? <Alert>{state.error}</Alert> : null}
+    <form action={formAction} className="space-y-6">
+      {state.ok ? (
+        <Alert variant="success" compact>
+          {state.ok}
+        </Alert>
+      ) : null}
+      {state.error ? (
+        <Alert variant="error" compact>
+          {state.error}
+        </Alert>
+      ) : null}
 
       <input type="hidden" name="targetExam" value={sinav} />
       <input type="hidden" name="grade" value={sinif} />
       <input type="hidden" name="targetNet" value={hedef} />
 
       <fieldset>
-        <legend className="text-caption font-medium text-ink">Hazırlandığın sınav</legend>
-        <div className="scroll-x mt-2 flex gap-2">
+        <legend className={labelClass}>Hazırlandığın sınav</legend>
+        {/* Kaydırma şeridi odak çerçevesini kırpmasın: içte 4 px pay, dışta eksi pay (yer değişmez). */}
+        <div className="scroll-x -m-1 mt-1 flex gap-2 p-1">
           {SECILEBILIR_SINAVLAR.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => sinavSec(s)}
               aria-pressed={s === sinav}
-              className={cn(
-                "min-h-11 shrink-0 touch-manipulation rounded-xl border px-4 text-body font-semibold transition",
-                s === sinav
-                  ? "border-brand bg-brand text-white"
-                  : "border-line bg-surface text-ink-soft active:bg-surface-sunk"
+              className={cx(
+                "min-h-11 shrink-0 cursor-pointer touch-manipulation rounded-lg border px-4 text-sm font-semibold transition",
+                secimSinifi(s === sinav)
               )}
             >
               {EXAMS[s].short}
             </button>
           ))}
         </div>
-        <p className="mt-2 text-micro text-ink-faint">
+        <p className={hintClass}>
           Sınavı değiştirmek test kataloğunu ve önerileri değiştirir. Geçmiş sonuçların durur.
         </p>
       </fieldset>
 
       <fieldset>
-        <legend className="text-caption font-medium text-ink">Hangi aşamadasın?</legend>
+        <legend className={labelClass}>Hangi aşamadasın?</legend>
         <div className="mt-2 flex flex-wrap gap-2">
           {bilgi.grades.map((g) => (
             <button
@@ -137,11 +163,9 @@ export function HedefForm({
               type="button"
               onClick={() => setSinif(g)}
               aria-pressed={sinif === g}
-              className={cn(
-                "min-h-11 touch-manipulation rounded-xl border px-4 text-body font-medium transition",
-                sinif === g
-                  ? "border-brand bg-brand text-white"
-                  : "border-line bg-surface text-ink-soft active:bg-surface-sunk"
+              className={cx(
+                "min-h-11 cursor-pointer touch-manipulation rounded-lg border px-4 text-sm font-medium transition",
+                secimSinifi(sinif === g)
               )}
             >
               {GRADE_LABEL[g]}
@@ -151,9 +175,7 @@ export function HedefForm({
       </fieldset>
 
       <fieldset>
-        <legend className="text-caption font-medium text-ink">
-          Matematikte hedefin kaç net?
-        </legend>
+        <legend className={labelClass}>Matematikte hedefin kaç net?</legend>
         <div className="mt-2 flex items-center gap-4">
           <input
             type="range"
@@ -163,27 +185,29 @@ export function HedefForm({
             value={hedef}
             onChange={(e) => setHedef(Number(e.target.value))}
             aria-label="Hedef net"
-            className="h-11 flex-1 accent-[var(--brand)]"
+            className="h-11 min-w-0 flex-1 cursor-pointer accent-brand-500"
           />
-          <output className="font-display tabular w-16 shrink-0 text-center text-num-sm font-bold text-ink">
+          <output className="tabular w-16 shrink-0 text-center font-display text-title-sm font-semibold text-gray-800">
             {hedef}
           </output>
         </div>
-        <p className="mt-1 text-micro text-ink-faint">
+        <p className={hintClass}>
           {bilgi.short} matematikte {bilgi.mathQuestionCount} soru var.
         </p>
       </fieldset>
 
       <fieldset>
-        <legend className="text-caption font-medium text-ink">Haftada kaç test?</legend>
+        <legend className={labelClass}>Haftada kaç test?</legend>
         <div className="mt-2 flex gap-2">
           {[1, 2, 3].map((n) => (
             <label
               key={n}
-              className={cn(
-                "flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-xl border text-body font-medium transition",
-                "has-[:checked]:border-brand has-[:checked]:bg-brand has-[:checked]:text-white",
-                "border-line bg-surface text-ink-soft"
+              className={cx(
+                "flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg border text-sm font-medium transition",
+                "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+                "has-checked:border-brand-500 has-checked:bg-brand-500 has-checked:text-white",
+                // Radyo görünmez: klavye odağı etiketin çerçevesinde görünsün.
+                "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500"
               )}
             >
               <input
@@ -199,8 +223,7 @@ export function HedefForm({
         </div>
       </fieldset>
 
-      <Button type="submit" disabled={pending || !sinif}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" loading={pending} disabled={!sinif}>
         {pending ? "Kaydediliyor…" : "Hedefi kaydet"}
       </Button>
     </form>
@@ -212,66 +235,91 @@ export function PasswordForm() {
 
   return (
     <form action={formAction} className="space-y-5">
-      {state.ok ? <Alert tone="ok">{state.ok}</Alert> : null}
+      {state.ok ? (
+        <Alert variant="success" compact>
+          {state.ok}
+        </Alert>
+      ) : null}
+      {state.error ? (
+        <Alert variant="error" compact>
+          {state.error}
+        </Alert>
+      ) : null}
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Mevcut parola" error={state.fields?.current}>
-          <PasswordInput name="current" autoComplete="current-password" required />
-        </Field>
-        <Field label="Yeni parola" error={state.fields?.next} hint="En az 8 karakter.">
-          <PasswordInput name="next" autoComplete="new-password" required minLength={8} />
-        </Field>
-      </div>
+      <Field label="Mevcut parola" error={state.fields?.current}>
+        <PasswordInput name="current" autoComplete="current-password" required />
+      </Field>
+      <Field label="Yeni parola" error={state.fields?.next} hint="En az 8 karakter.">
+        <PasswordInput name="next" autoComplete="new-password" required minLength={8} />
+      </Field>
 
-      <Button type="submit" variant="secondary" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" block loading={pending} startIcon={<KeyRound />}>
         {pending ? "Değiştiriliyor…" : "Parolayı değiştir"}
       </Button>
     </form>
   );
 }
 
+/** Güvenlik kartındaki "Parolayı değiştir": form kitin penceresinde açılır. */
+export function PasswordDialogButton() {
+  const { isOpen, openModal, closeModal } = useModal();
+
+  return (
+    <>
+      <Button variant="outline" startIcon={<KeyRound />} onClick={openModal}>
+        Parolayı değiştir
+      </Button>
+      <Modal
+        isOpen={isOpen}
+        onClose={closeModal}
+        size="sm"
+        title="Parolayı değiştir"
+        description="Değiştirdiğinde diğer cihazlardaki oturumların kapanır"
+      >
+        <PasswordForm />
+      </Modal>
+    </>
+  );
+}
+
 export function DeleteAccount() {
-  const [acik, setAcik] = useState(false);
+  const { isOpen, openModal, closeModal } = useModal();
   const [state, formAction, pending] = useActionState(deleteAccountAction, initial);
 
   return (
     <>
-      <Button variant="danger" onClick={() => setAcik(true)}>
-        <Trash2 /> Hesabımı sil
+      {/* Dolu kırmızı yalnızca penceredeki son onayda; kartta çerçeveli. */}
+      <Button variant="danger-outline" startIcon={<Trash2 />} onClick={openModal}>
+        Hesabımı sil
       </Button>
 
-      <Dialog
-        open={acik}
-        onClose={() => setAcik(false)}
+      <Modal
+        isOpen={isOpen}
+        onClose={closeModal}
+        size="sm"
         title="Hesabını silmek istediğine emin misin?"
         description="Bu işlem geri alınamaz."
       >
-        <ul className="space-y-1.5 rounded-xl bg-bad-wash p-4 text-sm text-ink-soft">
+        <ul className="space-y-1.5 rounded-xl border border-error-200 bg-error-50 p-4 text-sm text-gray-700">
           <li>• Tüm test sonuçların ve konu haritan silinir</li>
           <li>• Erişim hakların iptal olur</li>
           <li>• Aynı e-postayla yeniden kayıt olsan da geçmişin geri gelmez</li>
         </ul>
 
-        <form action={formAction} className="mt-5 space-y-4">
+        <form action={formAction} className="mt-5 space-y-5">
           <Field label="Onaylamak için parolanı yaz" error={state.fields?.password}>
             <PasswordInput name="password" autoComplete="current-password" required autoFocus />
           </Field>
-          <div className="flex gap-2.5">
-            <Button type="button" variant="secondary" onClick={() => setAcik(false)} className="flex-1">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={closeModal} className="flex-1">
               Vazgeç
             </Button>
-            <Button
-              type="submit"
-              disabled={pending}
-              className="flex-1 bg-bad-fill text-white shadow-none hover:bg-bad"
-            >
-              {pending ? <Loader2 className="animate-spin" /> : <Trash2 />}
+            <Button type="submit" variant="danger" loading={pending} startIcon={<Trash2 />} className="flex-1">
               {pending ? "Siliniyor…" : "Kalıcı olarak sil"}
             </Button>
           </div>
         </form>
-      </Dialog>
+      </Modal>
     </>
   );
 }
@@ -287,18 +335,22 @@ export function MailTercihForm({ optOut }: { optOut: boolean }) {
   const acik = state.ok ? !state.kapali : !optOut;
 
   return (
-    <form action={formAction} className="flex flex-wrap items-center justify-between gap-3">
-      <label className="flex items-start gap-3">
-        <input type="checkbox" name="haftalik" defaultChecked={acik} className="mt-0.5 size-4 accent-brand" />
-        <span>
-          <span className="block text-sm font-medium text-ink">Haftalık koçluk postası</span>
-          <span className="block text-[13px] text-ink-soft">Her pazartesi o haftanın planı e-postana gelir. Parola ve hesap postaları bundan ayrı.</span>
-        </span>
-      </label>
+    <form action={formAction} className="flex flex-wrap items-center justify-between gap-4">
+      <Checkbox
+        name="haftalik"
+        defaultChecked={acik}
+        label="Haftalık koçluk postası"
+        description="Her pazartesi o haftanın planı e-postana gelir. Parola ve hesap postaları bundan ayrı."
+        wrapperClassName="min-w-0 grow basis-64"
+      />
       <div className="flex items-center gap-3">
-        {state.ok ? <span className="text-[13px] text-ok">Kaydedildi.</span> : null}
-        <Button type="submit" variant="secondary" size="sm" disabled={pending}>
-          {pending ? <Loader2 className="animate-spin" /> : null} Kaydet
+        {state.ok ? (
+          <span role="status" className="text-theme-sm text-success-700">
+            Kaydedildi.
+          </span>
+        ) : null}
+        <Button type="submit" variant="outline" loading={pending}>
+          Kaydet
         </Button>
       </div>
     </form>

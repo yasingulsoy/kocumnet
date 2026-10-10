@@ -7,6 +7,13 @@
  */
 @import "./tokens.css";
 
+/*
+ * TailAdmin kiti (MIT): tema — kırılmalar, gri/anlam/marka ölçekleri,
+ * gölgeler, menü yardımcıları. Kaynak design/tailadmin/theme.css, bu kopyayı
+ * da ELLE DÜZENLEME. Bileşenler components/tailadmin/ altında.
+ */
+@import "./tailadmin.css";
+
 /* ── Uygulama yoğunluğu ─────────────────────────────────────── */
 /*
  * Aynı belirteç adları, daha sıkı değerler: uygulama başlığı yön tabelasıdır,
@@ -32,18 +39,24 @@
  * kararmasını da kapatıyor.)
  */
 body {
-  background: var(--canvas);
-  color: var(--ink);
+  /* Kitin sayfa zemini ve metin rengi (gray-50 / gray-800). */
+  background: var(--color-gray-50);
+  color: var(--color-gray-800);
 }
 
-/* Yerel <dialog>: odak kapanı, Escape ve üst katman tarayıcıdan geliyor. */
-dialog::backdrop {
-  background: rgb(17 24 52 / 0.45);
-  backdrop-filter: blur(2px);
-}
+/*
+ * Pencereler kitin Modal'ı (yerel <dialog> + kendi buzlu perdesi); eski
+ * dialog::backdrop ve açılış animasyonu kuralları kaldırıldı — tam ekran
+ * pencere öğesini de kaydırıyordu.
+ */
 
-dialog[open] {
-  animation: var(--animate-rise);
+/*
+ * Koyu bantta (kitin Card tone="dark" / bg-brand-950) odak halkası beyaz:
+ * marka mavisi lacivert zeminde ~2,6:1 kalıyordu. tokens.css'teki genel
+ * :focus-visible katmansız; bu kural ondan özgül.
+ */
+.bg-brand-950 :focus-visible {
+  outline-color: white;
 }
 
 /* ── KaTeX ──────────────────────────────────────────────────── */
@@ -86,9 +99,9 @@ dialog[open] {
   }
 
   /* Kartlar gölgesiz, sayfa sınırında bölünmesin. */
-  .shadow-card,
-  .shadow-raised,
-  .shadow-pop {
+  .shadow-theme-xs,
+  .shadow-theme-sm,
+  .shadow-theme-md {
     box-shadow: none !important;
   }
 

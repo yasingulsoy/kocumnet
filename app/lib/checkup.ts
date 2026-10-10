@@ -7,6 +7,7 @@ import { checkPackageAccess } from "@/lib/entitlements";
 import { planOlustur, retestIsiniKapat } from "@/lib/plan";
 import { konuSinavdaMi } from "@/lib/exam-scope";
 import { examShort } from "@/lib/exams";
+import { defteriGuncelle } from "@/lib/notebook";
 
 /**
  * Check-up akışı: başlat → cevapla → bitir.
@@ -67,6 +68,8 @@ export interface StudentQuestion {
 
 export interface StudentSession {
   id: string;
+  /** Alıştırma (PRACTICE) sınav ekranında açılmaz, kendi ekranına gider. */
+  kind: "PACKAGE" | "TOPIC_RETEST" | "LEVEL_STAGE" | "PRACTICE";
   packageName: string;
   packageSlug: string;
   status: "IN_PROGRESS" | "SUBMITTED" | "EXPIRED" | "ABANDONED";
@@ -116,6 +119,9 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
   }
   if (pkg.kind === "RETEST") {
     throw new CheckupError("Kontrol testi planındaki konudan başlar.");
+  }
+  if (pkg.kind === "PRACTICE") {
+    throw new CheckupError("Alıştırma sonuç ekranından ya da yanlış defterinden başlar.");
   }
 
   // Erişim denetimi SERVİS katmanında: arayüzde kilit rozeti göstermek yetmez,
@@ -275,9 +281,10 @@ export async function startTopicRetest(
    * öğrenci istediği konu kimliğiyle çağırarak ücretli havuzdan beşer beşer
    * soru çekebilirdi.
    */
+  // Alıştırma ölçüm değil: konuyu "ölçülmüş" yapmaz.
   const olculdu = await prisma.sessionItem.findFirst({
     where: {
-      session: { userId, status: "SUBMITTED" },
+      session: { userId, status: "SUBMITTED", kind: { not: "PRACTICE" } },
       question: { topicId },
     },
     select: { id: true },
@@ -386,6 +393,7 @@ export async function getStudentSession(
     select: {
       id: true,
       userId: true,
+      kind: true,
       status: true,
       durationMinutes: true,
       startedAt: true,
@@ -422,6 +430,7 @@ export async function getStudentSession(
 
   return {
     id: session.id,
+    kind: session.kind,
     packageName: session.package.name,
     packageSlug: session.package.slug,
     status: session.status,
@@ -470,6 +479,7 @@ export async function getSessionState(sessionId: string, userId: string): Promis
     where: { id: sessionId },
     select: {
       userId: true,
+      kind: true,
       status: true,
       expiresAt: true,
       levelRunId: true,
@@ -480,11 +490,15 @@ export async function getSessionState(sessionId: string, userId: string): Promis
   if (!session || session.userId !== userId) throw new CheckupError("Oturum bulunamadı.");
 
   // Sonucu yazılamamış kapalı oturum (EXPIRED) için sonuç sayfası 404 olurdu.
-  const target = session.levelRunId
-    ? `/seviye/${session.levelRunId}`
-    : session.result
-      ? `/sonuc/${sessionId}`
-      : "/panel";
+  // Alıştırmanın sonucu yok; kendi ekranı özetini gösteriyor.
+  const target =
+    session.kind === "PRACTICE"
+      ? `/alistirma/${sessionId}`
+      : session.levelRunId
+        ? `/seviye/${session.levelRunId}`
+        : session.result
+          ? `/sonuc/${sessionId}`
+          : "/panel";
 
   return {
     status: session.status,
@@ -517,12 +531,18 @@ export async function saveAnswer(args: {
     where: { sessionId, questionId, session: { userId } },
     select: {
       id: true,
-      session: { select: { status: true, expiresAt: true } },
+      session: { select: { status: true, expiresAt: true, kind: true } },
       answer: { select: { id: true } },
     },
   });
 
   if (!item) throw new CheckupError("Soru bu oturuma ait değil.");
+  /*
+   * Alıştırmanın cevabı yalnızca kendi yolundan yazılır (answerPractice):
+   * orada cevap ilk kayıtta KİLİTLENİR. Buradan yazılabilseydi öğrenci
+   * çözümü gördükten sonra işaretini değiştirebilirdi.
+   */
+  if (item.session.kind === "PRACTICE") throw new CheckupError("Bu oturum bir alıştırma.");
   if (item.session.status !== "IN_PROGRESS") throw new CheckupError("Bu test kapandı.", "KAPANDI");
   if (item.session.expiresAt.getTime() + KAYIT_TOLERANSI_MS < Date.now()) {
     throw new CheckupError("Süre doldu.", "SURE_DOLDU");
@@ -617,8 +637,11 @@ export async function submitCheckup(
   if (times && Object.keys(times).length > 0) {
     const oturum = await prisma.checkupSession.findUnique({
       where: { id: sessionId },
-      select: { userId: true, status: true, durationMinutes: true },
+      select: { userId: true, status: true, durationMinutes: true, kind: true },
     });
+    // Alıştırmada süre birleştirme boş cevap satırı açardı; alıştırmada
+    // cevap satırı "cevaplandı, çözümü aç" demek (lib/practice.ts).
+    if (oturum?.kind === "PRACTICE") throw new CheckupError("Alıştırma bu yolla bitirilmez.");
     // Sessizce geçiyoruz: süre birleştirme başarısız olsa bile test bitmeli.
     if (oturum?.userId === userId && oturum.status === "IN_PROGRESS") {
       await sureleriBirlestir(sessionId, oturum.durationMinutes * 60_000, times).catch(() => {});
@@ -661,6 +684,13 @@ export async function submitCheckup(
 
   if (!session) throw new CheckupError("Oturum bulunamadı.");
   if (session.userId !== userId) throw new CheckupError("Oturum bulunamadı.");
+
+  /*
+   * Alıştırma PUANLANMAZ: sonuç satırı, soru/şık sayaçları ve plan yalnızca
+   * ölçümden çıkar (lib/practice.ts). Bu kapı, ileride biri alıştırmayı
+   * yanlışlıkla bu yoldan bitirmeye kalkarsa ölçümü kirletmesin diye.
+   */
+  if (session.kind === "PRACTICE") throw new CheckupError("Alıştırma bu yolla bitirilmez.");
 
   if (session.status !== "IN_PROGRESS") {
     const existing = await prisma.checkupResult.findUnique({ where: { sessionId } });
@@ -790,6 +820,18 @@ export async function submitCheckup(
     console.error("Koçluk planı üretilemedi:", e);
   }
 
+  /*
+   * Yanlış defteri: yanlış ve boşlar aralıklı tekrara girer (lib/notebook.ts).
+   * Plandan ayrı korumada: biri başarısız olursa öteki yine yazılsın. İşlev
+   * idempotent; aynı test ikinci kez işlense de madde çoğalmaz, ilerleme
+   * sıfırlanmaz. Cron'un puanladığı süresi dolmuş testler de buradan geçer.
+   */
+  try {
+    await defteriGuncelle(sessionId);
+  } catch (e) {
+    console.error("Yanlış defteri güncellenemedi:", e);
+  }
+
   return score;
 }
 
@@ -829,6 +871,7 @@ export interface ReviewChoice {
 }
 
 export interface ReviewItem {
+  questionId: string;
   order: number;
   topicName: string;
   stem: QuestionContent;
@@ -858,11 +901,13 @@ export async function getCheckupReview(
     where: { id: sessionId },
     select: {
       userId: true,
+      kind: true,
       status: true,
       items: {
         orderBy: { sortOrder: "asc" },
         select: {
           sortOrder: true,
+          questionId: true,
           question: {
             select: {
               stem: true,
@@ -885,8 +930,13 @@ export async function getCheckupReview(
   if (session.status === "IN_PROGRESS") {
     throw new CheckupError("Test bitmeden cevaplar gösterilmez.");
   }
+  // Alıştırmanın kendi geri bildirimi var ve yalnızca CEVAPLANMIŞ soruyu
+  // açıyor (lib/practice.ts). Buradan açılsaydı yarım bırakılan alıştırmanın
+  // hiç denenmemiş sorularının cevabı görünürdü.
+  if (session.kind === "PRACTICE") throw new CheckupError("Alıştırmanın incelemesi kendi ekranında.");
 
   return session.items.map((item) => ({
+    questionId: item.questionId,
     order: item.sortOrder,
     topicName: item.question.topic.name,
     stem: parseQuestionContent(item.question.stem),
@@ -912,10 +962,19 @@ export async function getCheckupReview(
 export async function expireStaleSessions(): Promise<number> {
   const stale = await prisma.checkupSession.findMany({
     where: { status: "IN_PROGRESS", expiresAt: { lt: new Date(Date.now() - KAYIT_TOLERANSI_MS) } },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, kind: true },
   });
 
   for (const s of stale) {
+    if (s.kind === "PRACTICE") {
+      // Alıştırma puanlanmaz: yalnızca kapanır. Cevaplanan sorular durur,
+      // cevaplanmayanların cevabı açılmaz (lib/practice.ts).
+      await prisma.checkupSession.updateMany({
+        where: { id: s.id, status: "IN_PROGRESS" },
+        data: { status: "EXPIRED" },
+      });
+      continue;
+    }
     try {
       await submitCheckup(s.id, s.userId);
     } catch {

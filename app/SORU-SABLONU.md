@@ -1,9 +1,15 @@
 # Check-up soru giriş şablonu (v3)
 
 Bu dosya **içerik hazırlayıcı için** yazılmıştır. Buradaki biçime uyan bir
-markdown dosyası, içe aktarma betiğiyle doğrudan veritabanına girer:
-`npm run import:questions -- dosya.md` (önce yalnızca denetler ve rapor verir;
-`--uygula` ile kaydeder). Örnek: `scripts/fixtures/ornek-import.md`.
+markdown dosyası yönetim panelinden yüklenir: **Check-up → Sorular → Toplu içe
+aktar**. Önce **Denetle**: her soru için satır numarasıyla hatalar ve uyarılar
+listelenir, hiçbir şey kaydedilmez. Sonra **Taslak olarak kaydet**: geçerli
+sorular taslak girer, hatalılar atlanır. Geçmişten bir içe aktarma **geri
+alınabilir** (öğrenci testine girmiş soru silinmez). Örnek dosya:
+`scripts/fixtures/ornek-import.md`.
+
+Komut satırı karşılığı (aynı kurallar): `npm run import:questions -- dosya.md`
+(yalnızca denetler; `--uygula` ile kaydeder).
 
 Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS · ALES.
 
@@ -164,8 +170,14 @@ Yukarıdaki verilere göre $x$ kaçtır?
 
 - Dosyaları markdown ile **aynı klasördeki `gorseller/`** dizinine koy. İçe
   aktarma görseli veritabanına yükler ve dosya adını iç kimlikle değiştirir;
-  sen dosya adı yazmaya devam et.
-- PNG veya JPG, kısa kenar en az 600 piksel.
+  sen dosya adı yazmaya devam et. Panelde **Klasör seç** ile klasörün tamamını
+  (.md + `gorseller/`) tek seferde seçebilirsin.
+- PNG, JPG veya WebP, kısa kenar en az 600 piksel. Panel görseli 1200 piksele
+  küçültüp WebP olarak saklar; bozuk dosyayı reddeder.
+- Bir içe aktarmada dosyaların toplamı **en fazla ~9,7 MB** (sunucu sınırı
+  10 MB). Geçerse dosyayı ikiye böl ya da görselleri küçült.
+- Görsel yalnızca **Soru Metni**'nde kullanılabilir; şıkta ya da çözümde
+  `![…](dosya)` yazılan soru reddedilir.
 - Köşeli parantez içindeki metin **alternatif metin**: görseli göremeyen bir
   öğrenciye ne anlatırdın, onu yaz. Boş bırakılan görsel içe aktarmada reddedilir.
 
@@ -268,7 +280,8 @@ değil. $b=2$ için $2a=36$ ve $a=18$.
 
 ## 9. İçe aktarma neyi reddeder
 
-Betik şu durumlarda **o soruyu almaz ve satır numarasıyla rapor eder**:
+İçe aktarma (panel ve komut satırı, aynı kurallar) şu durumlarda **o soruyu
+almaz ve satır numarasıyla rapor eder**:
 
 1. `Konu Kodu` listede yok
 2. Doğru şık yok, ya da birden fazla `[x]` var
@@ -281,9 +294,23 @@ Betik şu durumlarda **o soruyu almaz ve satır numarasıyla rapor eder**:
 8. `İdeal Süre` sayı değil, `Zorluk` 1–5 dışında
 9. Seviye 1 sorusunda `Kazanım Kodu` yok
 10. Seviye 2 ya da 3 sorusuna `Kazanım Kodu` yazılmış
+11. Bir şıkkın metni boş
+12. Şıkta ya da çözümde görsel var (görsel yalnızca Soru Metni'nde)
+13. `Hedef Sınav`, konunun geçtiği sınavlardan biri değil (soru o teste hiç
+    seçilmezdi)
 
-İçe aktarma ayrıca **uyarı** verir (reddetmez): bir kazanımın tek Seviye 1
-sorusu varsa, o kazanım telafi turunda boş kalacağı için listelenir.
+İçe aktarma ayrıca **uyarı** verir (reddetmez). Komut satırı yalnızca ilkini
+yazar, panel hepsini gösterir:
+
+- bir kazanımın tek Seviye 1 sorusu varsa (telafi turunda boş kalır),
+- tanınmayan alan adı (ör. yazım hatası: `Hedef Sınavlar`) ya da v2'den kalan alan,
+- `Çözüm Açıklaması` boş,
+- formül çizilemiyor (öğrenci kırmızı hata metni görür),
+- şık sayısı sınava uymuyor (LGS 4, diğerleri 5 şık),
+- hiçbir soruda geçmeyen görsel seçilmiş (dosya adı eşleşmiyor olabilir).
+
+Panel her sorunun **bütün** hatalarını ve uyarılarını tek seferde gösterir;
+komut satırı her reddedilen soru için ilk hatayı yazar.
 
 Rapor: `42 soru alındı, 3 soru reddedildi` + her ret için sebep.
 

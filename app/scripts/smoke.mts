@@ -41,6 +41,24 @@ import {
   type KayitYaniti,
   type KuyrukOlayi,
 } from "../lib/sinav-kuyrugu";
+import {
+  BENZER_ZORLUK_FARKI,
+  TEKRAR_ARALIKLARI_GUN,
+  benzerAta,
+  benzerMi,
+  benzeriVar,
+  gunBasi,
+  kapsamUygun,
+  tekrarSonrasi,
+  vade,
+  vadeMetni,
+  yanlisKarari,
+  yanlisSonrasi,
+  type BenzerAday,
+  type BenzerSoru,
+} from "../lib/review";
+import { hataTipiTavsiyesi } from "../lib/coaching";
+import { cn } from "../lib/cn";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -180,6 +198,7 @@ check(
 console.log("\nHata deseni:");
 
 const ri = (secilenErrorType: string | null, dogruMu: boolean): ReviewItem => ({
+  questionId: "q",
   order: 0,
   topicName: "t",
   stem: { version: 1, blocks: [] },
@@ -681,6 +700,168 @@ console.log("Sınav kuyruğu:");
       uyariEsigi(60_000) === 1 &&
       uyariEsigi(0) === 1
   );
+}
+
+// ── alıştırma: benzer soru ────────────────────────────────
+console.log("");
+console.log("Alıştırma — benzer soru:");
+{
+  const kaynak: BenzerSoru = { questionId: "k", topicId: "t1", objectiveId: null, level: null, difficulty: 3 };
+  const aday = (o: Partial<BenzerAday> & { questionId: string }): BenzerAday => ({
+    topicId: "t1",
+    objectiveId: null,
+    level: null,
+    difficulty: 3,
+    sonGosterim: null,
+    ...o,
+  });
+  check("aynı soru asla benzer değil", !benzerMi(kaynak, aday({ questionId: "k" })));
+  check("kazanımsız kaynakta aynı konu yeter", benzerMi(kaynak, aday({ questionId: "a" })));
+  check("başka konu benzer değil", !benzerMi(kaynak, aday({ questionId: "a", topicId: "t2" })));
+  check(
+    `zorluk farkı en fazla ${BENZER_ZORLUK_FARKI}`,
+    benzerMi(kaynak, aday({ questionId: "a", difficulty: 2 })) &&
+      benzerMi(kaynak, aday({ questionId: "b", difficulty: 4 })) &&
+      !benzerMi(kaynak, aday({ questionId: "c", difficulty: 5 })) &&
+      !benzerMi(kaynak, aday({ questionId: "d", difficulty: 1 }))
+  );
+  check(
+    "seviye aynı olmalı (seviyesiz yalnızca seviyesizle)",
+    !benzerMi(kaynak, aday({ questionId: "a", level: "L1_TEMEL" })) &&
+      !benzerMi({ ...kaynak, level: "L2_ORTA" }, aday({ questionId: "b" }))
+  );
+  const kazanimli: BenzerSoru = { ...kaynak, objectiveId: "o1", level: "L1_TEMEL", difficulty: 2 };
+  check(
+    "kazanımı olan kaynakta AYNI KAZANIM şart (aynı konu yetmez)",
+    benzerMi(kazanimli, aday({ questionId: "a", objectiveId: "o1", level: "L1_TEMEL", difficulty: 1 })) &&
+      !benzerMi(kazanimli, aday({ questionId: "b", objectiveId: "o2", level: "L1_TEMEL", difficulty: 2 })) &&
+      !benzerMi(kazanimli, aday({ questionId: "c", objectiveId: null, level: "L1_TEMEL", difficulty: 2 }))
+  );
+  check(
+    "sınav etiketi: kaynağın sınavında sorulamayan aday elenir",
+    kapsamUygun({ ...kaynak, examScope: "TYT" }, aday({ questionId: "a", kapsamlar: ["TYT", "KPSS_LISANS"] })) &&
+      !kapsamUygun({ ...kaynak, examScope: "LGS" }, aday({ questionId: "a", kapsamlar: ["TYT"] }))
+  );
+
+  // Seçim: önce görülmemiş, hepsi görülmüşse en eski gösterilen.
+  const eski = new Date("2026-09-01T00:00:00Z");
+  const yeni = new Date("2026-10-01T00:00:00Z");
+  const havuz = [
+    aday({ questionId: "gorulmus-yeni", sonGosterim: yeni }),
+    aday({ questionId: "taze" }),
+    aday({ questionId: "gorulmus-eski", sonGosterim: eski }),
+  ];
+  check("görülmemiş soru öne geçiyor", benzerAta([kaynak], havuz, () => 0).get("k")?.questionId === "taze");
+  check(
+    "hepsi görülmüşse en eski gösterilen",
+    benzerAta([kaynak], havuz.filter((a) => a.questionId !== "taze"), () => 0).get("k")?.questionId === "gorulmus-eski"
+  );
+
+  // İki kaynak aynı havuzdan: aynı soru iki kez verilmez; kaynaklar aday olamaz.
+  const k2: BenzerSoru = { ...kaynak, questionId: "k2" };
+  const atama = benzerAta([kaynak, k2], [aday({ questionId: "k2" }), aday({ questionId: "x" })], () => 0);
+  check(
+    "kaynak soru başka kaynağa benzer olarak verilmez; aynı aday iki kez verilmez",
+    atama.get("k")?.questionId === "x" && !atama.has("k2")
+  );
+  check("benzeri yoksa atama yok (çağıran söyler)", benzerAta([kaynak], [], () => 0).size === 0);
+  check(
+    "benzeriVar seçimle aynı kuralı kullanıyor",
+    benzeriVar(kaynak, havuz) && !benzeriVar(kaynak, [aday({ questionId: "k" })]) &&
+      !benzeriVar({ ...kaynak, examScope: "LGS" }, [aday({ questionId: "a", kapsamlar: ["TYT"] })])
+  );
+  check(
+    "tek yanlışın hata tipi reçetesi var; DIGER için yok",
+    typeof hataTipiTavsiyesi("ISLEM_HATASI") === "string" && hataTipiTavsiyesi("DIGER") === null &&
+      hataTipiTavsiyesi(null) === null
+  );
+}
+
+// ── yanlış defteri: aralıklı tekrar ───────────────────────
+console.log("");
+console.log("Yanlış defteri — aralıklar:");
+{
+  const gun = 86_400_000;
+  // 10 Ekim 2026 21:30 Türkiye = 18:30Z; gün başı 10 Ekim 00:00 TR = 9 Ekim 21:00Z.
+  const aksam = new Date("2026-10-10T18:30:00Z");
+  check("gün başı Türkiye saatiyle", gunBasi(aksam).toISOString() === "2026-10-09T21:00:00.000Z", gunBasi(aksam).toISOString());
+  // 00:30 TR (21:30Z önceki gün) yeni günün başına yuvarlanmalı.
+  const geceYarisi = new Date("2026-10-10T21:30:00Z");
+  check("gece yarısından sonra yeni gün", gunBasi(geceYarisi).toISOString() === "2026-10-10T21:00:00.000Z");
+  check("akşamki yanlış YARIN gelir (yarın 21:30 değil, gün başı)", vade(aksam, 1).toISOString() === "2026-10-10T21:00:00.000Z");
+
+  const y = yanlisSonrasi(aksam);
+  check(
+    `yanlıştan sonra ilk aşama, ${TEKRAR_ARALIKLARI_GUN[0]} gün sonra`,
+    y.stage === 0 && y.resolvedAt === null && y.dueAt.getTime() === vade(aksam, TEKRAR_ARALIKLARI_GUN[0]).getTime()
+  );
+
+  // Doğru → sonraki aralık; sonuncusu da doğruysa çıkar. Yanlış → başa.
+  let durum = { stage: 0 };
+  const yol: string[] = [];
+  for (let i = 0; i < TEKRAR_ARALIKLARI_GUN.length; i++) {
+    const s = tekrarSonrasi(durum.stage, true, aksam);
+    yol.push(s.cozuldu ? "çıktı" : `${s.stage}:${Math.round((s.dueAt.getTime() - gunBasi(aksam).getTime()) / gun)}g`);
+    durum = s;
+  }
+  check(
+    `doğru, doğru, doğru → ${TEKRAR_ARALIKLARI_GUN.slice(1).map((g) => `+${g}g`).join(", ")}, defterden çıkar`,
+    yol.join(" ") === `${TEKRAR_ARALIKLARI_GUN.slice(1).map((g, i) => `${i + 1}:${g}g`).join(" ")} çıktı`,
+    yol.join(" ")
+  );
+  const geri = tekrarSonrasi(2, false, aksam);
+  check("son aşamada yanlış → başa, 1 gün", geri.stage === 0 && !geri.cozuldu && geri.resolvedAt === null &&
+    geri.dueAt.getTime() === vade(aksam, TEKRAR_ARALIKLARI_GUN[0]).getTime());
+
+  // İdempotentlik: aynı ölçüm iki kez, eski ölçüm geç.
+  const t0 = new Date("2026-10-01T10:00:00Z");
+  const t1 = new Date("2026-10-05T10:00:00Z");
+  check("madde yoksa oluştur", yanlisKarari(null, { sessionId: "s1", zaman: t0 }) === "OLUSTUR");
+  check(
+    "aynı ölçüm yeniden puanlanırsa dokunma",
+    yanlisKarari({ lastSessionId: "s1", lastWrongAt: t0, lastReviewedAt: null }, { sessionId: "s1", zaman: t0 }) === "DOKUNMA"
+  );
+  check(
+    "daha yeni ölçümdeki yanlış maddeyi başa alır",
+    yanlisKarari({ lastSessionId: "s1", lastWrongAt: t0, lastReviewedAt: null }, { sessionId: "s2", zaman: t1 }) === "SIFIRLA"
+  );
+  check(
+    "geç puanlanan ESKİ ölçüm sonraki tekrarın ilerlemesini silmez",
+    yanlisKarari({ lastSessionId: "s2", lastWrongAt: t0, lastReviewedAt: t1 }, { sessionId: "s1", zaman: new Date("2026-10-03T10:00:00Z") }) === "DOKUNMA"
+  );
+  check(
+    "geç puanlanan eski ölçüm daha yeni yanlışın üstüne yazmaz",
+    yanlisKarari({ lastSessionId: "s2", lastWrongAt: t1, lastReviewedAt: null }, { sessionId: "s1", zaman: t0 }) === "DOKUNMA"
+  );
+  check(
+    "vade metni",
+    vadeMetni(aksam, aksam) === "bugün" && vadeMetni(vade(aksam, 1), aksam) === "yarın" &&
+      vadeMetni(vade(aksam, 3), aksam) === "3 gün sonra"
+  );
+}
+
+// ── sınıf birleştirici ────────────────────────────────────
+/*
+ * tailwind-merge projenin ve kitin özel adlarını bilmezse `text-micro`'yu
+ * renk sanıp yanındaki `text-white` ile birlikte siliyordu (yazı sessizce
+ * büyüyordu). lib/cn.ts bu adları ona öğretiyor.
+ */
+console.log("");
+console.log("Sınıf birleştirici (cn):");
+{
+  const icerir = (sonuc: string, ...siniflar: string[]) => siniflar.every((s) => sonuc.split(" ").includes(s));
+  const a = cn("rounded-full px-2.5 text-micro font-semibold", "bg-ok-wash text-ok");
+  check("özel boyut + renk birlikte kalıyor (text-micro + text-ok)", icerir(a, "text-micro", "text-ok"), a);
+  const b = cn("text-caption text-ink-soft", "text-white");
+  check("sonraki renk öncekini ezer, boyut kalır", icerir(b, "text-caption", "text-white") && !icerir(b, "text-ink-soft"), b);
+  const c = cn("text-theme-xs text-gray-500", "text-title-sm");
+  check("kitin boyutları birbirini ezer (theme-xs → title-sm)", icerir(c, "text-title-sm", "text-gray-500") && !icerir(c, "text-theme-xs"), c);
+  const d = cn("shadow-card", "shadow-ok/20");
+  check("özel gölge gölge rengiyle çakışmıyor", icerir(d, "shadow-card", "shadow-ok/20"), d);
+  const e = cn("bg-brand-gradient", "bg-brand");
+  check("gradyan zemin rengiyle çakışmıyor", icerir(e, "bg-brand-gradient", "bg-brand"), e);
+  const f = cn("px-5", "px-3");
+  check("çağıranın sınıfı varsayılanı ezer (px-5 → px-3)", f === "px-3", f);
 }
 
 // ── istemci paketi ────────────────────────────────────────

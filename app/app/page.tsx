@@ -17,15 +17,44 @@ import { getCurrentUser } from "@/lib/auth";
 import { SITE_URL } from "@/lib/products";
 import { KATALOG_TURLERI } from "@/lib/catalog";
 import { EXAMS, SECILEBILIR_SINAVLAR, examShort } from "@/lib/exams";
-import { ScoreRing, TopicBar } from "@/components/ui/charts";
-import { Alert, Badge, Card, LinkButton, Wordmark } from "@/components/ui";
+import { KonuHaritasi } from "@/components/KonuHaritasi";
+import { Logo, LogoYazi, Wordmark } from "@/components/ui/logo";
+import { RadialGauge } from "@/components/tailadmin/charts/RadialGauge";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { GridShape } from "@/components/tailadmin/ui/GridShape";
+
+const OZELLIKLER = [
+  {
+    icon: Crosshair,
+    t: "Konu haritası",
+    d: "Her konu için güçlü, orta ya da zayıf — tek bakışta.",
+  },
+  {
+    icon: Brain,
+    t: "Hata teşhisi",
+    d: "Yanlışların bilgi eksiği mi, işlem hatası mı? Farkı çalışma biçimini değiştirir.",
+  },
+  {
+    icon: Lightbulb,
+    t: "Adım adım çözüm",
+    d: "Test bitince yanlış yaptığın her sorunun çözümü açılır.",
+  },
+  {
+    icon: TrendingUp,
+    t: "Gelişim takibi",
+    d: "Aynı paketi tekrar çöz, hangi konuda ilerlediğini gör.",
+  },
+];
 
 /**
  * Giriş yapmamış öğrencinin gördüğü sayfa. Girişliyse doğrudan panoya.
  *
- * Kahraman bölümündeki sonuç kartı gerçek bileşenlerle çiziliyor (skor
- * halkası, konu çubukları) — "ne alacağım" sorusunun cevabı bir görsel
- * değil, ürünün kendisi.
+ * Kahraman bölümündeki sonuç kartı gerçek bileşenlerle çiziliyor (kitin
+ * yarım daire göstergesi, sonuç ekranındaki konu haritası) — "ne alacağım"
+ * sorusunun cevabı bir görsel değil, ürünün kendisi.
  */
 export default async function LandingPage({ searchParams }: PageProps<"/">) {
   if (await getCurrentUser()) redirect("/panel");
@@ -41,252 +70,236 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
   });
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="min-h-screen bg-white">
       {/* Üst çubuk */}
-      <header className="sticky top-0 z-30 border-b border-line/70 bg-surface/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-          <Link href="/" aria-label="Ana sayfa">
-            <Wordmark />
+      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-5">
+          {/* Telefonda yalnızca logo yazısı: altındaki "Matematik Check-up" satırı
+              iki düğmeyle birlikte 360 px'e sığmıyor; 352 px altında (320'lik
+              eski telefonlar) yazı da sığmıyor, kare işaret kalıyor. */}
+          <Link href="/" aria-label="Ana sayfa" className="shrink-0">
+            <Logo className="min-[22rem]:hidden" />
+            <LogoYazi className="h-6 max-[22rem]:hidden sm:hidden" />
+            <Wordmark className="max-sm:hidden" />
           </Link>
           <div className="flex items-center gap-2">
-            <LinkButton href="/giris" variant="ghost" size="sm">
+            <ButtonLink href="/giris" variant="ghost" size="xs">
               Giriş yap
-            </LinkButton>
-            <LinkButton href="/kayit" size="sm">
+            </ButtonLink>
+            <ButtonLink href="/kayit" size="xs">
               Ücretsiz başla
-            </LinkButton>
+            </ButtonLink>
           </div>
         </div>
       </header>
 
-      {sp["hesap-silindi"] ? (
-        <div className="mx-auto max-w-6xl px-5 pt-6">
-          <Alert tone="ok">
-            Hesabın ve tüm verilerin kalıcı olarak silindi. İstediğin zaman yeniden
-            başlayabilirsin.
-          </Alert>
-        </div>
-      ) : null}
-
-      {/* Kahraman */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_at_top_right,rgba(14,144,213,0.14),transparent_60%),radial-gradient(ellipse_at_top_left,rgba(26,95,180,0.10),transparent_55%)]"
-        />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pt-14 pb-16 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:pb-24">
-          <div className="animate-rise">
-            <Badge tone="brand" className="py-1 text-xs">
-              <Target /> Matematik · 6 sınav
-            </Badge>
-            <h1 className="font-display mt-5 text-[40px] font-bold leading-[1.08] tracking-tight text-ink sm:text-[54px] text-balance">
-              Net kaç değil,{" "}
-              <span className="marker">nerede eksiğin var?</span>
-            </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
-              20 dakikalık bir testle matematikte hangi konuda güçlü, hangisinde zayıf
-              olduğunu gör. Sonunda rapor değil <strong className="font-semibold text-ink">
-              bu hafta ne çalışacağın</strong> çıkar: en fazla iki konu, sırayla.
-            </p>
-
-            {/* Hangi sınavlar — kapsam ilk ekranda görünmeli. */}
-            <ul className="mt-6 flex flex-wrap gap-1.5">
-              {SECILEBILIR_SINAVLAR.map((s) => (
-                <li
-                  key={s}
-                  className="rounded-lg bg-surface-sunk px-2.5 py-1 text-xs font-semibold text-ink-soft ring-1 ring-inset ring-line"
-                  title={EXAMS[s].name}
-                >
-                  {examShort(s)}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <LinkButton href="/kayit" size="lg">
-                Ücretsiz dene <ArrowRight />
-              </LinkButton>
-              <LinkButton href="/giris" variant="secondary" size="lg">
-                Hesabım var
-              </LinkButton>
-            </div>
-            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-soft">
-              {["Kredi kartı gerekmez", "15-25 soru", "Anında sonuç"].map((m) => (
-                <li key={m} className="flex items-center gap-1.5">
-                  <CircleCheck className="size-4 text-ok-fill" /> {m}
-                </li>
-              ))}
-            </ul>
+      <main>
+        {sp["hesap-silindi"] ? (
+          <div className="mx-auto max-w-6xl px-5 pt-6">
+            <Alert variant="success">
+              Hesabın ve tüm verilerin kalıcı olarak silindi. İstediğin zaman yeniden
+              başlayabilirsin.
+            </Alert>
           </div>
+        ) : null}
 
-          {/* Ürün önizlemesi */}
-          <div className="relative mx-auto w-full max-w-md lg:max-w-none">
-            <div
-              aria-hidden
-              className="bg-brand-gradient absolute -inset-4 -z-0 rotate-2 rounded-[28px] opacity-10 blur-2xl"
-            />
-            <Card className="relative p-6 shadow-pop">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                    Örnek sonuç
-                  </p>
-                  <p className="font-display mt-1 text-base font-semibold text-ink">Problemler</p>
-                </div>
-                <Badge tone="ok">
-                  <TrendingUp /> +8,75 net
-                </Badge>
-              </div>
-
-              <div className="mt-5 flex items-center gap-6">
-                <ScoreRing value={75} size={120} stroke={11} label="Yüzde 75 başarı">
-                  <span className="font-display tabular text-3xl font-bold text-ink">%75</span>
-                  <span className="text-[11px] text-ink-faint">başarı</span>
-                </ScoreRing>
-                <div className="space-y-2 text-sm">
-                  <p className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full bg-ok-fill" /> 15 doğru
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full bg-bad-fill" /> 3 yanlış
-                  </p>
-                  <p className="flex items-center gap-2 text-ink-soft">
-                    <span className="size-2.5 rounded-full bg-line-strong" /> 2 boş
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 divide-y divide-line border-t border-line">
-                <TopicBar name="Hareket - Hız" ratio={1} correct={4} asked={4} level="STRONG" />
-                <TopicBar name="Yüzde - Kâr - Zarar" ratio={0.5} correct={2} asked={4} level="MEDIUM" />
-                <TopicBar name="Sayı - Kesir" ratio={0.25} correct={1} asked={4} level="WEAK" slow />
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Neden */}
-      <section className="border-y border-line bg-canvas py-16 sm:py-20">
-        <div className="mx-auto max-w-6xl px-5">
-          <div className="max-w-2xl">
-            <h2 className="font-display text-[28px] font-bold tracking-tight text-ink sm:text-[34px] text-balance">
-              Deneme sana puan verir. Check-up yol gösterir.
-            </h2>
-            <p className="mt-3 text-[15px] leading-relaxed text-ink-soft">
-              120 soruluk denemede bir konuya bir-iki soru düşer; tek soruya bakıp
-              &quot;bu konuda zayıfsın&quot; demek yazı-tura atmaktır. Check-up her konudan en
-              az 3 soru sorar.
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                icon: Crosshair,
-                t: "Konu haritası",
-                d: "Her konu için güçlü, orta ya da zayıf — tek bakışta.",
-              },
-              {
-                icon: Brain,
-                t: "Hata teşhisi",
-                d: "Yanlışların bilgi eksiği mi, işlem hatası mı? Farkı çalışma biçimini değiştirir.",
-              },
-              {
-                icon: Lightbulb,
-                t: "Adım adım çözüm",
-                d: "Test bitince yanlış yaptığın her sorunun çözümü açılır.",
-              },
-              {
-                icon: TrendingUp,
-                t: "Gelişim takibi",
-                d: "Aynı paketi tekrar çöz, hangi konuda ilerlediğini gör.",
-              },
-            ].map(({ icon: Icon, t, d }) => (
-              <Card key={t} className="p-5">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-brand-wash text-brand">
-                  <Icon className="size-5" />
-                </span>
-                <h3 className="font-display mt-4 text-[15px] font-semibold text-ink">{t}</h3>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">{d}</p>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Paketler */}
-      <section className="py-16 sm:py-20">
-        <div className="mx-auto max-w-6xl px-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="font-display text-[28px] font-bold tracking-tight text-ink text-balance">
-                Odaklı paketler
-              </h2>
-              <p className="mt-2 text-[15px] text-ink-soft">
-                Neyi ölçmek istiyorsan onu seç. Her biri 15-30 dakika.
+        {/* Kahraman */}
+        <section className="bg-linear-to-b from-brand-25 to-white">
+          <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-14 pb-16 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:pb-24">
+            <div className="animate-rise">
+              <Badge startIcon={<Target aria-hidden />}>Matematik · 6 sınav</Badge>
+              <h1 className="mt-5 font-display text-title-md leading-tight font-bold tracking-tight text-balance text-gray-800 sm:text-title-lg">
+                Net kaç değil, <span className="marker">nerede eksiğin var?</span>
+              </h1>
+              <p className="mt-5 max-w-xl text-lg leading-relaxed text-gray-500">
+                20 dakikalık bir testle matematikte hangi konuda güçlü, hangisinde zayıf
+                olduğunu gör. Sonunda rapor değil{" "}
+                <strong className="font-semibold text-gray-800">bu hafta ne çalışacağın</strong> çıkar: en
+                fazla iki konu, sırayla.
               </p>
-            </div>
-            <LinkButton href="/kayit" variant="soft">
-              Hepsini gör <ArrowRight />
-            </LinkButton>
-          </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {paketler.map((p) => (
-              <Link key={p.slug} href="/kayit" className="group">
-                <Card interactive className="flex items-center justify-between gap-4 p-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge tone="brand">{examShort(p.examScope)}</Badge>
-                      <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
-                    </div>
-                    <p className="mt-2 flex items-center gap-3 text-xs text-ink-faint">
-                      <span className="flex items-center gap-1">
-                        <ListChecks className="size-3.5" /> {p.questionCount} soru
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3.5" /> {p.durationMinutes} dk
-                      </span>
+              {/* Hangi sınavlar — kapsam ilk ekranda görünmeli. */}
+              <ul className="mt-6 flex flex-wrap gap-1.5">
+                {SECILEBILIR_SINAVLAR.map((s) => (
+                  <li key={s}>
+                    <Badge color="light" size="sm" title={EXAMS[s].name}>
+                      {examShort(s)}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <ButtonLink href="/kayit" size="md" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+                  Ücretsiz dene
+                </ButtonLink>
+                <ButtonLink href="/giris" variant="outline" size="md">
+                  Hesabım var
+                </ButtonLink>
+              </div>
+              <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
+                {["Kredi kartı gerekmez", "15-25 soru", "Anında sonuç"].map((m) => (
+                  <li key={m} className="flex items-center gap-1.5">
+                    <CircleCheck className="size-4 text-success-500" aria-hidden /> {m}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Ürün önizlemesi */}
+            <div className="mx-auto w-full max-w-md lg:max-w-none">
+              <Card className="p-5 shadow-theme-lg sm:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-theme-xs font-semibold tracking-wider text-gray-500 uppercase">Örnek sonuç</p>
+                    <p className="mt-1 font-display text-base font-semibold text-gray-800">Problemler</p>
+                  </div>
+                  <Badge color="success" startIcon={<TrendingUp aria-hidden />}>
+                    +8,75 net
+                  </Badge>
+                </div>
+
+                <div className="mt-5 flex items-center gap-5 sm:gap-6">
+                  <div className="w-36 shrink-0 sm:w-40">
+                    <RadialGauge value={75} ariaLabel="Başarı" />
+                    <p aria-hidden className="mt-1 text-center text-theme-xs text-gray-500">
+                      başarı
                     </p>
                   </div>
-                  <ArrowRight className="size-4 shrink-0 text-ink-faint transition group-hover:translate-x-0.5 group-hover:text-brand" />
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <p className="flex items-center gap-2">
+                      <span aria-hidden className="size-2.5 rounded-full bg-success-500" /> 15 doğru
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span aria-hidden className="size-2.5 rounded-full bg-error-500" /> 3 yanlış
+                    </p>
+                    <p className="flex items-center gap-2 text-gray-500">
+                      <span aria-hidden className="size-2.5 rounded-full bg-gray-300" /> 2 boş
+                    </p>
+                  </div>
+                </div>
 
-      {/* Son çağrı */}
-      <section className="px-5 pb-16 sm:pb-20">
-        <div className="bg-brand-gradient relative mx-auto max-w-6xl overflow-hidden rounded-3xl px-6 py-12 text-center text-white shadow-pop sm:px-12 sm:py-16">
-          <div aria-hidden className="bg-grid-fade absolute inset-0" />
-          <div className="relative">
-            <h2 className="font-display text-[28px] font-bold tracking-tight sm:text-[36px] text-balance">
+                <div className="mt-5 border-t border-gray-100 pt-5">
+                  <KonuHaritasi
+                    konular={[
+                      { topicId: "hiz", name: "Hareket - Hız", ratio: 1, correct: 4, asked: 4, level: "STRONG" },
+                      { topicId: "yuzde", name: "Yüzde - Kâr - Zarar", ratio: 0.5, correct: 2, asked: 4, level: "MEDIUM" },
+                      { topicId: "kesir", name: "Sayı - Kesir", ratio: 0.25, correct: 1, asked: 4, level: "WEAK", slow: true },
+                    ]}
+                  />
+                </div>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        {/* Neden */}
+        <section className="border-y border-gray-200 bg-gray-50 py-16 sm:py-20">
+          <div className="mx-auto max-w-6xl px-5">
+            <div className="max-w-2xl">
+              <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-gray-800 sm:text-title-md">
+                Deneme sana puan verir. Check-up yol gösterir.
+              </h2>
+              <p className="mt-3 text-base leading-relaxed text-gray-500">
+                120 soruluk denemede bir konuya bir-iki soru düşer; tek soruya bakıp
+                &quot;bu konuda zayıfsın&quot; demek yazı-tura atmaktır. Check-up her konudan en
+                az 3 soru sorar.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-4">
+              {OZELLIKLER.map(({ icon: Icon, t, d }) => (
+                <Card key={t} className="p-5 sm:p-6">
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-500">
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  <h3 className="mt-4 font-display text-base font-semibold text-gray-800">{t}</h3>
+                  <p className="mt-1.5 text-theme-sm leading-relaxed text-gray-500">{d}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Paketler */}
+        <section className="py-16 sm:py-20">
+          <div className="mx-auto max-w-6xl px-5">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-gray-800">
+                  Odaklı paketler
+                </h2>
+                <p className="mt-2 text-base text-gray-500">
+                  Neyi ölçmek istiyorsan onu seç. Her biri 15-30 dakika.
+                </p>
+              </div>
+              <ButtonLink href="/kayit" variant="soft" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+                Hepsini gör
+              </ButtonLink>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
+              {paketler.map((p) => (
+                <Link key={p.slug} href="/kayit" className="group block rounded-2xl">
+                  <Card className="flex h-full items-center justify-between gap-4 p-4 transition group-hover:border-gray-300 group-hover:shadow-theme-md sm:p-5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge size="sm">{examShort(p.examScope)}</Badge>
+                        <p className="truncate text-sm font-semibold text-gray-800">{p.name}</p>
+                      </div>
+                      <p className="tabular mt-2 flex items-center gap-3 text-theme-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <ListChecks className="size-3.5" aria-hidden /> {p.questionCount} soru
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="size-3.5" aria-hidden /> {p.durationMinutes} dk
+                        </span>
+                      </p>
+                    </div>
+                    <ArrowRight
+                      className="size-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500 rtl:rotate-180 rtl:group-hover:-translate-x-0.5"
+                      aria-hidden
+                    />
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Son çağrı: lacivert bant + kitin ızgara deseni, üstünde beyaz düğme */}
+        <section className="px-5 pb-16 sm:pb-20">
+          <div className="relative z-1 mx-auto max-w-6xl overflow-hidden rounded-3xl bg-brand-950 px-6 py-12 text-center sm:px-12 sm:py-16">
+            <GridShape />
+            <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-white sm:text-title-md">
               İlk check-up&apos;ın bugün
             </h2>
-            <p className="mx-auto mt-3 max-w-xl text-base text-white/80">
+            <p className="mx-auto mt-3 max-w-xl text-base text-gray-300">
               Hesap aç, bir paket seç, 20 dakika sonra neyi çalışman gerektiğini bil.
             </p>
             <div className="mt-8 flex justify-center">
-              <LinkButton href="/kayit" variant="white" size="lg">
-                Ücretsiz başla <ArrowRight />
-              </LinkButton>
+              <ButtonLink
+                href="/kayit"
+                variant="outline"
+                size="md"
+                endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}
+              >
+                Ücretsiz başla
+              </ButtonLink>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm text-ink-faint">
+      <footer className="border-t border-gray-200">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-8 text-sm text-gray-500">
           <span className="flex items-center gap-2">
-            <ShieldCheck className="size-4" /> © {yil} Koçum.Net
+            <ShieldCheck className="size-4" aria-hidden /> © {yil} Koçum.Net
           </span>
           <nav className="flex gap-5">
-            <a href={SITE_URL} className="hover:text-ink">
+            <a href={SITE_URL} className="transition hover:text-gray-700">
               kocum.net
             </a>
-            <Link href="/gizlilik" className="hover:text-ink">
+            <Link href="/gizlilik" className="transition hover:text-gray-700">
               Gizlilik ve KVKK
             </Link>
           </nav>

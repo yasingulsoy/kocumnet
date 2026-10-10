@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
 import { abonelikDegistirAction } from "@/lib/actions/abonelik";
-import { Alert, Button } from "@/components/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
 
 export function AbonelikForm({ token, kapali }: { token: string; kapali: boolean }) {
   const [durum, setDurum] = useState(kapali);
@@ -21,12 +21,15 @@ export function AbonelikForm({ token, kapali }: { token: string; kapali: boolean
 
   return (
     <div className="space-y-4">
-      {hata ? <Alert>{hata}</Alert> : null}
-      <Alert tone={durum ? "info" : "ok"}>
+      {hata ? (
+        <Alert variant="error" compact>
+          {hata}
+        </Alert>
+      ) : null}
+      <Alert variant={durum ? "info" : "success"} compact>
         {durum ? "Haftalık posta kapalı. Artık pazartesi postası gelmeyecek." : "Haftalık posta açık."}
       </Alert>
-      <Button block size="lg" variant={durum ? "secondary" : "primary"} disabled={pending} onClick={() => degistir(!durum)}>
-        {pending ? <Loader2 className="animate-spin" /> : null}
+      <Button block size="md" variant={durum ? "outline" : "primary"} loading={pending} onClick={() => degistir(!durum)}>
         {durum ? "Haftalık postayı yeniden aç" : "Haftalık postayı kapat"}
       </Button>
     </div>

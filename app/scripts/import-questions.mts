@@ -12,6 +12,11 @@
  * Kurallar SORU-SABLONU.md §9'dan: reddedilen soru satır numarasıyla raporlanır,
  * geri kalanı girer. Rapor: "42 soru alındı, 3 soru reddedildi".
  *
+ * Çözümleme ve denetim lib/question-import.ts'te (saf modül): yönetim
+ * panelinin "Toplu içe aktar" ekranı da aynısını kullanıyor. Bu betik dosyayı
+ * okur, bağlamı veritabanından kurar ve yazar. Raporda reddedilen her soru
+ * için İLK hata yazılır; panel hepsini ve uyarıları da gösterir.
+ *
  * Tasarım:
  *  · Önce dosyanın TAMAMI çözümlenir ve denetlenir, sonra yazılır. Yarım
  *    içe aktarma yok: ya hepsi geçerli olanlar girer, ya hiçbiri.
@@ -27,16 +32,17 @@ import "dotenv/config";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { prisma } from "../lib/db";
-import { ERROR_TYPES } from "../lib/error-types";
-import { markupToContent } from "../lib/question-markup";
 import {
-  CHOICE_LABELS,
-  deriveQuestionFields,
-  safeParseQuestionContent,
-  validateChoices,
-  type ChoiceDraft,
-  type QuestionContent,
-} from "../lib/question-content";
+  GORSEL_MIME,
+  dosyayiCozumle,
+  dosyayiDenetle,
+  gorselleriYerlestir,
+  seviye1Sayilari,
+  tekSoruluKazanimlar,
+  type HazirSoru,
+  type IceAktarmaBaglami,
+  type IceAktarmaKazanimi,
+} from "../lib/question-import";
 
 // ─────────────────────────────────────────────────────────────
 // Komut satırı
@@ -55,287 +61,24 @@ const GERI_AL = opt("--geri-al");
 const PERSONEL = opt("--personel") ?? "ice-aktarma (betik)";
 const DOSYA = argv.find((a) => !a.startsWith("--") && a.endsWith(".md"));
 
-const EXAM_SCOPES = ["LGS", "TYT", "AYT", "KPSS_LISANS", "KPSS_ONLISANS", "DGS", "ALES"] as const;
-type Scope = (typeof EXAM_SCOPES)[number];
-const LEVELS = { "1": "L1_TEMEL", "2": "L2_ORTA", "3": "L3_ANALIZ" } as const;
-
-// ─────────────────────────────────────────────────────────────
-// Çözümleme
-// ─────────────────────────────────────────────────────────────
-
-interface HamSoru {
-  satir: number;
-  baslik: string;
-  alanlar: Record<string, string>;
-  secenekler: { satir: number; isaretli: boolean; harf: string; metin: string; hataKodu: string | null; not: string | null }[];
-}
-
-/** `* **Alan:** değer` başlığını yakalar. Değer aynı satırda ya da sonraki satırlarda. */
-const ALAN = /^\*\s+\*\*([^*]+?):\*\*\s*(.*)$/;
-/** `  * [x] B) 18 (KOD: açıklama)` */
-const SECENEK = /^\s*\*\s+\[( |x|X)\]\s+([A-E])\)\s*(.*)$/;
-const HATA_KODU = /\(([A-Z_]+)(?::\s*([^)]*))?\)\s*$/;
-
-/**
- * Alan adlarını ASCII anahtara indirger: "İdeal Süre" → "ideal sure",
- * "Doğru Şık" → "dogru sik". Türkçe yerel ayarla küçültmek TUZAK: "ID" →
- * "ıd" oluyor (noktasız ı) ve hiçbir anahtar eşleşmiyor. Aksanlar atılıp
- * yerelden bağımsız küçültülüyor; hoca "Ideal Sure" yazsa da eşleşir.
- */
-const ad = (s: string) =>
-  s
-    .trim()
-    .replace(/İ/g, "I")
-    .replace(/ı/g, "i")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-
-function dosyayiCozumle(metin: string): HamSoru[] {
-  const satirlar = metin.replace(/\r\n/g, "\n").split("\n");
-  const sorular: HamSoru[] = [];
-  let mevcut: HamSoru | null = null;
-  let aktifAlan: string | null = null;
-  let kodBlogu = false;
-
-  for (let i = 0; i < satirlar.length; i++) {
-    const s = satirlar[i];
-
-    // ```markdown ... ``` blokları (şablondaki örnek) atlanır — gerçek dosyada olmaz.
-    if (s.trim().startsWith("```")) {
-      kodBlogu = !kodBlogu;
-      continue;
-    }
-    if (kodBlogu) continue;
-
-    const baslik = s.match(/^###\s+(.+)$/);
-    if (baslik) {
-      mevcut = { satir: i + 1, baslik: baslik[1].trim(), alanlar: {}, secenekler: [] };
-      sorular.push(mevcut);
-      aktifAlan = null;
-      continue;
-    }
-    if (!mevcut) continue;
-    if (s.trim() === "---") {
-      aktifAlan = null;
-      continue;
-    }
-
-    const alan = s.match(ALAN);
-    if (alan) {
-      aktifAlan = ad(alan[1]);
-      mevcut.alanlar[aktifAlan] = alan[2].trim();
-      continue;
-    }
-
-    const sec = s.match(SECENEK);
-    if (sec && aktifAlan === "secenekler") {
-      let govde = sec[3].trim();
-      let hataKodu: string | null = null;
-      let not: string | null = null;
-      const h = govde.match(HATA_KODU);
-      if (h) {
-        hataKodu = h[1];
-        not = h[2]?.trim() || null;
-        govde = govde.slice(0, h.index).trim();
-      }
-      mevcut.secenekler.push({ satir: i + 1, isaretli: sec[1].toLowerCase() === "x", harf: sec[2], metin: govde, hataKodu, not });
-      continue;
-    }
-
-    // Çok satırlı alan devamı (soru metni, çözüm, kazanım adı…).
-    if (aktifAlan && aktifAlan !== "secenekler") {
-      mevcut.alanlar[aktifAlan] = (mevcut.alanlar[aktifAlan] + "\n" + s).replace(/^\n+/, "");
-    }
-  }
-
-  for (const q of sorular) for (const k of Object.keys(q.alanlar)) q.alanlar[k] = q.alanlar[k].trim();
-  return sorular;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Denetim
-// ─────────────────────────────────────────────────────────────
-
+/** Raporun ve ImportBatch.errors'un satırı: reddedilen soru + ilk hatası. */
 interface Hata {
   satir: number;
   id: string;
   sebep: string;
 }
 
-interface HazirSoru {
-  satir: number;
-  id: string;
-  topicId: string;
-  topicSlug: string;
-  stem: QuestionContent;
-  stemText: string;
-  fingerprint: string;
-  solution: QuestionContent | null;
-  drafts: ChoiceDraft[];
-  errorTypes: (string | null)[];
-  difficulty: number;
-  targetTimeSeconds: number;
-  level: (typeof LEVELS)[keyof typeof LEVELS] | null;
-  kazanimKodu: string | null;
-  kazanimAdi: string | null;
-  examScopes: Scope[];
-  sourceRef: string;
-  gorseller: { dosya: string; alt: string }[];
-}
-
-interface Baglam {
-  konular: Map<string, string>; // slug → id
-  mevcutIdler: Set<string>;
-  mevcutParmakIzleri: Set<string>;
-  kazanimlar: Map<string, { id: string; topicId: string }>;
-  gorselDizini: string;
-}
-
-function denetle(
-  q: HamSoru,
-  b: Baglam,
-  dosyadakiIdler: Set<string>,
-  dosyadakiParmakIzleri: Set<string>,
-  dosyadakiKazanimlar: Map<string, string>
-): HazirSoru | Hata {
-  const a = q.alanlar;
-  const id = a["id"] ?? "";
-  const hata = (sebep: string): Hata => ({ satir: q.satir, id: id || q.baslik, sebep });
-
-  if (!id) return hata("ID yok.");
-  if (dosyadakiIdler.has(id)) return hata("Aynı ID dosyada iki kez geçiyor.");
-  if (b.mevcutIdler.has(id)) return hata("Bu ID daha önce içe aktarılmış.");
-
-  const slug = a["konu kodu"] ?? "";
-  const topicId = b.konular.get(slug);
-  if (!topicId) return hata(`Konu kodu listede yok: "${slug}".`);
-
-  const zorluk = Number(a["zorluk"]);
-  if (!Number.isInteger(zorluk) || zorluk < 1 || zorluk > 5) return hata(`Zorluk 1-5 arası olmalı (şu an "${a["zorluk"]}").`);
-
-  const sure = Number(a["ideal sure"]);
-  if (!Number.isInteger(sure) || sure < 10 || sure > 600) return hata(`İdeal Süre 10-600 arası tam sayı olmalı (şu an "${a["ideal sure"]}").`);
-
-  const seviyeKodu = (a["seviye"] ?? "").trim();
-  const level = seviyeKodu ? LEVELS[seviyeKodu as keyof typeof LEVELS] : null;
-  if (seviyeKodu && !level) return hata(`Seviye 1, 2 veya 3 olmalı (şu an "${seviyeKodu}"). Parantezli açıklama yazma.`);
-
-  const kazanimKodu = (a["kazanim kodu"] ?? "").trim().toUpperCase() || null;
-  if (level === "L1_TEMEL" && !kazanimKodu) return hata("Seviye 1 sorusunda Kazanım Kodu zorunlu.");
-  if ((level === "L2_ORTA" || level === "L3_ANALIZ") && kazanimKodu) return hata("Seviye 2 ve 3 sorusuna Kazanım Kodu yazılmaz.");
-  const kazanimAdi = (a["kazanim adi"] ?? "").trim() || null;
-  if (kazanimKodu) {
-    const mevcutKazanim = b.kazanimlar.get(kazanimKodu);
-    const dosyadaki = dosyadakiKazanimlar.get(kazanimKodu);
-    if (mevcutKazanim && mevcutKazanim.topicId !== topicId) {
-      return hata(`Kazanım "${kazanimKodu}" başka bir konuya ait.`);
-    }
-    if (dosyadaki && dosyadaki !== topicId) {
-      return hata(`Kazanım "${kazanimKodu}" bu dosyada başka bir konuyla tanımlandı.`);
-    }
-    // Ad yalnızca İLK kullanımda gerekli: sistemde ya da bu dosyada daha önce
-    // tanımlandıysa tekrar yazılmaz.
-    if (!mevcutKazanim && !dosyadaki && !kazanimAdi) {
-      return hata(`Kazanım "${kazanimKodu}" sistemde yok; ilk kullanımda Kazanım Adı yazılmalı.`);
-    }
-  }
-
-  const sinavlar = (a["hedef sinav"] ?? "")
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-  for (const s of sinavlar) {
-    if (s === "ORTAK") return hata('Hedef Sınav: "ORTAK" diye bir değer yok; alanı boş bırak.');
-    if (!(EXAM_SCOPES as readonly string[]).includes(s)) return hata(`Hedef Sınav kodu tanınmıyor: "${s}".`);
-  }
-
-  // Soru metni + görseller
-  const stemMarkup = a["soru metni"] ?? "";
-  if (!stemMarkup.trim()) return hata("Soru Metni boş.");
-  const gorseller: HazirSoru["gorseller"] = [];
-  for (const m of stemMarkup.matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) {
-    const [, alt, dosya] = m;
-    if (!alt.trim()) return hata(`Görsel "${dosya}" için alternatif metin boş.`);
-    const yol = join(b.gorselDizini, dosya);
-    if (!existsSync(yol)) return hata(`Görsel dosyası bulunamadı: gorseller/${dosya}`);
-    if (![".png", ".jpg", ".jpeg", ".webp"].includes(extname(dosya).toLowerCase())) return hata(`Görsel PNG/JPG/WebP olmalı: ${dosya}`);
-    gorseller.push({ dosya, alt: alt.trim() });
-  }
-
-  const stem = safeParseQuestionContent(markupToContent(stemMarkup));
-  if (!stem.success) return hata("Soru metni çözümlenemedi.");
-  const { stemText, fingerprint } = deriveQuestionFields(stem.data);
-  if (dosyadakiParmakIzleri.has(fingerprint)) return hata("Aynı soru metni dosyada iki kez geçiyor.");
-  if (b.mevcutParmakIzleri.has(fingerprint)) return hata("Bu soru metni havuzda zaten var (farklı ID ile).");
-
-  // Şıklar
-  if (q.secenekler.length < 4) return hata(`En az 4 şık gerekli (şu an ${q.secenekler.length}).`);
-  const dogrular = q.secenekler.filter((s) => s.isaretli);
-  if (dogrular.length === 0) return hata("Doğru şık işaretlenmemiş ([x]).");
-  if (dogrular.length > 1) return hata(`Birden fazla doğru şık işaretli: ${dogrular.map((d) => d.harf).join(", ")}.`);
-  const dogruSatir = (a["dogru sik"] ?? "").trim().toUpperCase();
-  if (dogruSatir && dogruSatir !== dogrular[0].harf) {
-    return hata(`[x] ${dogrular[0].harf} şıkkında ama "Doğru Şık" satırı ${dogruSatir} diyor — çelişki.`);
-  }
-  const errorTypes: (string | null)[] = [];
-  for (const s of q.secenekler) {
-    if (s.isaretli) {
-      errorTypes.push(null);
-      continue;
-    }
-    if (!s.hataKodu) return hata(`${s.harf} şıkkında hata kodu yok (satır ${s.satir}).`);
-    if (!(ERROR_TYPES as readonly string[]).includes(s.hataKodu)) return hata(`${s.harf} şıkkındaki hata kodu listede yok: ${s.hataKodu}.`);
-    errorTypes.push(s.hataKodu);
-  }
-  const drafts: ChoiceDraft[] = q.secenekler.map((s, i) => ({
-    label: CHOICE_LABELS[i],
-    content: markupToContent(s.metin),
-    isCorrect: s.isaretli,
-  }));
-  if (q.secenekler.some((s, i) => s.harf !== CHOICE_LABELS[i])) return hata("Şık harfleri A, B, C, … sırasıyla gitmeli.");
-  const sikHatalari = validateChoices(drafts);
-  if (sikHatalari.length) return hata(sikHatalari.join(" "));
-
-  let solution: QuestionContent | null = null;
-  const cozum = a["cozum aciklamasi"] ?? "";
-  if (cozum.trim()) {
-    const p = safeParseQuestionContent(markupToContent(cozum));
-    if (!p.success) return hata("Çözüm metni çözümlenemedi.");
-    solution = p.data;
-  }
-
-  const kaynak = (a["kaynak"] ?? "").trim();
-  return {
-    satir: q.satir,
-    id,
-    topicId,
-    topicSlug: slug,
-    stem: stem.data,
-    stemText,
-    fingerprint,
-    solution,
-    drafts,
-    errorTypes,
-    difficulty: zorluk,
-    targetTimeSeconds: sure,
-    level: level ?? null,
-    kazanimKodu,
-    kazanimAdi,
-    examScopes: sinavlar as Scope[],
-    sourceRef: kaynak ? `${id} · ${kaynak}` : id,
-    gorseller,
-  };
-}
-
 // ─────────────────────────────────────────────────────────────
 // Yazma
 // ─────────────────────────────────────────────────────────────
 
-const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
-
-async function uygula(hazir: HazirSoru[], hatalar: Hata[], dosyaAdi: string, b: Baglam) {
+async function uygula(
+  hazir: HazirSoru[],
+  hatalar: Hata[],
+  dosyaAdi: string,
+  kazanimlar: Map<string, IceAktarmaKazanimi>,
+  gorselDizini: string
+) {
   const batch = await prisma.importBatch.create({
     data: {
       filename: dosyaAdi,
@@ -357,7 +100,7 @@ async function uygula(hazir: HazirSoru[], hatalar: Hata[], dosyaAdi: string, b: 
           // Kazanım: varsa bul, yoksa oluştur (yayında — içerik ekibinin listesi).
           let objectiveId: string | null = null;
           if (q.kazanimKodu) {
-            const mevcut = b.kazanimlar.get(q.kazanimKodu);
+            const mevcut = kazanimlar.get(q.kazanimKodu);
             if (mevcut) {
               objectiveId = mevcut.id;
             } else {
@@ -366,7 +109,7 @@ async function uygula(hazir: HazirSoru[], hatalar: Hata[], dosyaAdi: string, b: 
                 data: { topicId: q.topicId, code: q.kazanimKodu, name: adi, status: "PUBLISHED", examScopes: q.examScopes },
                 select: { id: true },
               });
-              b.kazanimlar.set(q.kazanimKodu, { id: o.id, topicId: q.topicId });
+              kazanimlar.set(q.kazanimKodu, { id: o.id, topicId: q.topicId });
               yeniKazanim.push(q.kazanimKodu);
               objectiveId = o.id;
             }
@@ -375,16 +118,16 @@ async function uygula(hazir: HazirSoru[], hatalar: Hata[], dosyaAdi: string, b: 
           // Görseller: dosya adı → MediaAsset kimliği.
           let stem = q.stem;
           if (q.gorseller.length) {
-            let markup = JSON.stringify(stem);
+            const kimlikler = new Map<string, string>();
             for (const g of q.gorseller) {
               let mediaId = gorselOnbellek.get(g.dosya);
               if (!mediaId) {
-                const yol = join(b.gorselDizini, g.dosya);
+                const yol = join(gorselDizini, g.dosya);
                 const data = readFileSync(yol);
                 const m = await tx.mediaAsset.create({
                   data: {
                     storageKey: `import/${batch.id}/${g.dosya}`,
-                    mimeType: MIME[extname(g.dosya).toLowerCase()] ?? "application/octet-stream",
+                    mimeType: GORSEL_MIME[extname(g.dosya).toLowerCase()] ?? "application/octet-stream",
                     byteSize: statSync(yol).size,
                     data,
                     alt: g.alt,
@@ -395,9 +138,9 @@ async function uygula(hazir: HazirSoru[], hatalar: Hata[], dosyaAdi: string, b: 
                 mediaId = m.id;
                 gorselOnbellek.set(g.dosya, mediaId);
               }
-              markup = markup.split(JSON.stringify(g.dosya).slice(1, -1)).join(mediaId);
+              kimlikler.set(g.dosya, mediaId);
             }
-            stem = JSON.parse(markup) as QuestionContent;
+            stem = gorselleriYerlestir(stem, kimlikler);
           }
 
           await tx.question.create({
@@ -475,7 +218,28 @@ async function geriAl(batchId: string) {
       prisma.question.deleteMany({ where: { id: { in: silinecek } } }),
     ]);
   }
-  await prisma.mediaAsset.deleteMany({ where: { storageKey: { startsWith: `import/${batchId}/` } } });
+
+  /*
+   * Görseller: yalnızca artık HİÇBİR soruda geçmeyenler silinir. Korunan
+   * (çözülmüş) soru ya da panelde "benzerini oluştur" ile yapılmış kopyası aynı
+   * görseli gösteriyor olabilir. Eskiden partinin bütün görselleri siliniyordu
+   * ve korunan sorular öğrenci ekranında kırık görselle kalıyordu. Panelin geri
+   * alması da aynı sorguyu kullanıyor (admin/src/lib/checkup/question-import.ts).
+   */
+  const adaylar = await prisma.mediaAsset.findMany({
+    where: { storageKey: { startsWith: `import/${batchId}/` } },
+    select: { id: true },
+  });
+  let korunanGorsel = 0;
+  if (adaylar.length) {
+    const kullanilan = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT m.id FROM unnest(${adaylar.map((a) => a.id)}::text[]) AS m(id)
+      WHERE EXISTS (SELECT 1 FROM "Question" q WHERE strpos(q.stem::text, m.id) > 0 OR strpos(coalesce(q.solution::text, ''), m.id) > 0)
+         OR EXISTS (SELECT 1 FROM "Choice" c WHERE strpos(c.content::text, m.id) > 0)`;
+    const kalsin = new Set(kullanilan.map((r) => r.id));
+    korunanGorsel = kalsin.size;
+    await prisma.mediaAsset.deleteMany({ where: { id: { in: adaylar.map((a) => a.id).filter((id) => !kalsin.has(id)) } } });
+  }
 
   // Bu partiyle AÇILAN ve artık sorusu kalmayan kazanımlar da gider: parti
   // başlangıcı ile bitişi arasında oluşturulmuş, boş kalmış kazanımlar.
@@ -487,6 +251,7 @@ async function geriAl(batchId: string) {
     },
   });
   if (bosKazanimlar.count) console.log(`Bu partiyle açılan ${bosKazanimlar.count} boş kazanım silindi.`);
+  if (korunanGorsel) console.log(`${korunanGorsel} görsel, hâlâ bir soruda kullanıldığı için silinmedi.`);
 
   if (cozulmus.length === 0) await prisma.importBatch.delete({ where: { id: batchId } });
   else await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVERTED_PARTIAL" } });
@@ -515,62 +280,54 @@ async function main() {
     process.exit(2);
   }
 
-  const [konular, idler, kazanimlar] = await Promise.all([
-    prisma.topic.findMany({ where: { children: { none: {} } }, select: { id: true, slug: true } }),
-    prisma.question.findMany({ where: { sourceRef: { not: null } }, select: { sourceRef: true, fingerprint: true } }),
-    prisma.objective.findMany({ select: { id: true, code: true, topicId: true } }),
+  const [konular, sorular, kazanimSatirlari] = await Promise.all([
+    prisma.topic.findMany({ where: { children: { none: {} } }, select: { id: true, slug: true, examScope: true, examScopes: true } }),
+    // TÜM sorular: panelde elle girilen (kaynağı boş) sorunun metni de çift sayılır.
+    prisma.question.findMany({ select: { id: true, sourceRef: true, fingerprint: true } }),
+    prisma.objective.findMany({ select: { id: true, code: true, topicId: true, name: true } }),
   ]);
 
-  const b: Baglam = {
-    konular: new Map(konular.map((k) => [k.slug, k.id])),
+  const gorselDizini = join(dirname(yol), "gorseller");
+  const kazanimlar = new Map<string, IceAktarmaKazanimi>(
+    kazanimSatirlari.map((k) => [k.code, { id: k.id, topicId: k.topicId, name: k.name }])
+  );
+  const b: IceAktarmaBaglami = {
+    konular: new Map(konular.map((k) => [k.slug, { id: k.id, examScope: k.examScope, examScopes: k.examScopes }])),
     // sourceRef "ID · kaynak" biçiminde; ID kısmı karşılaştırılır.
-    mevcutIdler: new Set(idler.map((q) => (q.sourceRef ?? "").split(" · ")[0]).filter(Boolean)),
-    mevcutParmakIzleri: new Set(idler.map((q) => q.fingerprint)),
-    kazanimlar: new Map(kazanimlar.map((k) => [k.code, { id: k.id, topicId: k.topicId }])),
-    gorselDizini: join(dirname(yol), "gorseller"),
+    mevcutIdler: new Set(sorular.map((q) => (q.sourceRef ?? "").split(" · ")[0]).filter(Boolean)),
+    mevcutParmakIzleri: new Map(sorular.map((q) => [q.fingerprint, q.id])),
+    kazanimlar,
+    gorselVar: (dosya) => existsSync(join(gorselDizini, dosya)),
   };
 
-  const hazir: HazirSoru[] = [];
-  const hatalar: Hata[] = [];
-  const dosyadakiIdler = new Set<string>();
-  const dosyadakiParmakIzleri = new Set<string>();
-  const dosyadakiKazanimlar = new Map<string, string>(); // kod → topicId
-
-  for (const q of ham) {
-    const r = denetle(q, b, dosyadakiIdler, dosyadakiParmakIzleri, dosyadakiKazanimlar);
-    if ("sebep" in r) {
-      hatalar.push(r);
-    } else {
-      hazir.push(r);
-      dosyadakiIdler.add(r.id);
-      dosyadakiParmakIzleri.add(r.fingerprint);
-      if (r.kazanimKodu && !dosyadakiKazanimlar.has(r.kazanimKodu)) dosyadakiKazanimlar.set(r.kazanimKodu, r.topicId);
-    }
-  }
+  const { sorular: rapor, hazir } = dosyayiDenetle(ham, b);
+  const hatalar: Hata[] = rapor
+    .filter((r) => r.hatalar.length > 0)
+    .map((r) => ({ satir: r.satir, id: r.id || r.baslik, sebep: r.hatalar[0] }));
 
   // Uyarı: tek seviye-1 sorusu kalan kazanımlar (telafi turunda boş kalır).
-  const l1Sayac = new Map<string, number>();
-  for (const q of hazir) if (q.level === "L1_TEMEL" && q.kazanimKodu) l1Sayac.set(q.kazanimKodu, (l1Sayac.get(q.kazanimKodu) ?? 0) + 1);
+  const l1Sayac = seviye1Sayilari(hazir);
+  const havuzdaL1 = new Map<string, number>();
   if (l1Sayac.size) {
     const mevcutL1 = await prisma.question.groupBy({
       by: ["objectiveId"],
       where: { level: "L1_TEMEL", objectiveId: { not: null } },
       _count: { _all: true },
     });
-    const idToCode = new Map([...b.kazanimlar.entries()].map(([code, v]) => [v.id, code]));
+    const idToCode = new Map([...kazanimlar.entries()].map(([code, v]) => [v.id, code]));
     for (const r of mevcutL1) {
       const code = idToCode.get(r.objectiveId!);
-      if (code && l1Sayac.has(code)) l1Sayac.set(code, (l1Sayac.get(code) ?? 0) + r._count._all);
+      if (code) havuzdaL1.set(code, r._count._all);
     }
   }
-  const tekSoruluKazanimlar = [...l1Sayac.entries()].filter(([, n]) => n < 2).map(([k]) => k);
+  const tekSoruluKazanimListesi = tekSoruluKazanimlar(l1Sayac, havuzdaL1);
 
   console.log(`\n${basename(yol)}: ${ham.length} soru bulundu`);
   console.log(`  ✓ ${hazir.length} soru geçerli`);
   console.log(`  ✗ ${hatalar.length} soru reddedildi`);
   for (const h of hatalar) console.log(`    satır ${h.satir} · ${h.id}: ${h.sebep}`);
-  if (tekSoruluKazanimlar.length) {
-    console.log(`  ⚠ Tek seviye-1 sorusu olan kazanımlar (telafi turunda boş kalır): ${tekSoruluKazanimlar.join(", ")}`);
+  if (tekSoruluKazanimListesi.length) {
+    console.log(`  ⚠ Tek seviye-1 sorusu olan kazanımlar (telafi turunda boş kalır): ${tekSoruluKazanimListesi.join(", ")}`);
   }
 
   if (!UYGULA) {
@@ -582,7 +339,7 @@ async function main() {
     return;
   }
 
-  const sonuc = await uygula(hazir, hatalar, basename(yol), b);
+  const sonuc = await uygula(hazir, hatalar, basename(yol), kazanimlar, gorselDizini);
   console.log(`\n${sonuc.yazilan} soru alındı (${YAYINLA ? "YAYINDA" : "taslak"}), ${hatalar.length} soru reddedildi.`);
   if (sonuc.yeniKazanim.length) console.log(`Yeni kazanımlar: ${sonuc.yeniKazanim.join(", ")}`);
   console.log(`Parti kimliği: ${sonuc.batchId}  (geri almak için: --geri-al ${sonuc.batchId})`);

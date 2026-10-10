@@ -83,7 +83,8 @@ async function haftalikPosta(
   const [plan, sonTest] = await Promise.all([
     aktifPlan(u.id, now),
     prisma.checkupSession.findFirst({
-      where: { userId: u.id, status: "SUBMITTED" },
+      // Alıştırma "son check-up" sayılmaz: ölçüm değil.
+      where: { userId: u.id, status: "SUBMITTED", kind: { not: "PRACTICE" } },
       orderBy: { submittedAt: "desc" },
       select: { submittedAt: true },
     }),

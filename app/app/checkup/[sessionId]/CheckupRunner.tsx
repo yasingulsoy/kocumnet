@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { unstable_rethrow, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,8 +22,10 @@ import {
   X,
 } from "lucide-react";
 import { saveAnswerAction, sinavDurumuAction, submitCheckupAction } from "@/lib/actions/checkup";
-import { Alert, Button, LinkButton, Logo } from "@/components/ui";
-import { Dialog } from "@/components/ui/dialog";
+import { Logo } from "@/components/ui/logo";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Modal } from "@/components/tailadmin/ui/Modal";
 import { cn } from "@/lib/cn";
 import {
   KayitKuyrugu,
@@ -78,12 +80,15 @@ function Palet({
   sonraBak,
   index,
   onGoTo,
+  aktifRef,
 }: {
   questions: RunnerQuestion[];
   answers: Record<string, string | null>;
   sonraBak: ReadonlySet<string>;
   index: number;
   onGoTo: (i: number) => void;
+  /** Pencere açılınca odak bulunulan soruya gitsin (1. soruya değil). */
+  aktifRef?: RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8 lg:grid-cols-5">
@@ -94,6 +99,7 @@ function Palet({
         return (
           <button
             key={q.id}
+            ref={aktif ? aktifRef : undefined}
             type="button"
             onClick={() => onGoTo(i)}
             aria-current={aktif ? "true" : undefined}
@@ -101,19 +107,19 @@ function Palet({
               "Soru " + (i + 1) + (dolu ? ", işaretli" : ", boş") + (sonra ? ", sonra bakılacak" : "")
             }
             className={cn(
-              "tabular relative flex aspect-square touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold transition",
+              "tabular relative flex aspect-square cursor-pointer touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold transition",
               aktif
-                ? "bg-brand-deep text-white shadow-card"
+                ? "bg-brand-500 text-white shadow-theme-xs"
                 : dolu
-                  ? "bg-brand-wash text-brand ring-1 ring-inset ring-brand/20 hover:bg-brand-wash-strong"
-                  : "bg-surface text-ink-faint ring-1 ring-inset ring-line hover:ring-line-strong"
+                  ? "bg-brand-50 text-brand-500 ring-1 ring-brand-200 ring-inset hover:bg-brand-100"
+                  : "bg-white text-gray-500 ring-1 ring-gray-300 ring-inset hover:bg-gray-50 hover:text-gray-700"
             )}
           >
             {i + 1}
             {sonra ? (
               <span
                 aria-hidden
-                className="absolute -end-1 -top-1 size-3 rounded-full bg-warn-fill ring-2 ring-surface"
+                className="absolute -end-1 -top-1 size-3 rounded-full bg-warning-500 ring-2 ring-white"
               />
             ) : null}
           </button>
@@ -144,7 +150,7 @@ function NumaraListesi({
   const kalan = indeksler.length - gosterilen.length;
   return (
     <div className="mt-4">
-      <p className="text-[13px] font-semibold text-ink">{baslik}</p>
+      <p className="text-theme-sm font-semibold text-gray-800">{baslik}</p>
       <ul className="mt-2 flex flex-wrap gap-1.5">
         {gosterilen.map((i) => (
           <li key={i}>
@@ -153,10 +159,10 @@ function NumaraListesi({
               onClick={() => onSec(i)}
               aria-label={`${i + 1}. soruya git`}
               className={cn(
-                "tabular flex size-10 touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold ring-1 ring-inset transition",
+                "tabular flex size-10 cursor-pointer touch-manipulation items-center justify-center rounded-lg text-[13px] font-semibold ring-1 ring-inset transition",
                 ton === "warn"
-                  ? "bg-warn-wash text-warn ring-warn/30 hover:bg-surface"
-                  : "bg-surface text-ink-soft ring-line-strong hover:bg-surface-hover"
+                  ? "bg-warning-50 text-warning-700 ring-warning-200 hover:bg-white"
+                  : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"
               )}
             >
               {i + 1}
@@ -164,7 +170,7 @@ function NumaraListesi({
           </li>
         ))}
         {kalan > 0 ? (
-          <li className="tabular flex h-10 items-center px-1.5 text-[13px] font-medium text-ink-faint">
+          <li className="tabular flex h-10 items-center px-1.5 text-[13px] font-medium text-gray-500">
             +{kalan} soru
           </li>
         ) : null}
@@ -709,29 +715,35 @@ export function CheckupRunner({
     goTo(i);
   };
 
+  // Pencereler açılınca odak: palette bulunulan soru, bitirme ve çıkışta
+  // "devam" düğmesi (yanlışlıkla Enter testi bitirmesin / çıkarmasın).
+  const paletAktifRef = useRef<HTMLButtonElement>(null);
+  const bitirDevamRef = useRef<HTMLButtonElement>(null);
+  const cikisDonRef = useRef<HTMLButtonElement>(null);
+
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen bg-gray-50">
       {/* Üst çubuk */}
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-3 sm:h-16 sm:gap-5 sm:px-6">
           <button
             type="button"
             onClick={() => setCikisAcik(true)}
             aria-label="Testten çık"
-            className="-ms-1.5 flex size-11 shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-hover hover:text-ink"
+            className="-ms-1.5 flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
           >
             <X className="size-5" />
           </button>
 
           <div className="hidden items-center gap-2.5 sm:flex">
             <Logo className="size-7" />
-            <p className="max-w-[16rem] truncate text-sm font-semibold text-ink">{packageName}</p>
+            <p className="max-w-[16rem] truncate text-theme-sm font-semibold text-gray-800">{packageName}</p>
           </div>
 
           {/* İlerleme */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2 text-[11px] text-ink-soft sm:text-xs">
-              <span className="tabular shrink-0 font-medium">
+            <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 sm:text-theme-xs">
+              <span className="tabular shrink-0 font-medium text-gray-700">
                 {isaretli}/{questions.length} işaretli
               </span>
               {/* Kayıt durumu telefonda da görünür: mobilde simge, sm+ metin.
@@ -740,9 +752,9 @@ export function CheckupRunner({
               <span
                 className={cn(
                   "flex min-w-0 items-center gap-1 transition",
-                  saveState === "saving" && "text-ink-faint",
-                  saveState === "saved" && "text-ok",
-                  saveState === "error" && "text-bad",
+                  saveState === "saving" && "text-gray-500",
+                  saveState === "saved" && "text-success-700",
+                  saveState === "error" && "text-error-700",
                   saveState === "idle" && "invisible"
                 )}
               >
@@ -765,7 +777,7 @@ export function CheckupRunner({
               </span>
             </div>
             <div
-              className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-sunk ring-1 ring-inset ring-line sm:mt-1.5"
+              className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-200 sm:mt-1.5"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={questions.length}
@@ -773,7 +785,7 @@ export function CheckupRunner({
               aria-label="İşaretlenen soru sayısı"
             >
               <div
-                className="bg-brand-gradient h-full rounded-full transition-[width] duration-300"
+                className="h-full rounded-full bg-brand-500 transition-[width] duration-300"
                 style={{ width: (isaretli / questions.length) * 100 + "%" }}
               />
             </div>
@@ -783,12 +795,12 @@ export function CheckupRunner({
               bir sayaç, matematik sorusu çözen öğrenciyi sorudan koparıyor. */}
           <div
             className={cn(
-              "tabular flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 font-mono text-[15px] font-bold transition sm:px-3 sm:py-2",
+              "tabular flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-[15px] font-bold transition sm:px-3 sm:py-2",
               kritik
-                ? "bg-bad-fill text-white"
+                ? "bg-error-600 text-white"
                 : azaliyor
-                  ? "bg-warn-wash text-warn ring-1 ring-inset ring-warn/25"
-                  : "bg-surface-sunk text-ink ring-1 ring-inset ring-line"
+                  ? "bg-warning-50 text-warning-700 ring-1 ring-warning-200 ring-inset"
+                  : "bg-gray-100 text-gray-800 ring-1 ring-gray-200 ring-inset"
             )}
             role="timer"
             aria-live="off"
@@ -807,16 +819,16 @@ export function CheckupRunner({
 
         {/* Oturum düştü: tekrar denemek işe yaramaz, giriş gerekir. */}
         {oturumYok && !kapandi ? (
-          <div role="status" className="border-t border-bad/20 bg-bad-wash">
+          <div role="status" className="border-t border-error-200 bg-error-50">
             <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2 sm:px-6">
-              <TriangleAlert className="size-4 shrink-0 text-bad" />
-              <p className="min-w-0 flex-1 text-[12px] leading-snug text-bad sm:text-[13px]">
+              <TriangleAlert className="size-4 shrink-0 text-error-600" />
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-error-700 sm:text-[13px]">
                 <strong className="font-semibold">Oturumun kapanmış.</strong> Cevapların bu cihazda
                 saklı; giriş yapınca kaldığın yerden devam edersin.
               </p>
               <Link
                 href="/giris"
-                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-error-700 ring-1 ring-error-200 ring-inset"
               >
                 <LogIn className="size-3.5" /> Giriş yap
               </Link>
@@ -824,10 +836,10 @@ export function CheckupRunner({
           </div>
         ) : saveState === "error" && bekleyen > 0 && !kapandi ? (
           /* Bağlantı uyarısı — başlığa yapışık, kaydırınca da görünür. */
-          <div role="status" className="border-t border-bad/20 bg-bad-wash">
+          <div role="status" className="border-t border-error-200 bg-error-50">
             <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2 sm:px-6">
-              <TriangleAlert className="size-4 shrink-0 text-bad" />
-              <p className="min-w-0 flex-1 text-[12px] leading-snug text-bad sm:text-[13px]">
+              <TriangleAlert className="size-4 shrink-0 text-error-600" />
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-error-700 sm:text-[13px]">
                 <strong className="font-semibold">{bekleyen} cevabın kaydedilmedi.</strong>{" "}
                 {ardisikHata >= 3
                   ? "Sorun sürerse sayfayı yenile; cevapların bu cihazda saklı."
@@ -840,7 +852,7 @@ export function CheckupRunner({
                     yenileniyorRef.current = true;
                     window.location.reload();
                   }}
-                  className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                  className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-error-700 ring-1 ring-error-200 ring-inset"
                 >
                   <RefreshCw className="size-3.5" /> Yenile
                 </button>
@@ -851,7 +863,7 @@ export function CheckupRunner({
                     kuyruk().sifirlaDeneme();
                     void kuyruk().bosalt();
                   }}
-                  className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-bad ring-1 ring-inset ring-bad/25"
+                  className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-error-700 ring-1 ring-error-200 ring-inset"
                 >
                   <RefreshCw className="size-3.5" /> Dene
                 </button>
@@ -863,10 +875,10 @@ export function CheckupRunner({
         {/* Son dakikalar: kaç boş ve "sonra bak" kaldığını söyler, oraya götürür.
             Yanıp sönmez; eşik başına bir kez görünür, kapatılabilir. */}
         {uyariGoster ? (
-          <div className="border-t border-warn/25 bg-warn-wash">
+          <div className="border-t border-warning-200 bg-warning-50">
             <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-1.5 sm:px-6">
-              <Hourglass className="size-4 shrink-0 text-warn" aria-hidden />
-              <p className="tabular min-w-0 flex-1 text-[12px] leading-snug text-warn sm:text-[13px]">
+              <Hourglass className="size-4 shrink-0 text-warning-600" aria-hidden />
+              <p className="tabular min-w-0 flex-1 text-[12px] leading-snug text-warning-700 sm:text-[13px]">
                 <strong className="font-semibold">
                   Son {Math.max(1, Math.ceil(remaining / 60_000))} dakika.
                 </strong>{" "}
@@ -877,7 +889,7 @@ export function CheckupRunner({
                 <button
                   type="button"
                   onClick={() => goTo(sonrakiBos)}
-                  className="flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-surface px-2.5 text-[12px] font-semibold text-warn ring-1 ring-inset ring-warn/25"
+                  className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-warning-700 ring-1 ring-warning-200 ring-inset"
                 >
                   Boşa git <ArrowRight className="size-3.5" />
                 </button>
@@ -886,7 +898,7 @@ export function CheckupRunner({
                 type="button"
                 onClick={() => setKapatilanUyari(esik)}
                 aria-label="Uyarıyı kapat"
-                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-warn transition hover:bg-surface"
+                className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-warning-700 transition hover:bg-white"
               >
                 <X className="size-4" />
               </button>
@@ -898,26 +910,30 @@ export function CheckupRunner({
       <div className="mx-auto grid max-w-6xl gap-6 px-4 pb-32 pt-5 sm:px-6 sm:pt-6 lg:grid-cols-[1fr_280px] lg:pb-12">
         {/* Soru */}
         <div className="min-w-0">
-          {error ? <Alert className="mb-4">{error}</Alert> : null}
+          {error ? (
+            <Alert variant="error" compact className="mb-4">
+              {error}
+            </Alert>
+          ) : null}
 
           <article
             key={current.id}
             ref={soruRef}
             aria-labelledby={baslikId}
-            className="animate-rise rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-8"
+            className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
           >
             <div className="flex items-center gap-2">
               <h2
                 id={baslikId}
                 ref={baslikRef}
                 tabIndex={-1}
-                className="font-display tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-deep px-2 text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
+                className="tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-2 font-display text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
               >
                 <span className="sr-only">Soru </span>
                 {index + 1}
                 <span className="sr-only"> / {questions.length}</span>
               </h2>
-              <span className="min-w-0 truncate rounded-full bg-surface-sunk px-2.5 py-0.5 text-[11px] font-medium text-ink-soft ring-1 ring-inset ring-line sm:py-1 sm:text-xs">
+              <span className="min-w-0 truncate rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 sm:py-1 sm:text-theme-xs">
                 {current.topicName}
               </span>
               {/* Emin olmadığın soruyu işaretle, bitirmeden önce tek listede gör. */}
@@ -926,10 +942,10 @@ export function CheckupRunner({
                 onClick={() => sonraDegistir(current.id)}
                 aria-pressed={sonraMi}
                 className={cn(
-                  "ms-auto flex min-h-10 shrink-0 touch-manipulation items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold ring-1 ring-inset transition sm:text-[13px]",
+                  "ms-auto flex min-h-10 shrink-0 cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold ring-1 ring-inset transition sm:text-[13px]",
                   sonraMi
-                    ? "bg-warn-wash text-warn ring-warn/30"
-                    : "bg-surface text-ink-soft ring-line hover:bg-surface-hover hover:text-ink"
+                    ? "bg-warning-50 text-warning-700 ring-warning-200"
+                    : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 hover:text-gray-800"
                 )}
               >
                 {sonraMi ? (
@@ -941,7 +957,7 @@ export function CheckupRunner({
               </button>
             </div>
 
-            <div className="mt-4 text-read leading-relaxed text-ink sm:mt-5">{current.stem}</div>
+            <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">{current.stem}</div>
 
             <div
               role="radiogroup"
@@ -958,27 +974,27 @@ export function CheckupRunner({
                     aria-checked={secili}
                     onClick={() => select(choice.id)}
                     className={cn(
-                      "group flex w-full touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
+                      "group flex w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
                       "min-h-[var(--tap-comfort)]",
                       secili
-                        ? "border-brand bg-brand-wash"
-                        : "border-line bg-surface hover:border-line-strong hover:bg-surface-sunk active:bg-surface-sunk"
+                        ? "border-brand-500 bg-brand-25"
+                        : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:bg-gray-50"
                     )}
                   >
                     <span
                       className={cn(
                         "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition",
                         secili
-                          ? "bg-brand text-white"
-                          : "bg-surface-sunk text-ink-soft ring-1 ring-inset ring-line-strong group-hover:ring-ink-faint"
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-700 ring-1 ring-gray-300 ring-inset group-hover:ring-gray-400"
                       )}
                     >
                       {choice.label}
                     </span>
-                    <span className="min-w-0 flex-1 text-body text-ink sm:text-base">
+                    <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
                       {choice.content}
                     </span>
-                    {secili ? <CircleCheck className="size-5 shrink-0 text-brand" /> : null}
+                    {secili ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
                   </button>
                 );
               })}
@@ -987,20 +1003,20 @@ export function CheckupRunner({
 
           {/* Masaüstü gezinme */}
           <div className="mt-5 hidden items-center justify-between gap-4 lg:flex">
-            <Button variant="secondary" onClick={() => goTo(index - 1)} disabled={index === 0}>
-              <ArrowLeft /> Önceki
+            <Button variant="outline" onClick={() => goTo(index - 1)} disabled={index === 0} startIcon={<ArrowLeft />}>
+              Önceki
             </Button>
-            <p className="flex items-center gap-1.5 text-center text-xs text-ink-faint">
+            <p className="flex items-center gap-1.5 text-center text-theme-xs text-gray-500">
               <Keyboard className="size-3.5 shrink-0" /> {harfler[0]}–{harfler[harfler.length - 1]}{" "}
               işaretle · S sonra bak · ← → gez · aynı şık işareti kaldırır
             </p>
             {son ? (
-              <Button onClick={() => setBitirAcik(true)} disabled={submitting}>
-                <Flag /> Testi bitir
+              <Button onClick={() => setBitirAcik(true)} disabled={submitting} startIcon={<Flag />}>
+                Testi bitir
               </Button>
             ) : (
-              <Button onClick={() => goTo(index + 1)}>
-                Sonraki <ArrowRight />
+              <Button onClick={() => goTo(index + 1)} endIcon={<ArrowRight />}>
+                Sonraki
               </Button>
             )}
           </div>
@@ -1008,8 +1024,8 @@ export function CheckupRunner({
 
         {/* Masaüstü soru paleti */}
         <aside className="hidden lg:block">
-          <div className="sticky top-24 rounded-2xl border border-line bg-surface p-5 shadow-card">
-            <p className="text-sm font-semibold text-ink">Sorular</p>
+          <div className="sticky top-24 rounded-2xl border border-gray-200 bg-white p-5">
+            <p className="font-display text-base font-semibold text-gray-800">Sorular</p>
             <div className="mt-3">
               <Palet
                 questions={questions}
@@ -1019,17 +1035,17 @@ export function CheckupRunner({
                 onGoTo={goTo}
               />
             </div>
-            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-line pt-4 text-xs text-ink-soft">
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-gray-100 pt-4 text-theme-xs text-gray-500">
               <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm bg-brand-wash ring-1 ring-brand/30" />
+                <span className="size-2.5 rounded-sm bg-brand-50 ring-1 ring-brand-200" />
                 <span className="tabular">{isaretli}</span> işaretli
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm bg-surface ring-1 ring-line-strong" />
+                <span className="size-2.5 rounded-sm bg-white ring-1 ring-gray-300" />
                 <span className="tabular">{bos}</span> boş
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-full bg-warn-fill" />
+                <span className="size-2.5 rounded-full bg-warning-500" />
                 <span className="tabular">{sonraIndeksler.length}</span> sonra bak
               </span>
             </div>
@@ -1039,59 +1055,58 @@ export function CheckupRunner({
               className="mt-4"
               onClick={() => setBitirAcik(true)}
               disabled={submitting}
+              startIcon={<Flag />}
             >
-              <Flag /> Testi bitir
+              Testi bitir
             </Button>
           </div>
         </aside>
       </div>
 
       {/* Mobil alt çubuk — başparmak bölgesi */}
-      <div className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
+      <div className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-2xl items-center gap-2 px-3 pt-2.5 sm:px-4">
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => goTo(index - 1)}
             disabled={index === 0}
             aria-label="Önceki soru"
-            className="px-3.5"
-          >
-            <ArrowLeft />
-          </Button>
+            startIcon={<ArrowLeft />}
+          />
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={() => setPaletAcik(true)}
             aria-label={`Soru listesi, ${index + 1} / ${questions.length}`}
             className="flex-1"
+            startIcon={<LayoutGrid />}
           >
-            <LayoutGrid />
             <span className="tabular">
               {index + 1} / {questions.length}
             </span>
             {sonraIndeksler.length > 0 ? (
               <span
                 aria-hidden
-                className="tabular flex h-5 min-w-5 items-center justify-center rounded-full bg-warn-fill px-1 text-[11px] font-bold text-white"
+                className="tabular flex h-5 min-w-5 items-center justify-center rounded-full bg-warning-500 px-1 text-[11px] font-bold text-white"
               >
                 {sonraIndeksler.length}
               </span>
             ) : null}
           </Button>
           {son ? (
-            <Button onClick={() => setBitirAcik(true)} disabled={submitting} className="flex-1">
-              <Flag /> Bitir
+            <Button onClick={() => setBitirAcik(true)} disabled={submitting} className="flex-1" startIcon={<Flag />}>
+              Bitir
             </Button>
           ) : (
-            <Button onClick={() => goTo(index + 1)} className="flex-1">
-              Sonraki <ArrowRight />
+            <Button onClick={() => goTo(index + 1)} className="flex-1" endIcon={<ArrowRight />}>
+              Sonraki
             </Button>
           )}
         </div>
       </div>
 
-      {/* Mobil soru paleti */}
-      <Dialog
-        open={paletAcik && !kapandi}
+      {/* Mobil soru paleti — telefonda alttan açılan tabaka */}
+      <Modal
+        isOpen={paletAcik && !kapandi}
         onClose={() => setPaletAcik(false)}
         title="Sorular"
         description={
@@ -1101,7 +1116,9 @@ export function CheckupRunner({
           " boş" +
           (sonraIndeksler.length > 0 ? " · " + sonraIndeksler.length + " sonra bak" : "")
         }
-        variant="sheet"
+        size="sm"
+        sheet
+        initialFocusRef={paletAktifRef}
       >
         <Palet
           questions={questions}
@@ -1109,60 +1126,62 @@ export function CheckupRunner({
           sonraBak={sonraBak}
           index={index}
           onGoTo={soruyaGit}
+          aktifRef={paletAktifRef}
         />
         <Button
           variant="soft"
           block
           className="mt-5"
+          startIcon={<Flag />}
           onClick={() => {
             setPaletAcik(false);
             setBitirAcik(true);
           }}
         >
-          <Flag /> Testi bitir
+          Testi bitir
         </Button>
-      </Dialog>
+      </Modal>
 
       {/* Bitirme onayı */}
-      <Dialog
-        open={bitirAcik && !kapandi}
+      <Modal
+        isOpen={bitirAcik && !kapandi}
         onClose={() => setBitirAcik(false)}
         title="Testi bitirmek istiyor musun?"
         description="Bitirdikten sonra cevaplarını değiştiremezsin."
+        size="sm"
+        initialFocusRef={bitirDevamRef}
       >
         <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-xl bg-brand-wash p-3 text-center">
-            <p className="font-display tabular text-2xl font-bold text-brand">{isaretli}</p>
-            <p className="text-xs text-ink-soft">işaretli</p>
+          <div className="rounded-xl bg-brand-50 p-3 text-center">
+            <p className="tabular font-display text-2xl font-bold text-brand-500">{isaretli}</p>
+            <p className="text-theme-xs text-gray-500">işaretli</p>
           </div>
-          <div
-            className={cn("rounded-xl p-3 text-center", bos > 0 ? "bg-warn-wash" : "bg-surface-sunk")}
-          >
+          <div className={cn("rounded-xl p-3 text-center", bos > 0 ? "bg-warning-50" : "bg-gray-100")}>
             <p
               className={cn(
-                "font-display tabular text-2xl font-bold",
-                bos > 0 ? "text-warn" : "text-ink-faint"
+                "tabular font-display text-2xl font-bold",
+                bos > 0 ? "text-warning-700" : "text-gray-500"
               )}
             >
               {bos}
             </p>
-            <p className="text-xs text-ink-soft">boş</p>
+            <p className="text-theme-xs text-gray-500">boş</p>
           </div>
           <div
             className={cn(
               "rounded-xl p-3 text-center",
-              sonraIndeksler.length > 0 ? "bg-warn-wash" : "bg-surface-sunk"
+              sonraIndeksler.length > 0 ? "bg-warning-50" : "bg-gray-100"
             )}
           >
             <p
               className={cn(
-                "font-display tabular text-2xl font-bold",
-                sonraIndeksler.length > 0 ? "text-warn" : "text-ink-faint"
+                "tabular font-display text-2xl font-bold",
+                sonraIndeksler.length > 0 ? "text-warning-700" : "text-gray-500"
               )}
             >
               {sonraIndeksler.length}
             </p>
-            <p className="text-xs text-ink-soft">sonra bak</p>
+            <p className="text-theme-xs text-gray-500">sonra bak</p>
           </div>
         </div>
 
@@ -1180,62 +1199,64 @@ export function CheckupRunner({
         />
 
         {bos > 0 ? (
-          <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
+          <p className="mt-4 text-theme-sm leading-relaxed text-gray-500">
             Boş sorular nete girmez ama konu haritanda &quot;bilmiyorum&quot; olarak sayılır.
           </p>
         ) : null}
         {bekleyen > 0 ? (
-          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-relaxed text-bad">
+          <p className="mt-3 flex items-start gap-1.5 text-theme-sm leading-relaxed text-error-700">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             {bekleyen} cevabın henüz kaydedilmedi. Bitir dediğinde önce onları yazmayı deneyeceğim.
           </p>
         ) : null}
-        {bitirHatasi ? <Alert className="mt-4">{bitirHatasi}</Alert> : null}
-        <div className="mt-5 flex gap-2.5">
-          <Button variant="secondary" onClick={() => setBitirAcik(false)} className="flex-1">
+        {bitirHatasi ? (
+          <Alert variant="error" compact className="mt-4">
+            {bitirHatasi}
+          </Alert>
+        ) : null}
+        <div className="mt-6 flex gap-2.5">
+          <Button ref={bitirDevamRef} variant="outline" onClick={() => setBitirAcik(false)} className="flex-1">
             Devam et
           </Button>
-          <Button onClick={doSubmit} disabled={submitting} className="flex-1">
-            {submitting ? <Loader2 className="animate-spin" /> : <Flag />}
+          <Button onClick={doSubmit} loading={submitting} startIcon={<Flag />} className="flex-1">
             {submitting ? "Hesaplanıyor…" : "Bitir"}
           </Button>
         </div>
-      </Dialog>
+      </Modal>
 
       {/* Çıkış onayı */}
-      <Dialog
-        open={cikisAcik && !kapandi}
+      <Modal
+        isOpen={cikisAcik && !kapandi}
         onClose={() => setCikisAcik(false)}
         title="Testten çıkmak istiyor musun?"
+        size="sm"
+        initialFocusRef={cikisDonRef}
       >
-        <p className="text-sm leading-relaxed text-ink-soft">
+        <p className="text-sm leading-relaxed text-gray-500">
           Cevapların kayıtlı, istediğin zaman kaldığın yerden devam edebilirsin.{" "}
-          <strong className="font-semibold text-ink">Ama süre işlemeye devam eder:</strong>{" "}
-          <span className="tabular font-semibold text-ink">{formatClock(remaining)}</span> kaldı.
+          <strong className="font-semibold text-gray-800">Ama süre işlemeye devam eder:</strong>{" "}
+          <span className="tabular font-semibold text-gray-800">{formatClock(remaining)}</span> kaldı.
         </p>
         {bekleyen > 0 ? (
-          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-relaxed text-warn">
+          <p className="mt-3 flex items-start gap-1.5 text-theme-sm leading-relaxed text-warning-700">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             {bekleyen} cevabın henüz sunucuya ulaşmadı. Bu cihazda saklı; teste döndüğünde
             gönderilir.
           </p>
         ) : null}
-        <div className="mt-5 flex gap-2.5">
-          <Button variant="secondary" onClick={() => setCikisAcik(false)} className="flex-1">
+        <div className="mt-6 flex gap-2.5">
+          <Button ref={cikisDonRef} variant="outline" onClick={() => setCikisAcik(false)} className="flex-1">
             Teste dön
           </Button>
-          <Link
-            href="/panel"
-            className="flex h-11 flex-1 items-center justify-center rounded-xl bg-bad-wash text-sm font-semibold text-bad transition hover:bg-bad-fill hover:text-white"
-          >
+          <ButtonLink href="/panel" variant="danger-outline" className="flex-1">
             Çık
-          </Link>
+          </ButtonLink>
         </div>
-      </Dialog>
+      </Modal>
 
       {/* Süre doldu — kapatılamaz: öğrenci teste geri dönemez, sonuca gider. */}
-      <Dialog
-        open={kapandi}
+      <Modal
+        isOpen={kapandi}
         onClose={() => {}}
         dismissable={false}
         title="Süre doldu"
@@ -1244,45 +1265,48 @@ export function CheckupRunner({
             ? undefined
             : "Kaydedilen cevapların değerlendiriliyor, birazdan sonuç ekranındasın."
         }
+        size="sm"
       >
         {bitirHatasi ? (
           <>
-            <Alert>{bitirHatasi}</Alert>
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+            <Alert variant="error" compact>
+              {bitirHatasi}
+            </Alert>
+            <p className="mt-3 text-theme-sm leading-relaxed text-gray-500">
               Kaydedilen cevapların kaybolmaz. Bağlantın gelince kendiliğinden tekrar deneyeceğim;
               bu ekranı kapatsan da sonucun hesaplanıp Gelişim sayfana düşer.
             </p>
-            <div className="mt-5 flex gap-2.5">
+            <div className="mt-6 flex gap-2.5">
               {oturumYok ? (
-                <LinkButton href="/giris" className="flex-1">
-                  <LogIn /> Giriş yap
-                </LinkButton>
+                <ButtonLink href="/giris" className="flex-1" startIcon={<LogIn />}>
+                  Giriş yap
+                </ButtonLink>
               ) : (
-                <Button onClick={doSubmit} disabled={submitting} className="flex-1">
-                  {submitting ? <Loader2 className="animate-spin" /> : <RefreshCw />} Tekrar dene
+                <Button onClick={doSubmit} loading={submitting} startIcon={<RefreshCw />} className="flex-1">
+                  Tekrar dene
                 </Button>
               )}
-              <LinkButton href="/panel" variant="secondary" className="flex-1">
+              <ButtonLink href="/panel" variant="outline" className="flex-1">
                 Ana sayfa
-              </LinkButton>
+              </ButtonLink>
             </div>
           </>
         ) : (
-          <div className="flex items-center gap-3 rounded-xl bg-surface-sunk p-4">
-            <Loader2 className="size-5 shrink-0 animate-spin text-brand" aria-hidden />
-            <p className="text-sm text-ink-soft">
-              <span className="tabular font-semibold text-ink">{isaretli}</span> işaretli,{" "}
-              <span className="tabular font-semibold text-ink">{bos}</span> boş.
+          <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-4">
+            <Loader2 className="size-5 shrink-0 animate-spin text-brand-500" aria-hidden />
+            <p className="text-sm text-gray-500">
+              <span className="tabular font-semibold text-gray-800">{isaretli}</span> işaretli,{" "}
+              <span className="tabular font-semibold text-gray-800">{bos}</span> boş.
             </p>
           </div>
         )}
         {kayipCevap > 0 ? (
-          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-relaxed text-warn">
+          <p className="mt-3 flex items-start gap-1.5 text-theme-sm leading-relaxed text-warning-700">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
             Son {kayipCevap} işaretin süre dolduktan sonra ulaştığı için kaydedilemedi.
           </p>
         ) : null}
-      </Dialog>
+      </Modal>
     </div>
   );
 }

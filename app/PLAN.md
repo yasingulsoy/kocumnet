@@ -279,6 +279,8 @@ derlenmiş JS değil TypeScript kaynağı ve uzantısız import kullanıyor (bun
 | 18 | Ödeme sağlayıcı entegrasyonu (iyzico/PayTR) | 2 | ⬜ hesap bekliyor |
 | 19 | Mesafeli satış sözleşmesi + cayma hakkı metinleri | 2 | ⬜ hukukçu |
 | 20 | Adaptif soru seçimi (soru başına ≥300 cevap sonrası) | 3 | ⬜ |
+| 21 | Alıştırma: "Benzerini çöz", "Bu konuda çalış" (§12) | 2 | ✅ |
+| 22 | Yanlış defteri + aralıklı tekrar, "Bugünkü tekrar" (§12) | 2 | ✅ (aralıklar hoca onayı bekliyor) |
 
 **Doğrulama:** `npm run smoke` (saf mantık: puanlama, teşhis, parola, içerik şeması) ·
 `npm run test:markup` (yazım biçimi + gidiş-dönüş) · `npm run test:leak` (uçtan uca akış,
@@ -440,3 +442,58 @@ okşuyor, hiçbir eyleme yol açmıyor.
 KPSS/DGS/ALES için `penaltyRatio` şu an **0.25** yazılı ve kodda ⚠️ işaretli:
 yayına çıkmadan Serhat Hoca ile doğrulanmalı. Oran oturum başlarken paketten
 kopyalandığı için sonradan düzeltmek **eski sonuçları düzeltmiyor**.
+
+---
+
+## 12. Öğrenme döngüsü: alıştırma ve yanlış defteri (2026-10-10)
+
+Check-up ölçüyor ve sıralıyordu; öğrenci yanlışını gördükten sonra yapacak bir
+şey bulamıyordu. Döngü artık kapanıyor: **yanlışı gör → hemen benzerini çöz →
+günler sonra benzeriyle yeniden dene.** Kurallar README'de ("Alıştırma ve
+yanlış defteri"), sabitler tek dosyada: `lib/review.ts`.
+
+### 12.1 Alıştırma ölçüm değil
+
+Yeni oturum türü `PRACTICE` (`practiceMode`: `SIMILAR` benzer soru, `TOPIC`
+konu çalışması, `REVIEW` bugünkü tekrar). Süre yok, her cevaptan sonra doğrusu,
+yanlış şıkkın hata tipi + reçetesi ve çözüm. Cevap kilitli.
+
+Kontrol testindeki "ölçüm değil, doğrulama" kararının bir adım ötesi: alıştırma
+**hiçbir ölçüme girmez** — sonuç satırı yok; eğilim, tahmini net, plan, haftalık
+posta, panelin risk listesi ve madde analizi onu süzer; soru/şık sayaçları
+(kalibrasyon) yalnızca sınav bitişinde artar. Çözümü gösterilen bir sorunun
+cevabı ölçüm sayılsaydı soru olduğundan kolay, öğrenci olduğundan iyi görünürdü.
+
+Alıştırma sorusu tekrar engeline yazılır (30 gün sınava gelmez): öğrenci
+çözümünü gördü, sınavda hatırlar.
+
+### 12.2 Neden benzer soru, aynısı değil
+
+Öğrenci yanlış yaptığı sorunun çözümünü sonuç ekranında gördü. Aynı soruyu
+yeniden sormak hafızayı ölçer, öğrenmeyi değil. Benzer = aynı kazanım (yoksa
+aynı konu), aynı seviye, zorluk ±1, sınav kapsamı aynı kural. Havuzda benzer
+yoksa bunu söylüyoruz; düğme hiç çıkmıyor.
+
+### 12.3 Yanlış defteri
+
+Yalnızca ölçümler (paket, kontrol testi, seviyeli aşama) madde yazar.
+Aralıklar 1 → 3 → 7 gün; üçü de doğruysa madde defterden çıkar, yanlış başa
+döndürür. Defter idempotent (aynı test iki kez puanlanırsa değişmez; geç
+puanlanan eski test sonraki tekrarı silmez). Bugünkü tekrar günde en fazla 10
+soru; vadeler Türkiye saatiyle gün başına yuvarlı.
+
+### 12.4 Hocaya sorulacaklar (sabitler `lib/review.ts`'te)
+
+1. Aralıklar 1/3/7 gün ve "3 tekrar doğruysa çıkar" kuralı uygun mu?
+2. Günlük tekrar sınırı 10 soru, alıştırma sınırı 24 saatte 30 soru uygun mu?
+3. Kazanımında başka soru olmayan yanlış için aynı konudan (kazanımsız) benzer
+   getirelim mi, yoksa "benzeri yok" demeye devam mı?
+4. Benzeri havuzda olmayan madde için aynı sorunun kendisi (çözümü görülmüş
+   olsa da) tekrar sorulsun mu?
+5. Hata tipi reçeteleri (lib/coaching.ts) desen için yazıldı ("dört işlemde
+   kaybediyorsun"); tek bir yanlışın altında da bu metin mi kalsın, ayrı kısa
+   metin mi yazalım?
+6. Haftalık plandaki "yanlışlarını deftere geçir" işi: yanlışlar artık deftere
+   kendiliğinden giriyor. Bu iş başka bir işe mi dönüşsün (ör. "defterdeki
+   çözümleri oku"), yoksa kontrol testi gibi bugünkü tekrar bitince sistem mi
+   kapatsın?

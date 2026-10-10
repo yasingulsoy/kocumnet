@@ -10,10 +10,24 @@ import {
   type ExamScopeValue,
   type GradeValue,
 } from "@/lib/exams";
-import { Alert, Button, Card } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { cx } from "@/components/tailadmin/cx";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
 
 const initial: TanismaState = {};
+
+/** Aç/kapa düğmesi: seçili marka mavisi, seçilmemiş beyaz. 44 px dokunma hedefi. */
+function secimSinifi(secili: boolean) {
+  return secili
+    ? "border-brand-500 bg-brand-500 text-white"
+    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100";
+}
+
+/** "TYT — Temel Yeterlilik Testi" → "Temel Yeterlilik Testi": kısaltma zaten rozette. */
+function uzunAd(ad: string) {
+  return ad.includes("—") ? ad.split("—")[1].trim() : ad;
+}
 
 /**
  * İki adım: (1) sınav, (2) sınıf + hedef net.
@@ -57,7 +71,7 @@ export function TanismaForm({
 
   return (
     <form action={formAction} className="space-y-5">
-      {state.error ? <Alert>{state.error}</Alert> : null}
+      {state.error ? <Alert variant="error">{state.error}</Alert> : null}
 
       {/* Sunucuya giden değerler — görünen denetimlerden bağımsız. */}
       <input type="hidden" name="targetExam" value={sinav ?? ""} />
@@ -65,7 +79,7 @@ export function TanismaForm({
       <input type="hidden" name="targetNet" value={hedef} />
 
       {adim === 1 ? (
-        <ul className="grid gap-2.5">
+        <ul className="grid gap-3">
           {SECILEBILIR_SINAVLAR.map((s) => {
             const e = EXAMS[s];
             return (
@@ -73,26 +87,24 @@ export function TanismaForm({
                 <button
                   type="button"
                   onClick={() => sinavSec(s)}
-                  className={cn(
-                    "flex w-full touch-manipulation items-center gap-3 rounded-2xl border bg-surface p-4 text-start transition",
-                    "active:scale-[0.995] [@media(hover:hover)]:hover:border-brand/50",
-                    sinav === s ? "border-brand bg-brand-wash/40" : "border-line"
+                  className={cx(
+                    "flex w-full cursor-pointer touch-manipulation items-center gap-4 rounded-2xl border p-4 text-start transition",
+                    "hover:shadow-theme-md active:bg-gray-50",
+                    sinav === s ? "border-brand-500 bg-brand-25" : "border-gray-200 bg-white hover:border-brand-300"
                   )}
                 >
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-caption font-bold text-brand">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-theme-sm font-bold text-brand-500">
                     {e.short.split(" ")[0]}
                   </span>
                   <span className="min-w-0 flex-1">
                     {/* Rozette zaten kısaltma var; başlıkta tekrar etmiyoruz
                         ("TYT — Temel Yeterlilik Testi" telefonda iki satıra düşüyordu). */}
-                    <span className="block text-body font-semibold text-ink">
-                      {e.name.includes("—") ? e.name.split("—")[1].trim() : e.name}
-                    </span>
-                    <span className="block text-caption text-ink-faint">
+                    <span className="block text-base font-semibold text-gray-800">{uzunAd(e.name)}</span>
+                    <span className="mt-0.5 block text-theme-sm text-gray-500">
                       {e.audience} · matematik {e.mathQuestionCount} soru · {e.season}
                     </span>
                   </span>
-                  <ArrowRight className="size-4 shrink-0 text-ink-faint" />
+                  <ArrowRight className="size-5 shrink-0 text-gray-400 rtl:rotate-180" aria-hidden />
                 </button>
               </li>
             );
@@ -101,114 +113,123 @@ export function TanismaForm({
       ) : (
         <div className="space-y-5">
           {/* Seçilen sınav — değiştirmek tek dokunuş */}
-          <Card className="flex items-start gap-3 p-4">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand text-caption font-bold text-white">
+          <Card tone="brand" className="flex items-start gap-3 p-4 sm:gap-4 sm:p-5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-theme-sm font-bold text-white">
               {bilgi?.short.split(" ")[0]}
             </span>
             <span className="min-w-0 flex-1">
               {/* Rozette kısaltma zaten var; başlıkta tekrar etmiyoruz. */}
-              <span className="block text-body font-semibold text-ink">
-                {bilgi && bilgi.name.includes("—") ? bilgi.name.split("—")[1].trim() : bilgi?.name}
-              </span>
-              <span className="mt-0.5 block text-caption leading-snug text-ink-faint">
-                {bilgi?.blankAdvice}
-              </span>
+              <span className="block text-base font-semibold text-gray-800">{bilgi ? uzunAd(bilgi.name) : null}</span>
+              <span className="mt-0.5 block text-theme-sm leading-snug text-gray-500">{bilgi?.blankAdvice}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => setAdim(1)}
-              className="-me-1 shrink-0 rounded-lg px-3 py-2 text-caption font-semibold text-brand active:bg-brand-wash"
-            >
+            <Button variant="soft" size="xs" onClick={() => setAdim(1)} className="shrink-0">
               Değiştir
-            </button>
+            </Button>
           </Card>
 
-          {/* Sınıf */}
-          <fieldset>
-            <legend className="flex items-center gap-2 text-body font-semibold text-ink">
-              <GraduationCap className="size-4 text-brand" /> Hangi aşamadasın?
-            </legend>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {siniflar.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setSinif(g)}
-                  aria-pressed={sinif === g}
-                  className={cn(
-                    "min-h-11 touch-manipulation rounded-xl border px-4 text-body font-medium transition",
-                    sinif === g
-                      ? "border-brand bg-brand text-white"
-                      : "border-line bg-surface text-ink-soft active:bg-surface-sunk"
-                  )}
-                >
-                  {GRADE_LABEL[g]}
-                </button>
-              ))}
+          {/* Üç soru tek kartta, aralarında ince çizgi. Dolgu sarmalayıcıda:
+              dolgulu fieldset'te legend dolgunun dışına (kenara) çizilir. */}
+          <Card className="divide-y divide-gray-100">
+            {/* Sınıf */}
+            <div className="p-5 sm:p-6">
+              <fieldset>
+                <legend className="flex items-center gap-2 text-base font-semibold text-gray-800">
+                  <GraduationCap className="size-4 text-brand-500" aria-hidden /> Hangi aşamadasın?
+                </legend>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {siniflar.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setSinif(g)}
+                      aria-pressed={sinif === g}
+                      className={cx(
+                        "min-h-11 cursor-pointer touch-manipulation rounded-lg border px-4 text-sm font-medium transition",
+                        secimSinifi(sinif === g)
+                      )}
+                    >
+                      {GRADE_LABEL[g]}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
-          </fieldset>
 
-          {/* Hedef net */}
-          <fieldset>
-            <legend className="flex items-center gap-2 text-body font-semibold text-ink">
-              <Target className="size-4 text-brand" /> Matematikte hedefin kaç net?
-            </legend>
-            <p className="mt-1 text-caption text-ink-soft">
-              {bilgi?.short} matematikte {bilgi?.mathQuestionCount} soru var. Hedefini sonra
-              profilinden değiştirebilirsin.
-            </p>
-            <div className="mt-3 flex items-center gap-4">
-              <input
-                type="range"
-                min={0}
-                max={bilgi?.mathQuestionCount ?? 40}
-                step={1}
-                value={hedef}
-                onChange={(e) => setHedef(Number(e.target.value))}
-                aria-label="Hedef net"
-                className="h-11 flex-1 accent-[var(--brand)]"
-              />
-              <output className="font-display tabular w-16 shrink-0 text-center text-num-sm font-bold text-ink">
-                {hedef}
-              </output>
-            </div>
-          </fieldset>
-
-          {/* Haftalık hedef */}
-          <fieldset>
-            <legend className="text-body font-semibold text-ink">Haftada kaç test?</legend>
-            <p className="mt-1 text-caption text-ink-soft">
-              Haftada bir check-up çoğu öğrenci için doğru tempo: ölçüm için yeterli,
-              çalışmayı bölmeyecek kadar seyrek.
-            </p>
-            <div className="mt-3 flex gap-2">
-              {[1, 2, 3].map((n) => (
-                <label
-                  key={n}
-                  className={cn(
-                    "flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-xl border text-body font-medium transition",
-                    "has-[:checked]:border-brand has-[:checked]:bg-brand has-[:checked]:text-white",
-                    "border-line bg-surface text-ink-soft"
-                  )}
-                >
+            {/* Hedef net */}
+            <div className="p-5 sm:p-6">
+              <fieldset>
+                <legend className="flex items-center gap-2 text-base font-semibold text-gray-800">
+                  <Target className="size-4 text-brand-500" aria-hidden /> Matematikte hedefin kaç net?
+                </legend>
+                <p className="mt-1 text-theme-sm text-gray-500">
+                  {bilgi?.short} matematikte {bilgi?.mathQuestionCount} soru var. Hedefini sonra
+                  profilinden değiştirebilirsin.
+                </p>
+                <div className="mt-3 flex items-center gap-4">
                   <input
-                    type="radio"
-                    name="weeklyTestGoal"
-                    value={n}
-                    defaultChecked={n === 1}
-                    className="sr-only"
+                    type="range"
+                    min={0}
+                    max={bilgi?.mathQuestionCount ?? 40}
+                    step={1}
+                    value={hedef}
+                    onChange={(e) => setHedef(Number(e.target.value))}
+                    aria-label="Hedef net"
+                    className="h-11 min-w-0 flex-1 cursor-pointer accent-brand-500"
                   />
-                  {n} test
-                </label>
-              ))}
+                  <output className="tabular w-16 shrink-0 text-center font-display text-title-sm font-semibold text-gray-800">
+                    {hedef}
+                  </output>
+                </div>
+              </fieldset>
             </div>
-          </fieldset>
 
-          <Button type="submit" size="lg" block disabled={pending || !sinif}>
-            {pending ? "Kaydediliyor…" : "Hazırım, başlayalım"} <Check />
+            {/* Haftalık hedef */}
+            <div className="p-5 sm:p-6">
+              <fieldset>
+                <legend className="text-base font-semibold text-gray-800">Haftada kaç test?</legend>
+                <p className="mt-1 text-theme-sm text-gray-500">
+                  Haftada bir check-up çoğu öğrenci için doğru tempo: ölçüm için yeterli,
+                  çalışmayı bölmeyecek kadar seyrek.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  {[1, 2, 3].map((n) => (
+                    <label
+                      key={n}
+                      className={cx(
+                        "flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg border text-sm font-medium transition",
+                        "border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+                        "has-checked:border-brand-500 has-checked:bg-brand-500 has-checked:text-white",
+                        // Radyo görünmez: klavye odağı etiketin çerçevesinde görünsün.
+                        "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="weeklyTestGoal"
+                        value={n}
+                        defaultChecked={n === 1}
+                        className="sr-only"
+                      />
+                      {n} test
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+          </Card>
+
+          <Button
+            type="submit"
+            size="md"
+            block
+            loading={pending}
+            disabled={!sinif}
+            endIcon={pending ? undefined : <Check />}
+          >
+            {pending ? "Kaydediliyor…" : "Hazırım, başlayalım"}
           </Button>
           {!sinif ? (
-            <p className="text-center text-caption text-ink-faint">Devam etmek için aşamanı seç.</p>
+            <p className="text-center text-theme-sm text-gray-500">Devam etmek için aşamanı seç.</p>
           ) : null}
         </div>
       )}

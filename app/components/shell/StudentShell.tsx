@@ -1,102 +1,74 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowUpRight, LogOut } from "lucide-react";
+import { ArrowUpRight, LogOut, UserRound } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
 import { logoutAction } from "@/lib/actions/auth";
 import { SITE_URL } from "@/lib/products";
-import { Avatar, Wordmark } from "@/components/ui";
-import { BottomNav, SidebarNav } from "./nav";
+import { Logo, Wordmark } from "@/components/ui/logo";
+import { UserDropdown } from "@/components/tailadmin/header/UserDropdown";
+import { DashboardShell } from "@/components/tailadmin/layout/DashboardShell";
+import { Button, buttonClass } from "@/components/tailadmin/ui/Button";
+import { DropdownItem } from "@/components/tailadmin/ui/Dropdown";
+import { altMenu, menu } from "./nav";
 
 /**
- * Öğrenci uygulamasının çerçevesi.
+ * Öğrenci uygulamasının çerçevesi — TailAdmin kitinin DashboardShell'i.
  *
- * Masaüstü: sabit sol kenar çubuğu. Mobil: üst çubuk + alt sekme çubuğu —
- * öğrencilerin çoğu telefondan giriyor, ana gezinme başparmağın ulaştığı
- * yerde olmalı.
+ * Masaüstü: daraltılabilir kenar çubuğu + üst çubuk (kullanıcı menüsü).
+ * Tablet: üst çubuktaki menü düğmesi çekmeceyi açar. Telefon: alt sekme
+ * çubuğu — öğrencilerin çoğu telefondan giriyor, ana gezinme başparmağın
+ * ulaştığı yerde olmalı; orada menü düğmesi yok (iki ayrı menü olmasın).
  *
- * Sınav ekranı BU ÇERÇEVEYİ KULLANMIYOR: test sırasında menü, dikkat
- * dağıtan her şey kaldırılıyor.
+ * Sınav ve alıştırma ekranları BU ÇERÇEVEYİ KULLANMIYOR: test sırasında
+ * menü, dikkat dağıtan her şey kaldırılıyor. Yazdırmada (sonuç → PDF)
+ * kenar çubuğu, üst çubuk ve alt çubuk görünmez.
  */
 export function StudentShell({ user, children }: { user: SessionUser; children: ReactNode }) {
   return (
-    <div className="min-h-screen lg:ps-[264px] print:ps-0">
-      {/* Klavyeyle gezen öğrenci her sayfada menüyü baştan geçmek zorunda
-          kalmasın. Odaklanmadan görünmez. */}
-      <a
-        href="#icerik"
-        className="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-xl focus:bg-brand-deep focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-white"
-      >
-        İçeriğe geç
-      </a>
-      {/* Masaüstü kenar çubuğu */}
-      <aside className="fixed inset-y-0 start-0 z-40 hidden w-[264px] flex-col border-e border-line bg-surface lg:flex print:hidden">
-        <div className="flex h-16 items-center px-5">
-          <Link href="/panel" aria-label="Ana sayfa">
-            <Wordmark />
-          </Link>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <SidebarNav />
-        </div>
-
-        <div className="border-t border-line p-3">
-          <a
-            href={SITE_URL}
-            target="_blank"
-            rel="noopener"
-            className="mb-2 flex items-center justify-between rounded-xl px-3 py-2 text-[13px] text-ink-soft transition hover:bg-surface-hover hover:text-ink"
-          >
-            kocum.net
-            <ArrowUpRight className="size-3.5" />
-          </a>
-
-          <div className="flex items-center gap-3 rounded-xl bg-surface-sunk p-2.5">
-            <Avatar name={user.name} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
-              <p className="truncate text-xs text-ink-faint">{user.email}</p>
-            </div>
+    <DashboardShell
+      nav={menu}
+      bottomNav={altMenu}
+      logo={<Wordmark />}
+      logoCollapsed={<Logo className="size-9" />}
+      logoHref="/panel"
+      logoLabel="Ana sayfa"
+      sidebarFooter={<SiteKutusu />}
+      headerEnd={
+        <UserDropdown
+          name={user.name}
+          detail={user.email}
+          footer={
             <form action={logoutAction}>
-              <button
-                type="submit"
-                aria-label="Çıkış yap"
-                title="Çıkış yap"
-                className="flex size-8 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface hover:text-bad"
-              >
-                <LogOut className="size-4" />
-              </button>
+              <Button type="submit" variant="outline" size="xs" block startIcon={<LogOut />}>
+                Çıkış yap
+              </Button>
             </form>
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobil üst çubuk */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden print:hidden">
-        <Link
-          href="/panel"
-          aria-label="Ana sayfa"
-          className="-ms-1 flex min-h-11 items-center rounded-xl px-1"
+          }
         >
-          <Wordmark compact />
-        </Link>
-        <Link
-          href="/profil"
-          aria-label="Profil"
-          className="-me-2 flex size-11 items-center justify-center rounded-xl transition active:bg-surface-sunk"
-        >
-          <Avatar name={user.name} className="size-8 text-xs" />
-        </Link>
-      </header>
+          <DropdownItem tag="a" href="/profil" icon={<UserRound />}>
+            Profil ve hedefin
+          </DropdownItem>
+          <DropdownItem tag="a" href={SITE_URL} external target="_blank" icon={<ArrowUpRight />}>
+            kocum.net
+          </DropdownItem>
+        </UserDropdown>
+      }
+    >
+      {children}
+    </DashboardShell>
+  );
+}
 
-      <main
-        id="icerik"
-        className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pb-12 lg:pt-10 print:max-w-none print:p-0"
-      >
-        {children}
-      </main>
-
-      <BottomNav />
+/** Kenar çubuğunun altı (TailAdmin'in SidebarWidget yeri): yayınlara giden yol. */
+function SiteKutusu() {
+  return (
+    <div className="rounded-2xl bg-gray-50 px-4 py-5 text-center">
+      <p className="font-display text-sm font-semibold text-gray-800">Koçum.Net yayınları</p>
+      <p className="mt-1 mb-4 text-theme-xs text-gray-500">
+        Zayıf çıkan konular için soru bankaları ve fasiküller.
+      </p>
+      <a href={SITE_URL} target="_blank" rel="noopener" className={buttonClass({ variant: "outline", size: "xs", block: true })}>
+        kocum.net <ArrowUpRight aria-hidden />
+      </a>
     </div>
   );
 }

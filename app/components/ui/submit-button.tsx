@@ -1,13 +1,12 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2 } from "lucide-react";
-import { Button } from "./index";
+import { Button, type ButtonProps } from "@/components/tailadmin/ui/Button";
 
 /**
- * Sunucu eylemine giden formun gönder düğmesi: gönderim sürerken dönen simge
- * ve bekleme metni gösterir, ikinci dokunuşu engeller.
+ * Sunucu eylemine giden formun gönder düğmesi (kitin Button'ı): gönderim
+ * sürerken dönen halka ve bekleme metni gösterir, ikinci dokunuşu engeller.
  *
  * Neden: test başlatan formlar soru seçimi yüzünden bir iki saniye sürüyor.
  * Düğme tepkisiz kalınca öğrenci ya tekrar dokunuyor (ikinci istek) ya da
@@ -18,19 +17,21 @@ export function SubmitButton({
   children,
   pendingText = "Hazırlanıyor…",
   disabled,
+  startIcon,
+  endIcon,
   ...props
-}: Omit<ComponentProps<typeof Button>, "type"> & { pendingText?: ReactNode }) {
+}: Omit<ButtonProps, "type" | "loading"> & { pendingText?: ReactNode }) {
   const { pending } = useFormStatus();
   return (
-    <Button {...props} type="submit" disabled={pending || disabled} aria-busy={pending || undefined}>
-      {pending ? (
-        <>
-          <Loader2 className="animate-spin" aria-hidden />
-          {pendingText}
-        </>
-      ) : (
-        children
-      )}
+    <Button
+      {...props}
+      type="submit"
+      loading={pending}
+      disabled={disabled}
+      startIcon={pending ? undefined : startIcon}
+      endIcon={pending ? undefined : endIcon}
+    >
+      {pending ? pendingText : children}
     </Button>
   );
 }

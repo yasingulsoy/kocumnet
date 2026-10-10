@@ -2,7 +2,9 @@ import { MonitorSmartphone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { currentSessionHash } from "@/lib/auth";
 import { logoutOthersAction } from "@/lib/actions/profile";
-import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
 
 /**
  * Açık oturumlar. Aydınlatma metni "açık oturumlarınızı ayırt etmek için
@@ -48,37 +50,41 @@ export async function SessionsCard({ userId }: { userId: string }) {
   const digerleri = oturumlar.filter((o) => o.tokenHash !== suankiHash).length;
 
   return (
-    <Card className="p-5 sm:p-6">
-      <CardHeader
-        icon={<MonitorSmartphone />}
-        title="Açık oturumların"
-        description="Hesabına şu an giriş yapmış cihazlar"
-        action={
-          digerleri > 0 ? (
-            <form action={logoutOthersAction}>
-              <Button type="submit" variant="secondary" size="sm">
-                Diğerlerinden çıkış ({digerleri})
-              </Button>
-            </form>
-          ) : null
-        }
-      />
-      <ul className="mt-5 divide-y divide-line">
+    <ComponentCard
+      icon={<MonitorSmartphone aria-hidden />}
+      title="Açık oturumların"
+      desc="Hesabına şu an giriş yapmış cihazlar"
+      actions={
+        digerleri > 0 ? (
+          <form action={logoutOthersAction}>
+            <SubmitButton variant="outline" size="xs" pendingText="Çıkış yapılıyor…">
+              Diğerlerinden çıkış ({digerleri})
+            </SubmitButton>
+          </form>
+        ) : null
+      }
+      flush
+    >
+      <ul className="divide-y divide-gray-100">
         {oturumlar.map((o) => {
           const bu = o.tokenHash === suankiHash;
           return (
-            <li key={o.id} className="flex items-center justify-between gap-3 py-3">
+            <li key={o.id} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">{cihazAdi(o.userAgent)}</p>
-                <p className="text-xs text-ink-faint">
+                <p className="truncate text-sm font-medium text-gray-800">{cihazAdi(o.userAgent)}</p>
+                <p className="text-theme-xs text-gray-500">
                   {o.createdAt.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} tarihinde giriş
                 </p>
               </div>
-              {bu ? <Badge tone="ok">Bu cihaz</Badge> : null}
+              {bu ? (
+                <Badge size="sm" color="success">
+                  Bu cihaz
+                </Badge>
+              ) : null}
             </li>
           );
         })}
       </ul>
-    </Card>
+    </ComponentCard>
   );
 }

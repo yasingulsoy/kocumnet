@@ -34,7 +34,7 @@ Oturum jetonları rastgele üretilip hash'i saklandığı için imzalama anahtar
 
 ## Doğrulama
 
-Her değişiklikten sonra üçü de çalıştırılmalı:
+Her değişiklikten sonra hepsi çalıştırılmalı:
 
 ```bash
 npm run smoke        # saf mantık: parola, içerik şeması, net, teşhis, SEVİYE KAPILARI
@@ -42,6 +42,8 @@ npm run smoke        # saf mantık: parola, içerik şeması, net, teşhis, SEV�
 npm run test:markup  # yazım biçimi ayrıştırma + düzenleme gidiş-dönüşü
 npm run test:leak    # uçtan uca akış + CEVAP ANAHTARI SIZINTI DENETİMİ
 npm run test:levels  # seviyeli check-up zinciri + TELAFİDE SORU TEKRARI DENETİMİ
+npm run test:practice # alıştırma + yanlış defteri: anahtar yalnızca cevaplanan soruda,
+                      #   ölçüm kirlenmiyor, defter idempotent, aralıklı tekrar
 ```
 
 `test:leak` öğrenciye giden JSON'da `isCorrect`/`errorType` olmadığını doğrular.
@@ -70,14 +72,21 @@ app/
     seviyeli/              Seviyeli check-up girişi: nasıl işler, başlat
     seviye/[runId]         Aşama geçişi, telafi uyarısı, kilit ve üç karne
     sonuc/[sessionId]      Karar cümlesi → öncelik sırası → plan → kaynak → inceleme
+                           (yanlış/boşta "Benzerini çöz", zayıf konuda "Bu konuda çalış")
+    defter/                Yanlış defteri: açık maddeler konuya göre, bugünkü tekrar
     gelisim/               Hedef takibi (tahmini net), eğilim, konu haritası, geçmiş
     profil/                Bilgiler, HEDEF (sınav/sınıf/net/tempo), parola, erişimler
   tanisma/                 İlk giriş: hangi sınav · hangi aşama · kaç net hedef
   checkup/[sessionId]      Sınav modu — çerçevesiz, dikkat dağıtan hiçbir şey yok
+  alistirma/[sessionId]    Alıştırma — süresiz, her cevaptan sonra doğrusu + çözüm
   api/media/[id]           Görsel servisi (baytlar veritabanında)
 components/
-  ui/                      Tasarım sistemi: düğme, kart, rozet, grafik, diyalog
-  shell/                   Öğrenci çerçevesi (kenar çubuğu + mobil sekme çubuğu)
+  tailadmin/               TailAdmin kiti (KOPYA — elle düzenleme; kaynak design/tailadmin/)
+  ui/                      Kitte olmayanlar: ilerleme çubuğu, iskelet, logo, tarih/sayı biçimi,
+                           SubmitButton, PasswordInput (ikisi de kitin Button/Input'u)
+  shell/                   Öğrenci çerçevesi (kitin DashboardShell'i + telefonda alt sekme çubuğu)
+  KonuHaritasi.tsx         Konu haritası ve seviye rozeti (kitin MeterList'i + Badge)
+  BasariGrafikleri.tsx     Başarı eğilimi ve son testler (kitin ApexCharts eklentisi)
   PackageCard.tsx          Paket kartı (pano + katalog)
   PlanCard.tsx             Haftalık plan — konuya göre gruplu, RETEST işaretlenemez
   MathContent.tsx          LaTeX → HTML, SUNUCUDA (KaTeX JS istemciye gitmez)
@@ -90,6 +99,9 @@ lib/
   level-selection.ts       Kazanım başına soru seçimi + telafi turu
   level-report.ts          Üç karnenin verisi
   checkup.ts               Akış: başlat → cevapla → bitir → incele → konu tekrarı
+  practice.ts              Alıştırma: benzer soru, konu çalışması, bugünkü tekrar, geri bildirim
+  notebook.ts              Yanlış defteri: ölçümden madde yaz, tekrar cevabıyla ilerlet
+  review.ts                ALIŞTIRMA + DEFTER SABİTLERİ VE KURALLARI (saf): aralıklar, sınırlar, benzerlik
   scoring.ts · diagnosis.ts · insights.ts   Puanlama, teşhis, pano okumaları (saf)
   question-selection.ts    Katmanlı soru seçimi (adaptif DEĞİL — PLAN §5)
   question-content.ts      JSONB blok şeması, parmak izi, şık doğrulaması
@@ -137,18 +149,55 @@ buradan.
 | **Aşamalar ayrı oturum** | Her birinin kendi süresi var, aralarında ara verilebilir. Mevcut oturum makinesi (sayaç, cevap kaydı, sızıntı koruması) olduğu gibi çalışıyor. |
 | **Kapsam: boş liste = KONUNUN sınavları** | Kazanımın/sorunun `examScopes` listesi doluysa o; boşsa `Topic.examScopes` (o da boşsa konunun ana sınavı). Tek tanım `lib/exam-scope.ts`; seviyeli seçim, paket seçimi ve kontrol testi (konu öğrencinin sınavında değilse açılmaz) aynı tanımı kullanır. Eskiden boş liste "her sınav" sayılıyordu: kapsamı boş AYT/TYT soruları LGS Seviye 2-3'e giriyordu. `npm run test:levels` dört aşamayı, `test:leak` kontrol testini denetliyor. |
 
+## Alıştırma ve yanlış defteri
+
+Ölçümün yanındaki öğrenme döngüsü: yanlışı gör → hemen benzerini çöz → günler
+sonra benzeriyle yeniden dene. **Bütün sabitler ve kurallar tek saf modülde:
+`lib/review.ts`** (aralıklar, günlük sınırlar, benzerlik kuralı); hoca karar
+verdiğinde yalnızca orası değişir. Veritabanı tarafı `lib/practice.ts` ve
+`lib/notebook.ts`.
+
+| Kural | Neden |
+| --- | --- |
+| **Alıştırma ayrı oturum türü** (`SessionKind.PRACTICE`, `practiceMode`: `SIMILAR` · `TOPIC` · `REVIEW`) | Aynı makine (soru sabitleme, cevap, tekrar engeli) ama süre yok ve her cevaptan sonra geri bildirim var. Oturum gizli bir alıştırma paketine (sınav başına bir tane, ilk kullanımda açılır) bağlanır; katalogda ve paket akışında görünmez. |
+| **Alıştırma ÖLÇÜM DEĞİL** | Sonuç satırı (`CheckupResult`) üretmez; soru/şık sayaçlarına, gelişime, eğilime, plana, haftalık postaya, panelin risk listelerine ve madde analizine girmez. Çözümü gösterilen sorunun cevabı ölçümü kirletirdi. Panelin istatistik sorguları `kind <> 'PRACTICE'` süzer. |
+| **Anahtar yalnızca CEVAPLANAN soruda** | `getPracticeSession` önce soruları anahtarsız okur, sonra yalnızca cevaplananların anahtarını. Cevap ilk kayıtta kilitlenir. Sınav yolları (`saveAnswer`, `submitCheckup`, `getCheckupReview`) alıştırmayı, alıştırma yolu (`answerPractice`) sınavı reddeder. `test:practice` denetliyor. |
+| **Açık sınavdaki soru alıştırmada açılmaz** | Seçim açık oturumların sorularını dışlar; cevapta ikinci kilit var. Yoksa test sürerken aynı sorunun çözümü alıştırmadan okunabilirdi. |
+| **Benzer soru** (`benzerMi`) | Asla aynı soru; kazanım varsa aynı kazanım, yoksa aynı konu; aynı seviye; zorluk ±1; sınav kapsamı `lib/exam-scope.ts`. Önce hiç görülmemiş, sonra en eski görülen. Kaynak testin soruları ve (anında alıştırmada) son 24 saatte görülenler gelmez. Benzeri yoksa düğme yok, açıklama var. |
+| **Teyit turu bekleyen kazanım korunur** | Seviyeli check-up'ın teyit turu "yeni soru" istiyor; o kazanımdan alıştırma/tekrar sorusu verilmez, madde tur bitince gelir. |
+| **Günlük sınırlar** | `GUNLUK_ALISTIRMA_SORU` (benzer + konu, 24 saatte): alıştırma anahtarı açtığı için havuz sınırsız boşaltılmasın. `GUNLUK_TEKRAR_SORU`: bugünkü tekrar en fazla 10 soru. |
+| **Yanlış defteri yalnızca ÖLÇÜMDEN** (`NotebookItem`) | Paket, kontrol testi ve seviyeli aşama puanlanınca (cron'un puanladığı süresi dolmuş testler dahil) her yanlış/boş bir madde: ilk aralık sonra. Alıştırmadaki yanlış madde açmaz. |
+| **Aralıklı tekrar** (`TEKRAR_ARALIKLARI_GUN` = 1, 3, 7) | Tekrarda maddenin BENZERİ sorulur. Doğru → sonraki aralık, sonuncusu da doğruysa defterden çıkar; yanlış/"Bilmiyorum" → başa. Vadeler Türkiye saatiyle gün başına yuvarlı. "Benzerini çöz" defteri ilerletmez (hemen ardından çözülen soru aralıklı tekrar değil). |
+| **Defter idempotent** | Aynı test ikinci kez işlenirse hiçbir şey değişmez; geç puanlanan eski bir test sonradan yapılan tekrarı silmez; daha yeni bir testte yine yanlış yapılan madde başa döner (`yanlisKarari`). Aynı tekrar cevabı maddeyi iki kez ilerletmez. |
+
 ## Tasarım sistemi
 
-- **Renkler** `app/globals.css` içinde belirteç olarak: marka (lacivert · mavi ·
-  camgöbeği), mavi tonlu nötrler, anlam renkleri için ayrı **metin** ve **dolgu** tonu.
-- **Bileşenler** `components/ui/`: `Button`/`LinkButton` (6 varyant, 3 boy), `Card`,
-  `Badge`, `Alert`, `Field`, `Stat`, `Progress`, `EmptyState`, `Dialog` (yerel
-  `<dialog>`, mobilde alttan tabaka), `ScoreRing`, `TrendChart`, `TopicBar`.
-- **Grafikler saf SVG** — grafik kütüphanesi yok; sunucuda çizilip JS'siz geliyor.
+Arayüz **TailAdmin kitinin** üstünde (`design/tailadmin/`, MIT; bileşenler, prop'lar
+ve kurallar orada README'de). Kopyası `components/tailadmin/` ve `app/tailadmin.css`:
+elle düzenlenmez, kitte değişiklik → `node design/sync.mjs`.
+
+- **Renk ve yazı**: kitin gri/anlam/marka ölçekleri (`gray-*`, `success-*`,
+  `warning-*`, `error-*`, `brand-*`); marka mavisi `#1a5fb4`, Poppins başlık + Inter
+  gövde, logo `components/ui/logo.tsx`. **Koyu tema yok** (KaTeX ve beyaz zeminli
+  soru görselleri): `dark:` yazılmaz. Soru ve şık metni `text-read`/`text-body`'nin
+  altına düşmez.
+- **Çerçeve** `components/shell/`: kitin `DashboardShell`'i. Masaüstünde kenar
+  çubuğu, tablette çekmece, **telefonda alt sekme çubuğu** (beş sekme; sonuç ekranı
+  "Gelişim"i, seviyeli check-up "Testler"i yakar). Sınav ve alıştırma ekranları
+  çerçevesiz.
+- **Kartlar**: renk className'le verilmez (kitin gri kenarı/beyazı kazanabilir);
+  vurgulu kart `Card tone="brand"`, koyu bant `Card tone="dark"` + `GridShape`.
+- **Grafikler**: pano ve gelişimde ApexCharts (kitin `extras/charts`'ı;
+  `next/dynamic` + `ssr:false`, grafiği olmayan sayfa indirmez), sarmalayıcı
+  `components/BasariGrafikleri.tsx` (0-100 ekseni, yüzde, görünmez veri tablosu).
+  Konu haritası kitin `MeterList`'i (`components/KonuHaritasi.tsx`), tek oran
+  `RadialGauge`. **Sonuç ekranında JS grafik yok**: liste telefonda okunur ve
+  "Yazdır / PDF" ile basılır.
 - **İkonlar** lucide-react 1.x (bazı adlar 0.x'ten farklı: `CircleCheck`,
   `TriangleAlert`, `ChartColumn`…).
-- Sınıf birleştirme `lib/cn.ts` (clsx + tailwind-merge): çağıranın verdiği sınıf
-  bileşenin varsayılanını ezer, `!önemli` işaretine gerek kalmaz.
+- Sınıf birleştirme: kit bileşenleri `cx` (yalnızca ekler, varyant prop'la);
+  uygulama kodu `lib/cn.ts` (clsx + tailwind-merge, projenin ve kitin özel
+  boyut/renk/gölge adları öğretilmiş — aşağıda).
 
 ## Bilinmesi gerekenler
 
@@ -208,6 +257,25 @@ buradan.
   işaretlenen cevap reddedilmesin diye. Sınav eylemleri hata KODU döndürür
   (`KAPANDI`, `SURE_DOLDU`, `OTURUM`): üretimde fırlatılan hatanın mesajı istemciye
   gitmiyor ve ekran kalıcı hatayı ağ kopması sanıp sonsuza kadar tekrar deniyordu.
+- **`cn()` (tailwind-merge) özel adları ancak öğretilirse tanır.** Öğretilmeden
+  `text-micro`, `text-caption`, `text-theme-xs` gibi boyutları renk sanıp yanına
+  gelen `text-white` gibi bir renkle "çakışıyor" diye siliyordu (sonuç ekranının
+  karar çipleri, seviye şeridi, şık harfleri sessizce büyüyordu); `shadow-card`'ı
+  gölge rengi sayıyordu. `lib/cn.ts` `extendTailwindMerge` ile tokens.css'in ve
+  kitin boyut/renk/gölge/animasyon adlarını tanıtıyor; **yeni belirteç eklersen
+  oraya da yaz**. `npm run smoke` birkaç birleşimi denetliyor.
+- **Kitin bileşeninde className yalnızca EKLER.** Aynı özelliği yazan iki sınıfı
+  (`border-gray-200` + `border-brand-200`, `bg-white` + `bg-brand-950`) Tailwind
+  kendi sırasıyla dizer; hangisinin kazanacağı belli değildir (lacivert bant bir ara
+  beyaz zeminde beyaz yazı oldu). Renk/boyut için prop (`tone`, `size`, `compact`,
+  `block`) kullan; uygun prop yoksa kite ekle.
+- **Görünmez veri tablosu `sr-only` bir kabın içinde** (`<div className="sr-only"><table>`).
+  Tabloya doğrudan `sr-only` verilince tablo daralmıyor ve telefonda sayfa yana
+  taşıyordu (pano grafiği).
+- **tsx'te `@/lib/x` ile `../lib/x` ayrı modül.** Test betiği `../lib/checkup`
+  içe aktarır, `lib/practice.ts` `@/lib/checkup`; fırlatılan `CheckupError`
+  `instanceof` ile eşleşmez. Betiklerde hata adına bak (`practice-test.mts`
+  `hataVerir`). Next'in derlemesinde sorun yok.
 - **React 19 form eylemi bitince formu sıfırlar.** `<select>` DOM'da varsayılana döner
   ve React geri yazmaz; paneldeki soru formunda seçimler gizli alanlarla taşınıyor ve
   görünen select'ler efektle durumdan geri yazılıyor (`admin/.../QuestionForm.tsx`).

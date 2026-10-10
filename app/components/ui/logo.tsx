@@ -51,7 +51,7 @@ export function Wordmark({
         <span
           className={cn(
             "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-            light ? "bg-white/10 text-white/80" : "bg-surface-sunk text-ink-soft"
+            light ? "bg-white/10 text-white/80" : "bg-gray-100 text-gray-600"
           )}
         >
           check-up
@@ -65,7 +65,7 @@ export function Wordmark({
       <span
         className={cn(
           "ps-0.5 text-[9.5px] font-semibold uppercase leading-none tracking-[0.16em]",
-          light ? "text-white/70" : "text-ink-faint"
+          light ? "text-white/70" : "text-gray-500"
         )}
       >
         Matematik Check-up

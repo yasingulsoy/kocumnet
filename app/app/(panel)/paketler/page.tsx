@@ -6,8 +6,13 @@ import { prisma } from "@/lib/db";
 import { availableExamScopes, groupCatalog, loadCatalog } from "@/lib/catalog";
 import { EXAMS, isExamScope } from "@/lib/exams";
 import { PackageCard } from "@/components/PackageCard";
-import { Card, EmptyState, LinkButton, PageHeader } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { cx } from "@/components/tailadmin/cx";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { GridShape } from "@/components/tailadmin/ui/GridShape";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { SegmentedTabs, type SegmentedTabItem } from "@/components/tailadmin/ui/SegmentedTabs";
 
 export const metadata: Metadata = { title: "Testler" };
 
@@ -51,130 +56,107 @@ export default async function CatalogPage({ searchParams }: PageProps<"/paketler
       where: { kind: "LEVEL", examScope: tur as never, status: "PUBLISHED" },
     })) > 0;
 
+  // Sınav rayı: öğrencinin kendi sınavı başta ve etiketinde işaretli, "Tümü" sonda.
+  const sekmeler: SegmentedTabItem[] = [
+    ...sinavlar.map((s) => ({
+      key: s,
+      href: `/paketler?tur=${s}`,
+      active: tur === s,
+      label:
+        s === user.targetExam ? (
+          <>
+            {EXAMS[s].short}
+            <span className="rounded-full bg-brand-50 px-1.5 text-theme-xs font-medium text-brand-500">
+              senin sınavın
+            </span>
+          </>
+        ) : (
+          EXAMS[s].short
+        ),
+    })),
+    { key: "TUMU", label: "Tümü", href: "/paketler?tur=TUMU", active: tur === null },
+  ];
+
   return (
-    <div className="animate-fade space-y-5 sm:space-y-6">
-      <PageHeader
-        title="Testler"
+    <div className="animate-fade">
+      <PageBreadcrumb
+        pageTitle="Testler"
         description={`${aktifBaslik} · her paket kısa ve odaklı: her konudan en az 3 soru. Sonunda konu haritan ve yanlışlarının çözümü.`}
       />
 
-      {/* Sınav rayı: altı sınav telefonda tek satıra sığmaz, kaydırılır. */}
-      <nav
-        aria-label="Sınav seçimi"
-        className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
-      >
-        <div className="flex w-max gap-2 pb-0.5">
-          {sinavlar.map((s) => {
-            const aktif = tur === s;
-            return (
-              <Link
-                key={s}
-                href={{ pathname: "/paketler", query: { tur: s } }}
-                aria-current={aktif ? "page" : undefined}
-                className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-body font-medium transition",
-                  aktif
-                    ? "bg-brand-deep text-white shadow-card"
-                    : "bg-surface text-ink-soft ring-1 ring-line active:bg-surface-sunk"
-                )}
-              >
-                {EXAMS[s].short}
-                {s === user.targetExam ? (
-                  <span
-                    className={cn(
-                      "rounded-full px-1.5 text-micro font-semibold",
-                      aktif ? "bg-white/15 text-white" : "bg-brand-wash text-brand"
-                    )}
-                  >
-                    senin sınavın
-                  </span>
-                ) : null}
-              </Link>
-            );
-          })}
-          <Link
-            href={{ pathname: "/paketler", query: { tur: "TUMU" } }}
-            aria-current={tur === null ? "page" : undefined}
-            className={cn(
-              "flex min-h-11 shrink-0 items-center rounded-full px-4 text-body font-medium transition",
-              tur === null
-                ? "bg-brand-deep text-white shadow-card"
-                : "bg-surface text-ink-soft ring-1 ring-line active:bg-surface-sunk"
-            )}
-          >
-            Tümü
-          </Link>
-        </div>
-      </nav>
+      <div className="space-y-4 md:space-y-6">
+        {/* Sınav rayı: altı sınav telefonda tek satıra sığmaz, kaydırılır. */}
+        <SegmentedTabs label="Sınav seçimi" items={sekmeler} size="md" />
 
-      {/* Seviyeli check-up — odaklı paketlerden farklı bir şey, ayrı duruyor. */}
-      {seviyeliVar ? (
-        <Link href="/seviyeli" className="group block">
-          <Card
-            interactive
-            className="bg-brand-gradient flex flex-wrap items-center gap-4 border-0 p-5 text-white shadow-brand"
+        {/* Seviyeli check-up — odaklı paketlerden farklı bir şey, ayrı duruyor:
+            paket kartlarının arasında kaybolmasın diye lacivert bant. */}
+        {seviyeliVar ? (
+          <Link
+            href="/seviyeli"
+            className="group relative z-1 flex flex-wrap items-center gap-4 overflow-hidden rounded-2xl bg-brand-950 p-5 text-white transition hover:bg-brand-900 sm:p-6"
           >
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-              <Layers className="size-5" />
+            <GridShape />
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/10">
+              <Layers className="size-5" aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
               <p className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-h3 font-bold">Seviyeli Check-up</span>
-                <span className="rounded-full bg-white/15 px-2 py-0.5 text-micro font-semibold">
-                  3 seviye
-                </span>
+                <span className="font-display text-lg font-semibold">Seviyeli Check-up</span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-theme-xs font-medium">3 seviye</span>
               </p>
-              <p className="mt-1 text-caption text-white/80">
+              <p className="mt-1 text-theme-sm text-white/80">
                 Nerede durduğunu ve hangi kazanımın eksik olduğunu tek tek gösterir.
                 Seviye geçemezsen üstü açılmaz.
               </p>
             </div>
-            <ArrowRight className="size-5 shrink-0 transition group-hover:translate-x-1" />
+            <ArrowRight
+              className="size-5 shrink-0 transition group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1"
+              aria-hidden
+            />
+          </Link>
+        ) : null}
+
+        {gruplar.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<ClipboardList aria-hidden />}
+              title={`${aktifBaslik} için paket hazırlanıyor`}
+              description={
+                user.targetExam
+                  ? "Bu sınavın soru havuzu henüz yeterli değil. Konular ortak olduğu için diğer sınavların paketleriyle de aynı konuları ölçebilirsin."
+                  : "Yakında burada olacak."
+              }
+              action={<ButtonLink href="/paketler?tur=TUMU">Tüm paketleri gör</ButtonLink>}
+            />
           </Card>
-        </Link>
-      ) : null}
+        ) : (
+          gruplar.map((g) => (
+            <section key={g.key} aria-labelledby={`grup-${g.key}`}>
+              <div className="flex items-baseline justify-between gap-3">
+                <h2
+                  id={`grup-${g.key}`}
+                  className="text-theme-xs font-semibold tracking-wider text-gray-500 uppercase"
+                >
+                  {g.title}
+                </h2>
+                <span className="tabular text-theme-xs text-gray-500">{g.items.length}</span>
+              </div>
+              {g.hint ? <p className="mt-1 text-theme-sm text-gray-500">{g.hint}</p> : null}
 
-      {gruplar.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<ClipboardList />}
-            title={`${aktifBaslik} için paket hazırlanıyor`}
-            description={
-              user.targetExam
-                ? "Bu sınavın soru havuzu henüz yeterli değil. Konular ortak olduğu için diğer sınavların paketleriyle de aynı konuları ölçebilirsin."
-                : "Yakında burada olacak."
-            }
-            action={<LinkButton href={{ pathname: "/paketler", query: { tur: "TUMU" } }}>Tüm paketleri gör</LinkButton>}
-          />
-        </Card>
-      ) : (
-        gruplar.map((g) => (
-          <section key={g.key} aria-labelledby={`grup-${g.key}`}>
-            <div className="flex items-baseline justify-between gap-3">
-              <h2
-                id={`grup-${g.key}`}
-                className="text-micro font-semibold uppercase tracking-[0.14em] text-ink-faint"
+              <div
+                className={cx(
+                  "mt-3 grid gap-4 sm:grid-cols-2 md:gap-6 xl:grid-cols-3",
+                  g.key === "kilitli" && "opacity-75"
+                )}
               >
-                {g.title}
-              </h2>
-              <span className="text-micro tabular text-ink-faint">{g.items.length}</span>
-            </div>
-            {g.hint ? <p className="mt-1 text-caption text-ink-soft">{g.hint}</p> : null}
-
-            <div
-              className={cn(
-                "mt-3 grid gap-2.5 sm:gap-4",
-                "sm:grid-cols-2 xl:grid-cols-3",
-                g.key === "kilitli" && "opacity-75"
-              )}
-            >
-              {g.items.map((p) => (
-                <PackageCard key={p.slug} p={p} />
-              ))}
-            </div>
-          </section>
-        ))
-      )}
+                {g.items.map((p) => (
+                  <PackageCard key={p.slug} p={p} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
     </div>
   );
 }

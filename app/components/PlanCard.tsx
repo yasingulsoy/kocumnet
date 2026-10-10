@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { BookOpen, Check, ClipboardCheck, PencilLine, Play, Target, Undo2, X } from "lucide-react";
 import { konuTekrarBaslat, planIsiAction, planIsiSilAction } from "@/lib/actions/plan";
-import { Card, CardHeader, LinkButton } from "@/components/ui";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { cx } from "@/components/tailadmin/cx";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { cn } from "@/lib/cn";
 import type { PlanGorunumu } from "@/lib/plan";
 
 type PlanIsi = PlanGorunumu["items"][number];
@@ -153,47 +156,43 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
   }, []);
 
   return (
-    <Card className="border-brand/25 shadow-raised">
-      <CardHeader
-        className="p-4 sm:p-6"
-        title={
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            Bu hafta
-            <span className="text-caption font-normal text-ink-faint">{haftaEtiketi}</span>
-          </span>
-        }
-        action={
-          <span className="tabular text-caption font-semibold text-ink-soft">
-            {biten}/{items.length}
-          </span>
-        }
-      />
-
+    <ComponentCard
+      title="Bu hafta"
+      desc={haftaEtiketi}
+      badge={
+        items.length > 0 ? (
+          <Badge size="sm" color={biten === items.length ? "success" : "light"}>
+            <span className="tabular">
+              {biten}/{items.length} iş
+            </span>
+          </Badge>
+        ) : null
+      }
+      tone="brand"
+      flush
+    >
       {plan.coachNote ? (
-        <p className="border-y border-line bg-brand-wash/40 px-4 py-3 text-body leading-relaxed text-ink sm:px-6">
-          <span className="font-semibold">Koç notu:</span> {plan.coachNote}
+        <p className="border-b border-gray-100 bg-brand-25 px-5 py-3 text-theme-sm leading-relaxed text-gray-700 sm:px-6">
+          <span className="font-semibold text-gray-800">Koç notu:</span> {plan.coachNote}
         </p>
       ) : null}
 
       {hata ? (
-        <p
-          role="alert"
-          className="border-b border-line bg-bad-wash px-4 py-2 text-caption text-bad sm:px-6"
-        >
+        <p role="alert" className="border-b border-error-100 bg-error-50 px-5 py-2.5 text-theme-sm font-medium text-error-700 sm:px-6">
           {hata}
         </p>
       ) : null}
 
       {/* Bütün işler çıkarıldıysa "0/0 · haftanın işleri bitti" yazmasın. */}
       {items.length === 0 ? (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-4 sm:px-6">
-          <p className="min-w-0 flex-1 text-caption leading-relaxed text-ink-soft">
-            <span className="font-semibold text-ink">Bu haftanın planında iş kalmadı.</span> Gelecek
+        <div className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-6">
+          <p className="min-w-0 flex-1 text-theme-sm leading-relaxed text-gray-500">
+            <span className="font-semibold text-gray-800">Bu haftanın planında iş kalmadı.</span> Gelecek
             haftanın planı, o hafta çözdüğün ilk check-up&apos;tan çıkar.
           </p>
-          <LinkButton href="/paketler" variant="soft" size="sm" className="max-sm:w-full">
+          <ButtonLink href="/paketler" variant="soft" size="xs" className="max-sm:w-full">
             Testlere göz at
-          </LinkButton>
+          </ButtonLink>
         </div>
       ) : null}
 
@@ -205,19 +204,15 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
           return (
             <section
               key={g.baslik ?? gi}
-              className={cn(
-                gi > 0 && "border-t-4 border-bg lg:border-s lg:border-line lg:border-t-0",
-              )}
+              className={cx(gi > 0 && "border-t border-gray-100 lg:border-s lg:border-t-0")}
             >
               {g.baslik ? (
-                <h3 className="flex items-center gap-2 bg-surface-sunk px-4 py-2 sm:px-6">
-                  <span className="min-w-0 flex-1 truncate text-caption font-semibold text-ink">
-                    {g.baslik}
-                  </span>
+                <h3 className="flex items-center gap-2 bg-gray-50 px-5 py-2.5 sm:px-6">
+                  <span className="min-w-0 flex-1 truncate text-theme-sm font-semibold text-gray-700">{g.baslik}</span>
                   <span
-                    className={cn(
-                      "tabular shrink-0 text-micro font-semibold",
-                      grupBiten === g.isler.length ? "text-ok" : "text-ink-faint",
+                    className={cx(
+                      "tabular shrink-0 text-theme-xs font-medium",
+                      grupBiten === g.isler.length ? "text-success-700" : "text-gray-500"
                     )}
                   >
                     {grupBiten}/{g.isler.length}
@@ -225,63 +220,57 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                 </h3>
               ) : null}
 
-              <ul className="divide-y divide-line">
+              <ul className="divide-y divide-gray-100">
                 {g.isler.map((i) => {
                   const Icon = SIMGE[i.kind];
                   const etiket = kisaBaslik(i.title, g.baslik);
                   return (
-                    <li key={i.id} className="group flex items-center gap-3 px-4 py-2 sm:px-6">
+                    <li key={i.id} className="group flex items-center gap-3 px-5 py-2 sm:px-6">
                       {i.verifiable ? (
                         // Kontrol testi: kutu değil, düğme. İşaretlenmez, çözülür.
                         <span
-                          className={cn(
-                            "flex size-6 shrink-0 items-center justify-center rounded-md border-2",
-                            i.done
-                              ? "border-ok bg-ok text-white"
-                              : "border-line-strong text-ink-faint",
+                          className={cx(
+                            "flex size-5 shrink-0 items-center justify-center rounded-md border",
+                            i.done ? "border-success-500 bg-success-500 text-white" : "border-gray-300 text-gray-500"
                           )}
                           aria-hidden
                         >
-                          {i.done ? <Check className="size-3.5" /> : <Icon className="size-3.5" />}
+                          {i.done ? <Check className="size-3.5" strokeWidth={3} /> : <Icon className="size-3.5" />}
                         </span>
                       ) : (
-                        <input
+                        <Checkbox
                           id={"plan-isi-" + i.id}
-                          type="checkbox"
                           checked={i.done}
                           onChange={(e) => degistir(i.id, e.target.checked)}
                           aria-label={i.title}
-                          className="size-6 shrink-0 cursor-pointer rounded-md border-2 border-line-strong accent-[var(--ok)]"
                         />
                       )}
 
-                      {/* Metne dokunmak da işaretler: 24 piksellik kutuyu
-                          telefonda tutturmak zordu. Kontrol testi işaretlenmez. */}
+                      {/* Metne dokunmak da işaretler: küçük kutuyu telefonda
+                          tutturmak zordu. Kontrol testi işaretlenmez. */}
                       <label
                         htmlFor={i.verifiable ? undefined : "plan-isi-" + i.id}
-                        className={cn("min-w-0 flex-1 py-1", !i.verifiable && "cursor-pointer")}
+                        className={cx("min-w-0 flex-1 py-1.5", !i.verifiable && "cursor-pointer")}
                       >
                         <span
-                          className={cn(
-                            "block truncate text-body leading-snug",
-                            i.done ? "text-ink-faint line-through" : "text-ink",
+                          className={cx(
+                            "block truncate text-theme-sm leading-snug font-medium",
+                            i.done ? "text-gray-500 line-through" : "text-gray-800"
                           )}
                         >
                           {etiket}
                         </span>
-                        <span className="tabular block text-micro text-ink-faint">
+                        <span className="tabular block text-theme-xs text-gray-500">
                           ~{i.estimatedMinutes} dk
-                          {i.verifiable && !i.done ? (
-                            <span className="ms-1.5 text-brand">sistem doğrular</span>
-                          ) : null}
+                          {i.verifiable && !i.done ? <span className="ms-1.5 text-brand-500">sistem doğrular</span> : null}
                         </span>
                       </label>
 
                       {i.verifiable && !i.done && i.topicId ? (
                         <form action={konuTekrarBaslat} className="shrink-0">
                           <input type="hidden" name="topicId" value={i.topicId} />
-                          <SubmitButton size="sm" className="rounded-lg px-3" pendingText="Açılıyor…">
-                            <Play /> Çöz
+                          <SubmitButton size="xs" pendingText="Açılıyor…" startIcon={<Play />}>
+                            Çöz
                           </SubmitButton>
                         </form>
                       ) : !i.verifiable ? (
@@ -289,9 +278,9 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                           type="button"
                           onClick={() => sil(i.id)}
                           aria-label={`${i.title} işini plandan çıkar`}
-                          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-faint opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 active:bg-surface-sunk max-sm:opacity-60"
+                          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-gray-500 opacity-0 transition group-hover:opacity-100 hover:bg-gray-100 hover:text-gray-700 focus-visible:opacity-100 active:bg-gray-100 max-sm:opacity-70"
                         >
-                          <X className="size-4" />
+                          <X className="size-4" aria-hidden />
                         </button>
                       ) : null}
                     </li>
@@ -304,35 +293,26 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
       </div>
 
       {kaldirilan ? (
-        <div
-          role="status"
-          className="flex items-center gap-3 border-t border-line bg-surface-sunk px-4 py-2 sm:px-6"
-        >
-          <p className="min-w-0 flex-1 truncate text-caption text-ink-soft">
-            <span className="font-semibold text-ink">
-              {kisaBaslik(kaldirilan.title, kaldirilan.topicName)}
-            </span>{" "}
+        <div role="status" className="flex items-center gap-3 border-t border-gray-100 bg-gray-50 px-5 py-2 sm:px-6">
+          <p className="min-w-0 flex-1 truncate text-theme-sm text-gray-500">
+            <span className="font-semibold text-gray-800">{kisaBaslik(kaldirilan.title, kaldirilan.topicName)}</span>{" "}
             plandan çıkarıldı.
           </p>
-          <button
-            type="button"
-            onClick={geriAl}
-            className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-caption font-semibold text-brand transition hover:bg-brand-wash"
-          >
-            <Undo2 className="size-4" aria-hidden /> Geri al
-          </button>
+          <Button variant="soft" size="xs" onClick={geriAl} startIcon={<Undo2 />}>
+            Geri al
+          </Button>
         </div>
       ) : null}
 
       {/* Plan haftada bir kez, o haftanın ilk check-up'ından çıkıyor: "sıradaki
           check-up'ı çöz, yeni plan al" sözü aynı hafta içinde doğru değildi. */}
       {items.length > 0 ? (
-        <p className="border-t border-line px-4 py-2.5 text-micro text-ink-faint sm:px-6">
+        <p className="border-t border-gray-100 px-5 py-3 text-theme-xs leading-relaxed text-gray-500 sm:px-6">
           {biten === items.length
             ? "Haftanın işleri bitti. Gelecek haftanın planı, o hafta çözdüğün ilk check-up'tan çıkar."
             : `Kalan iş ~${sureMetni(kalanDakika)}. Kontrol testini sen işaretleyemezsin: çözünce kendiliğinden kapanır.`}
         </p>
       ) : null}
-    </Card>
+    </ComponentCard>
   );
 }

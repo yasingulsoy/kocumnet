@@ -51,11 +51,12 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   /*
-   * Panelin zemin rengi. Eskiden lacivert (#17305e) yazıyordu: Android'de
-   * durum çubuğu lacivert, hemen altındaki uygulama çubuğu beyaz oluyor ve
-   * ekranın tepesinde sebepsiz bir şerit kalıyordu.
+   * Üst çubuğun rengi (kitin çerçevesi, sınav ekranı, giriş: hepsi beyaz).
+   * Eskiden lacivert (#17305e) yazıyordu: Android'de durum çubuğu lacivert,
+   * hemen altındaki uygulama çubuğu beyaz oluyor ve ekranın tepesinde
+   * sebepsiz bir şerit kalıyordu.
    */
-  themeColor: "#f4f6fb",
+  themeColor: "#ffffff",
   /*
    * viewport-fit=cover OLMADAN iOS'ta env(safe-area-inset-bottom) sıfır döner
    * ve .pb-safe hiçbir şey yapmaz — alt sekme çubuğu ile sınavdaki "Sonraki"
@@ -80,7 +81,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             node_modules'den @import çözmüyor; dosya public/ altına kopyalandı. */}
         <link rel="stylesheet" href="/katex/katex.min.css" />
       </head>
-      <body className="min-h-screen bg-canvas font-sans text-ink">{children}</body>
+      <body className="min-h-screen bg-gray-50 font-sans text-gray-800">{children}</body>
     </html>
   );
 }

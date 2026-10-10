@@ -260,6 +260,14 @@ const HATA_TAVSIYESI: Record<string, string> = {
     "Benzer formülleri karıştırıyorsun. Bu konunun formüllerini tek bir kâğıda yan yana yaz, farklarını işaretle — ezber değil, ayırt etme çalışması.",
 };
 
+/**
+ * Tek bir hata tipinin reçetesi — alıştırmada yanlış şıkkın altında.
+ * DIGER ve tanımsız tipler için null (uydurma tavsiye yok).
+ */
+export function hataTipiTavsiyesi(type: string | null | undefined): string | null {
+  return type ? (HATA_TAVSIYESI[type] ?? null) : null;
+}
+
 export function hataTavsiyesi(
   p: { type: string; label: string; count: number } | null
 ): { baslik: string; metin: string } | null {

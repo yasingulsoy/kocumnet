@@ -237,10 +237,16 @@ export async function selectQuestionsForTopic(
   count: number,
   userId: string | null,
   /** Öğrencinin hedef sınavı — sınava özgü işaretli sorular başka sınava gitmesin. */
-  examScope: string | null = null
+  examScope: string | null = null,
+  /**
+   * Hiç seçilmeyecek sorular. Alıştırma bunu kullanıyor: açık bir testteki
+   * soru alıştırmaya düşerse cevabı test sürerken görünür (lib/practice.ts).
+   */
+  haric: string[] = []
 ): Promise<SelectionResult> {
   const exposureCutoff = new Date(Date.now() - EXPOSURE_WINDOW_DAYS * 86_400_000);
   const secilen: SelectedQuestion[] = [];
+  const dislanan = () => [...haric, ...secilen.map((q) => q.id)];
   let relaxedExposureCount = 0;
 
   // Konu öğrencinin sınavında değilse kapsamı boş sorular gelmez; yalnızca
@@ -260,7 +266,7 @@ export async function selectQuestionsForTopic(
       limit: band.want,
       minDifficulty: band.min,
       maxDifficulty: band.max,
-      excludeIds: secilen.map((q) => q.id),
+      excludeIds: dislanan(),
       userId,
       exposureCutoff,
       examScope,
@@ -276,7 +282,7 @@ export async function selectQuestionsForTopic(
       limit: eksik,
       minDifficulty: 1,
       maxDifficulty: 5,
-      excludeIds: secilen.map((q) => q.id),
+      excludeIds: dislanan(),
       userId,
       exposureCutoff,
       examScope,
@@ -292,7 +298,7 @@ export async function selectQuestionsForTopic(
       limit: eksik,
       minDifficulty: 1,
       maxDifficulty: 5,
-      excludeIds: secilen.map((q) => q.id),
+      excludeIds: dislanan(),
       userId: null,
       exposureCutoff,
       examScope,

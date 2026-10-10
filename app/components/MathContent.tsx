@@ -113,10 +113,10 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
           <img
             src={mediaUrl(block.mediaId)}
             alt={block.alt}
-            className="mx-auto max-w-full rounded-lg border border-line bg-white"
+            className="mx-auto max-w-full rounded-lg border border-gray-200 bg-white"
           />
           {block.caption ? (
-            <figcaption className="mt-2 text-center text-xs text-ink-faint">
+            <figcaption className="mt-2 text-center text-xs text-gray-500">
               {block.caption}
             </figcaption>
           ) : null}
@@ -133,7 +133,7 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
                   {block.header.map((cell, i) => (
                     <th
                       key={i}
-                      className="border border-line bg-surface-sunk px-3 py-2 text-start font-semibold"
+                      className="border border-gray-200 bg-gray-50 px-3 py-2 text-start font-semibold"
                     >
                       <Inline nodes={cell} />
                     </th>
@@ -145,7 +145,7 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
               {block.rows.map((row, r) => (
                 <tr key={r}>
                   {row.map((cell, c) => (
-                    <td key={c} className="border border-line px-3 py-2">
+                    <td key={c} className="border border-gray-200 px-3 py-2">
                       <Inline nodes={cell} />
                     </td>
                   ))}
@@ -163,7 +163,7 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
         <ul className="my-3 space-y-1.5 ps-1">
           {block.items.map((item, i) => (
             <li key={i} className="flex gap-2.5">
-              <span className="min-w-[1.75rem] shrink-0 font-mono text-sm font-medium text-ink-soft">
+              <span className="min-w-[1.75rem] shrink-0 font-mono text-sm font-medium text-gray-600">
                 {block.style === "roman"
                   ? `${ROMAN[i] ?? i + 1}.`
                   : block.style === "ordered"
