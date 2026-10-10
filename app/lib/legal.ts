@@ -12,7 +12,7 @@
  * hukukçuyla netleşmeden ücretli satışa açılmamalı.
  */
 
-export const LAST_UPDATED = "20 Eylül 2026";
+export const LAST_UPDATED = "10 Ekim 2026";
 
 export interface DataItem {
   field: string;
@@ -42,6 +42,12 @@ export const COLLECTED_DATA: DataItem[] = [
     field: "Tarayıcı bilgisi (user agent)",
     purpose: "Açık oturumlarınızı ayırt etmek ve şüpheli girişleri fark etmek",
     required: true,
+  },
+  {
+    // TASLAK (hukuki inceleme): bkz. /gizlilik "Veli bağlantısı".
+    field: "Veli bağlantısı kayıtları (oluşturma, bitiş, kaç kez ve en son ne zaman açıldığı)",
+    purpose: "Bağlantılarınızı yönetebilmeniz ve velinizin açıp açmadığını görebilmeniz",
+    required: false,
   },
 ];
 

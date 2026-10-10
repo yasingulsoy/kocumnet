@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChartColumn, FileUp, ListChecks, Plus, Search, X } from "lucide-react";
+import { ChartColumn, FileUp, ListChecks, MessageSquareText, Plus, Search, X } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { partiBilgisi } from "@/lib/checkup/question-import";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
@@ -19,6 +19,7 @@ import { GateNotice } from "@/components/checkup/GateNotice";
 import { StatusSelect } from "@/components/checkup/StatusSelect";
 import { BulkCheckbox, BulkProvider, BulkSelectAll } from "@/components/checkup/BulkStatus";
 import { MONO, QUESTION_STATUS_COLOR, qs } from "@/components/checkup/ui";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
 import { Field } from "@/components/tailadmin/form/Field";
 import { Input } from "@/components/tailadmin/form/Input";
 import { Select } from "@/components/tailadmin/form/Select";
@@ -63,7 +64,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
   // Süzgeç ve sıra tek yerde (lib/checkup/question-query.ts): soru ekranındaki
   // önceki/sonraki gezinmesi aynı listeyi izliyor.
   const suzgec = listeSuzgeci(sp);
-  const { konu, durum, ara, kazanim, eksik, parti, sayfa } = suzgec;
+  const { konu, durum, ara, kazanim, eksik, parti, not, sayfa } = suzgec;
 
   const where = listeKosulu(suzgec);
 
@@ -95,15 +96,17 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         solution: true,
         topic: { select: { name: true, examScope: true } },
         objective: { select: { code: true } },
+        // Satırdaki "açık not" rozeti.
+        _count: { select: { notes: { where: { resolvedAt: null } } } },
       },
     }),
     parti ? partiBilgisi(parti) : Promise.resolve(null),
   ]);
 
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
-  const suzgecVar = Boolean(konu || durum || ara || eksik || kazanim || parti);
+  const suzgecVar = Boolean(konu || durum || ara || eksik || kazanim || parti || not);
   // Soruyu açıp kaydedince bu süzgece ve sayfaya dönülür.
-  const geri = listeSorgusuParams({ ara, konu, durum, eksik, kazanim, parti, sayfa: sayfa > 1 ? String(sayfa) : undefined });
+  const geri = listeSorgusuParams({ ara, konu, durum, eksik, kazanim, parti, not, sayfa: sayfa > 1 ? String(sayfa) : undefined });
 
   const kaydedilen = tek(sp.kaydedildi);
   const guncellenen = tek(sp.guncellendi);
@@ -206,6 +209,11 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
               </Select>
             </Field>
 
+            {/* Sıkı alan yüksekliğinde (36 px): kutu öteki alanların kutularıyla aynı hizada. */}
+            <div className="flex h-9 items-center">
+              <Checkbox name="not" value="acik" defaultChecked={not === "acik"} label="Açık notu olanlar" />
+            </div>
+
             <div className="flex gap-2">
               <Button type="submit" variant="outline" size="xs">
                 Süz
@@ -221,13 +229,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
           {kazanim || parti ? (
             <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 sm:px-6">
               {kazanim ? (
-                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, parti })}>
+                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, parti, not })}>
                   <span className={MONO}>{kazanim}</span>
                 </SuzgecCipi>
               ) : null}
               {parti ? (
                 <>
-                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim })}>
+                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, not })}>
                     {partiKaydi ? (
                       <>
                         {partiKaydi.dosyaAdi} · {trDate(partiKaydi.tarih, { time: true })}
@@ -280,6 +288,18 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                             {q.stemText || "(metinsiz soru)"}
                           </Link>
                           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-theme-xs text-gray-500">
+                            {q._count.notes > 0 ? (
+                              // Satırın başında: inceleme bekleyen soru taramada hemen görünsün.
+                              <Link
+                                href={soruAdresi(q.id, geri) + "#notlar"}
+                                title="Çözülmemiş inceleme notu"
+                                className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                              >
+                                <Badge size="sm" color="warning" startIcon={<MessageSquareText aria-hidden />}>
+                                  <span className="tabular">{q._count.notes}</span> açık not
+                                </Badge>
+                              </Link>
+                            ) : null}
                             <span>
                               {examLabel(q.topic.examScope)} · {q.topic.name}
                             </span>
@@ -325,7 +345,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         <Pagination
           currentPage={Math.min(sayfa, sonSayfa)}
           totalPages={sonSayfa}
-          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, parti, sayfa: p > 1 ? p : undefined })}
+          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, parti, not, sayfa: p > 1 ? p : undefined })}
         />
       </BulkProvider>
     </>

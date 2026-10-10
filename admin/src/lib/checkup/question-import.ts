@@ -465,6 +465,7 @@ const SURUYOR_MS = 10 * 60_000;
  * kendiliğinden gider) yalnızca cevaplanmış soruda olur — ikisi de bu kuralla
  * korunur. Sorulmuş soru silinemez: öğrencinin cevabı ona bağlı, geçmiş sonucu
  * yeniden hesaplanamaz olur. Onlar partide kalır, parti "kısmen geri alındı" olur.
+ * Parti kaydı silinmez: geri alan ve zamanı ona yazılır (rolledBackAt/ByStaff).
  *
  * Betikten iki farkı (ikisi de daha dar silme):
  *  · Kazanım: yalnızca silinen soruların bağlı olduğu, bu partiyle açılmış
@@ -477,9 +478,11 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
     select: { id: true, filename: true, status: true, createdAt: true, completedAt: true },
   });
   if (!parti) return { ok: false, hata: "Bu içe aktarma bulunamadı; zaten geri alınmış olabilir." };
+  if (parti.status === "REVERTED") return { ok: false, hata: "Bu içe aktarma zaten geri alınmış." };
   if (parti.status === "PENDING" && Date.now() - parti.createdAt.getTime() < SURUYOR_MS) {
     return { ok: false, hata: "Bu içe aktarma hâlâ sürüyor. Birkaç dakika sonra tekrar dene." };
   }
+  const damga = staffStamp(staff);
 
   const sorular = await db.question.findMany({
     where: { importBatchId: partiId },
@@ -532,8 +535,20 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
           })
         : { count: 0 };
 
-      if (kalan === 0) await tx.importBatch.delete({ where: { id: partiId } });
-      else await tx.importBatch.update({ where: { id: partiId }, data: { status: "REVERTED_PARTIAL" } });
+      /*
+       * Parti kaydı kalır, kim ne zaman geri aldı yazılır (komut satırıyla
+       * aynı kural). Yalnızca hiç sorusu olmayan parti (başarısız ya da boş:
+       * "Kaydı sil") silinir. Hiçbir soru silinmediyse damga yazılmaz.
+       */
+      const bosParti = silinen.count === 0 && kalan === 0;
+      if (bosParti) {
+        await tx.importBatch.delete({ where: { id: partiId } });
+      } else if (silinen.count > 0) {
+        await tx.importBatch.update({
+          where: { id: partiId },
+          data: { status: kalan === 0 ? "REVERTED" : "REVERTED_PARTIAL", rolledBackAt: new Date(), rolledBackByStaff: damga },
+        });
+      }
 
       return {
         silinen: silinen.count,
@@ -541,14 +556,13 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
         gorselSilinen,
         gorselKorunan,
         kazanimSilinen: kazanim.count,
-        partiSilindi: kalan === 0,
+        partiSilindi: bosParti,
       };
     },
     { timeout: 60_000, maxWait: 10_000 }
   );
 
-  // ImportBatch'te "geri alan" sütunu yok; iz sunucu günlüğünde.
-  console.info("[checkup] içe aktarma geri alındı:", partiId, parti.filename, staffStamp(staff), JSON.stringify(sonuc));
+  console.info("[checkup] içe aktarma geri alındı:", partiId, parti.filename, damga, JSON.stringify(sonuc));
   return { ok: true, dosyaAdi: parti.filename, partiId, ...sonuc };
 }
 
@@ -578,6 +592,9 @@ export interface PartiSatiri {
   hataMesaji: string | null;
   /** Yeni ve hâlâ PENDING: yazma sürüyor olabilir, geri alınamaz. */
   suruyor: boolean;
+  /** Son geri alma (panelden ya da komut satırından): ne zaman, kim. */
+  geriAlindi: Date | null;
+  geriAlan: string | null;
 }
 
 function hataListesi(json: unknown): { satir: number; sebep: string; etiket: string }[] {
@@ -603,6 +620,8 @@ export async function partiGecmisi(adet = 50): Promise<PartiSatiri[]> {
       errors: true,
       createdByStaff: true,
       createdAt: true,
+      rolledBackAt: true,
+      rolledBackByStaff: true,
       _count: { select: { questions: true } },
     },
   });
@@ -640,6 +659,8 @@ export async function partiGecmisi(adet = 50): Promise<PartiSatiri[]> {
       atlananlar: basarisiz ? [] : hatalar.filter((h) => h.satir > 0),
       hataMesaji: basarisiz ? (hatalar[0]?.sebep ?? "Bilinmeyen hata") : null,
       suruyor: p.status === "PENDING" && simdi - p.createdAt.getTime() < SURUYOR_MS,
+      geriAlindi: p.rolledBackAt,
+      geriAlan: p.rolledBackByStaff,
     };
   });
 }

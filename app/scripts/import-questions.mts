@@ -22,7 +22,8 @@
  *    içe aktarma yok: ya hepsi geçerli olanlar girer, ya hiçbiri.
  *  · Her içe aktarma bir ImportBatch kaydı açar; sorular ona bağlanır.
  *    `--geri-al` o partinin HİÇ ÇÖZÜLMEMİŞ sorularını siler (çözülmüş soru
- *    silinmez: öğrenci cevapları ona bağlı).
+ *    silinmez: öğrenci cevapları ona bağlı). Parti kaydı kalır; geri alma
+ *    zamanı ve `--personel` damgası ona yazılır (panelin geçmişinde görünür).
  *  · Kazanımlar koda göre bulunur; yoksa `Kazanım Adı` ile oluşturulur.
  *    İlk kullanımda ad zorunlu.
  *  · Görseller markdown'ın yanındaki gorseller/ dizininden okunur, MediaAsset
@@ -201,9 +202,13 @@ async function uygula(
 async function geriAl(batchId: string) {
   const batch = await prisma.importBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, filename: true, createdCount: true, createdAt: true, completedAt: true },
+    select: { id: true, filename: true, status: true, createdCount: true, createdAt: true, completedAt: true },
   });
   if (!batch) throw new Error("Parti bulunamadı: " + batchId);
+  if (batch.status === "REVERTED") {
+    console.log(`Bu parti zaten geri alınmış: ${batch.filename}`);
+    return;
+  }
 
   const sorular = await prisma.question.findMany({
     where: { importBatchId: batchId },
@@ -253,8 +258,25 @@ async function geriAl(batchId: string) {
   if (bosKazanimlar.count) console.log(`Bu partiyle açılan ${bosKazanimlar.count} boş kazanım silindi.`);
   if (korunanGorsel) console.log(`${korunanGorsel} görsel, hâlâ bir soruda kullanıldığı için silinmedi.`);
 
-  if (cozulmus.length === 0) await prisma.importBatch.delete({ where: { id: batchId } });
-  else await prisma.importBatch.update({ where: { id: batchId }, data: { status: "REVERTED_PARTIAL" } });
+  /*
+   * Parti kaydı kalır ve kim geri aldı yazılır (panelin geçmişinde görünür;
+   * panelin geri alması da aynı kuralı izler). Yalnızca hiç sorusu olmayan
+   * parti (başarısız ya da boş) silinir. Hiçbir soru silinmediyse damga da
+   * yazılmaz: geri alma olmadı.
+   */
+  if (silinecek.length === 0 && cozulmus.length === 0) {
+    await prisma.importBatch.delete({ where: { id: batchId } });
+    console.log(`Partinin sorusu yoktu, kaydı silindi: ${batch.filename}`);
+    return;
+  }
+  if (silinecek.length === 0) {
+    console.log(`Silinecek soru yok: ${batch.filename} — ${cozulmus.length} soru öğrencilere sorulduğu için korunuyor (arşivle).`);
+    return;
+  }
+  await prisma.importBatch.update({
+    where: { id: batchId },
+    data: { status: cozulmus.length ? "REVERTED_PARTIAL" : "REVERTED", rolledBackAt: new Date(), rolledBackByStaff: PERSONEL },
+  });
 
   console.log(`Geri alındı: ${batch.filename} — ${silinecek.length} soru silindi` + (cozulmus.length ? `, ${cozulmus.length} soru öğrenciler çözdüğü için korundu (arşivle).` : "."));
 }

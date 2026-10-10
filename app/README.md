@@ -44,6 +44,9 @@ npm run test:leak    # uçtan uca akış + CEVAP ANAHTARI SIZINTI DENETİMİ
 npm run test:levels  # seviyeli check-up zinciri + TELAFİDE SORU TEKRARI DENETİMİ
 npm run test:practice # alıştırma + yanlış defteri: anahtar yalnızca cevaplanan soruda,
                       #   ölçüm kirlenmiyor, defter idempotent, aralıklı tekrar
+npm run test:import  # soru içe aktarma: çözümleme + denetim (veritabanı istemez)
+npm run test:veli    # veli bağlantısı: jeton yaşam döngüsü + RAPORDA SORU/CEVAP/E-POSTA YOK
+                     #   (rapor verisi ve çizilmiş HTML taranır)
 ```
 
 `test:leak` öğrenciye giden JSON'da `isCorrect`/`errorType` olmadığını doğrular.
@@ -67,7 +70,7 @@ app/
   page.tsx                 Tanıtım (girişliyse /panel'e yönlenir)
   (auth)/                  Giriş · kayıt · parola sıfırlama — bölünmüş düzen
   (panel)/                 Girişli öğrenci — kenar çubuğu / mobil sekme çubuğu
-    panel/                 Pano: haftalık plan, tek eylem, ilerleme şeridi
+    panel/                 Pano: "Bugün" kartı (tek iş, tek düğme), haftalık plan, ilerleme
     paketler/              Katalog (sınava göre) → [slug]: test öncesi ekran
     seviyeli/              Seviyeli check-up girişi: nasıl işler, başlat
     seviye/[runId]         Aşama geçişi, telafi uyarısı, kilit ve üç karne
@@ -75,7 +78,8 @@ app/
                            (yanlış/boşta "Benzerini çöz", zayıf konuda "Bu konuda çalış")
     defter/                Yanlış defteri: açık maddeler konuya göre, bugünkü tekrar
     gelisim/               Hedef takibi (tahmini net), eğilim, konu haritası, geçmiş
-    profil/                Bilgiler, HEDEF (sınav/sınıf/net/tempo), parola, erişimler
+    profil/                Bilgiler, HEDEF (sınav/sınıf/net/tempo), parola, erişimler, veli bağlantısı
+  veli/[token]             Veli raporu — GİRİŞSİZ, salt okunur, süreli; yalnızca genel tablo
   tanisma/                 İlk giriş: hangi sınav · hangi aşama · kaç net hedef
   checkup/[sessionId]      Sınav modu — çerçevesiz, dikkat dağıtan hiçbir şey yok
   alistirma/[sessionId]    Alıştırma — süresiz, her cevaptan sonra doğrusu + çözüm
@@ -89,10 +93,14 @@ components/
   BasariGrafikleri.tsx     Başarı eğilimi ve son testler (kitin ApexCharts eklentisi)
   PackageCard.tsx          Paket kartı (pano + katalog)
   PlanCard.tsx             Haftalık plan — konuya göre gruplu, RETEST işaretlenemez
+  BugunKarti.tsx           Panonun "Bugün" kartı (seçim kuralı lib/bugun.ts'te, saf)
+  OkumaBoyu.tsx            Sınav/alıştırmada yazı boyu A− / A+ (cihazda saklı)
+  GorselBuyutec.tsx        Soru şeklini tam ekranda açar, yakınlaştırır
   MathContent.tsx          LaTeX → HTML, SUNUCUDA (KaTeX JS istemciye gitmez)
 lib/
   exams.ts                 SINAV TABLOSU: soru sayısı, ceza oranı, sınıflar, sezon
   coaching.ts              Koçluk mantığı (saf): öncelik sırası, karar cümlesi, plan
+  bugun.ts                 "Bugün" kartının sırası (saf): yarım test → tekrar → plan → öneri
   plan.ts                  Haftalık planın veritabanı tarafı
   levels.ts                SEVİYELİ CHECK-UP kuralları (saf): kapılar, eşikler, metin
   level-run.ts             Seviyeli sınavın zinciri: aşama aç, kapıyı değerlendir
@@ -108,7 +116,9 @@ lib/
   entitlements.ts          Ücretli paket erişim denetimi
   catalog.ts               Öğrenciye özel paket listesi (kilit, yarım test)
   auth.ts · password.ts    Oturum (token hash'i saklanır) · scrypt
-  actions/                 Server action'lar: auth, checkup, profile, password-reset
+  veli.ts                  VELİ BAĞLANTISI KURALLARI (saf): süreler, en fazla 3, önizleme botu, WhatsApp
+  veli-raporu.ts           Veli bağlantısı (jeton özeti) ve raporun verisi — alan alan seçilir
+  actions/                 Server action'lar: auth, checkup, profile, password-reset, veli
 ```
 
 ## Koçluk modeli
@@ -169,6 +179,24 @@ verdiğinde yalnızca orası değişir. Veritabanı tarafı `lib/practice.ts` ve
 | **Yanlış defteri yalnızca ÖLÇÜMDEN** (`NotebookItem`) | Paket, kontrol testi ve seviyeli aşama puanlanınca (cron'un puanladığı süresi dolmuş testler dahil) her yanlış/boş bir madde: ilk aralık sonra. Alıştırmadaki yanlış madde açmaz. |
 | **Aralıklı tekrar** (`TEKRAR_ARALIKLARI_GUN` = 1, 3, 7) | Tekrarda maddenin BENZERİ sorulur. Doğru → sonraki aralık, sonuncusu da doğruysa defterden çıkar; yanlış/"Bilmiyorum" → başa. Vadeler Türkiye saatiyle gün başına yuvarlı. "Benzerini çöz" defteri ilerletmez (hemen ardından çözülen soru aralıklı tekrar değil). |
 | **Defter idempotent** | Aynı test ikinci kez işlenirse hiçbir şey değişmez; geç puanlanan eski bir test sonradan yapılan tekrarı silmez; daha yeni bir testte yine yanlış yapılan madde başa döner (`yanlisKarari`). Aynı tekrar cevabı maddeyi iki kez ilerletmez. |
+
+## Veli bağlantısı
+
+Öğrenci profilden velisine girişsiz, salt okunur, süreli bir rapor adresi verir
+(`/veli/<jeton>`; kopyala ya da WhatsApp). Kurallar `lib/veli.ts`'te, veri
+`lib/veli-raporu.ts`'te. Velinin ne göreceği hocaya soruldu (HOCAYA-SORULAR 10.10);
+cevap gelene kadar **yalnızca genel tablo**.
+
+| Kural | Neden |
+| --- | --- |
+| **Yalnızca genel tablo** (`VeliRaporu`) | İlk ad, hedef sınav, son ölçüm ve eğilimi, güçlü/zayıf konular, son 5 check-up (tarih, paket, net, başarı), bu haftanın plan tamamlaması, açık defter sayısı. Soru, cevap, çözüm, e-posta, soyadı, kimlik YOK. Rapor alan alan kurulur; `test:veli` verinin ve çizilmiş HTML'in içinde öğrencinin gördüğü soruların metnini, cevap anahtarını, e-postayı ve kimlikleri arar, alan listesini sabitler. |
+| **Jeton saklanmaz** | Yalnızca SHA-256'sı (`ParentLink.tokenHash`), oturum ve parola sıfırlamayla aynı. Bağlantı oluşturulduğu an bir kez gösterilir; kaybolursa kaldırılıp yenisi açılır. |
+| **Süreli, en fazla 3, kaldırılabilir** | 7/30/90 gün (varsayılan 30). Sayım ve yazım aynı işlemde, öğrencinin satırı kilitli (çift tıklama dördüncüyü açmaz). Kaldırılan ya da süresi dolan bağlantı hemen kapanır; kaydı bakımda (`/api/cron`) 30 gün sonra silinir. |
+| **Kapalı bağlantı tek sayfa** | Bilinmeyen, süresi dolmuş ve kaldırılmış bağlantı aynı "artık açık değil" sayfasını görür, veri yok. |
+| **Kim açtı tutulmaz** | Yalnızca kaç kez ve en son ne zaman (`after()` ile, yanıttan sonra). Öğrencinin kendi açması sayılmaz: "son açılma" velinin açıp açmadığını söylesin. |
+| **Önizleme botlarına veri yok** | WhatsApp/Telegram/Slack önizleyicisi genel bir sayfa görür ve açılma sayılmaz: bazı uygulamalar önizlemeyi kendi sunucusunda çeker. Başlık ve paylaşım önizlemesinde ad geçmez. |
+| **Arama motoruna kapalı, Referer yok** | `noindex, nofollow` (meta + `X-Robots-Tag`), `Referrer-Policy: no-referrer` (`next.config.ts`): jeton tıklanan bağlantının günlüğüne düşmez. IP başına 10 dakikada 60 açılış (`lib/rate-limit.ts`). |
+| **Alıştırma ve kontrol testi ölçüm değil** | Eğilim, son ölçüm ve test listesi panodaki gibi yalnızca ölçümlerden; konu tablosu kontrol testlerini de toplar. |
 
 ## Tasarım sistemi
 
@@ -269,6 +297,18 @@ elle düzenlenmez, kitte değişiklik → `node design/sync.mjs`.
   kendi sırasıyla dizer; hangisinin kazanacağı belli değildir (lacivert bant bir ara
   beyaz zeminde beyaz yazı oldu). Renk/boyut için prop (`tone`, `size`, `compact`,
   `block`) kullan; uygun prop yoksa kite ekle.
+- **Okuma boyu sunucu çıktısında da doğru.** Seçim `localStorage`'da (`kocum:okuma-boyu`);
+  sınav ve alıştırma ekranının kökünün ilk çocuğu satır içi bir betik, seçimi ilk
+  boyamadan önce köke yazar (yazı sonradan zıplamaz), kökte `suppressHydrationWarning`
+  var. Ölçek `globals.css`'te: soru metni, şık ve çözüm `.okuma` kabında em ile büyür;
+  MathContent'in sabit boyları (`text-sm` tablo ve öncül numarası, `text-xs` alt yazı)
+  `.okuma` içinde ölçeğe uyar. Yeni sabit boy eklersen oraya da yaz.
+- **Şekil büyütme yalnızca büyüteci kuran ekranda.** `MathContent buyutulebilir` şekli
+  düğmeye sarar; tıklamayı ekranın `useGorselBuyutec` kancası yakalar. Başka ekranda bu
+  prop'u verme: ölü düğme olur. Şıktaki şekil büyütülmez (düğme içinde düğme olmaz).
+- **Kapalı `<details>` Chrome'da basılmıyordu**: içerik çocuklarda değil `::details-content`
+  kabında saklı (content-visibility). Baskı kuralı `globals.css`'te; cevap incelemesinin
+  kapalı soruları da PDF'e girer.
 - **Görünmez veri tablosu `sr-only` bir kabın içinde** (`<div className="sr-only"><table>`).
   Tabloya doğrudan `sr-only` verilince tablo daralmıyor ve telefonda sayfa yana
   taşıyordu (pano grafiği).

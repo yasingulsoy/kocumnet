@@ -136,6 +136,39 @@ html {
   text-align: right;
 }
 
+/*
+ * Arapça yazı tipi yalnızca /ar'da (Readex Pro, app/[lang]/layout.tsx).
+ *
+ * Yedek yüz: Readex Pro yavaş bağlantıda ilk boyamadan sonra gelirse arada
+ * Arapça harfleri çizer. Arial'in Arapçası, Readex Pro genişliğine
+ * büyütülmüş (aynı metin Readex Pro'da ortalama %33 daha geniş, Windows'ta
+ * ölçüldü); font gelince satırlar çoğunlukla aynı yerden kırılır. Arial'i
+ * olmayan cihazda yüz atlanır, sistemin Arapça fontu çizer. unicode-range
+ * yalnızca Arapça: Latin harfe karışmaz.
+ */
+@font-face {
+  font-family: "Readex Yedek";
+  src: local("Arial");
+  size-adjust: 133%;
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011,
+    U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+
+html[lang="ar"] {
+  /*
+   * Arapça harf önce Readex Pro'da aranır; Latin harf, rakam ve boşluk onun
+   * unicode-range'ine girmediği için Inter/Poppins'e düşer. --ar-* değerleri
+   * layout'ta <html>'in style'ında (next/font'un ürettiği aile adları).
+   */
+  --font-inter: var(--ar-readex), "Readex Yedek", var(--ar-inter);
+  --font-poppins: var(--ar-readex), "Readex Yedek", var(--ar-poppins);
+  /* Hero başlığının 1.04'ü Latin için; Arapçanın uzun harfleri ve harekeleri satırları birbirine değdiriyordu. */
+  --text-display--line-height: 1.2;
+  /* Bitişik yazıda harf aralığını daraltmak harfleri bindirebilir (Chrome uygulamıyor, her tarayıcı öyle değil). */
+  --tracking-tight: 0em;
+}
+
 [dir="rtl"] .prose {
   direction: rtl;
 }

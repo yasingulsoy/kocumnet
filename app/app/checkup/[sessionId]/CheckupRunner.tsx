@@ -22,6 +22,8 @@ import {
   X,
 } from "lucide-react";
 import { saveAnswerAction, sinavDurumuAction, submitCheckupAction } from "@/lib/actions/checkup";
+import { GorselBuyutec, useGorselBuyutec } from "@/components/GorselBuyutec";
+import { OkumaBetigi, OkumaBoyuDugmeleri, useOkumaBoyu } from "@/components/OkumaBoyu";
 import { Logo } from "@/components/ui/logo";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
@@ -234,6 +236,10 @@ export function CheckupRunner({
   const [cikisAcik, setCikisAcik] = useState(false);
   const [paletAcik, setPaletAcik] = useState(false);
   const [submitting, startSubmit] = useTransition();
+  // Okuma rahatlığı: yazı boyu (bu cihazda saklı) ve şekli tam ekranda büyütme.
+  // İkisi de yalnızca görünüm; cevaba, süreye ve kayda dokunmaz.
+  const [okumaBoyu, setOkumaBoyu] = useOkumaBoyu();
+  const { gorsel, yakala: gorselYakala, kapat: gorselKapat, acikRef: gorselAcikRef } = useGorselBuyutec();
 
   const current = questions[index];
   const sureBitti = remaining <= 0;
@@ -632,11 +638,16 @@ export function CheckupRunner({
     history.pushState({ kocumTest: true }, "");
     function onPop() {
       history.pushState({ kocumTest: true }, "");
+      // Şekil tam ekrandaysa geri hareketi onu kapatır, testten çıkmayı sormaz.
+      if (gorselAcikRef.current) {
+        gorselKapat();
+        return;
+      }
       setCikisAcik(true);
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [gorselAcikRef, gorselKapat]);
 
   // Kuyrukta yazılmamış cevap varken sekmeyi kapatmak riskli (yerel depo
   // gizli sekmede tutmayabilir). "Yenile" düğmesi bilerek yeniliyor.
@@ -653,7 +664,7 @@ export function CheckupRunner({
   // ── klavye ─────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (bitirAcik || cikisAcik || paletAcik || kapandi) return;
+      if (bitirAcik || cikisAcik || paletAcik || kapandi || gorselAcikRef.current) return;
       // Ctrl+C (kopyala) C şıkkını, Ctrl+A (tümünü seç) A şıkkını işaretliyordu.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const hedef = e.target;
@@ -689,7 +700,7 @@ export function CheckupRunner({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bitirAcik, cikisAcik, goTo, index, kapandi, paletAcik, questions, select, sonraDegistir]);
+  }, [bitirAcik, cikisAcik, goTo, gorselAcikRef, index, kapandi, paletAcik, questions, select, sonraDegistir]);
 
   // ── türetilenler ───────────────────────────────────────────
   const isaretli = questions.filter((q) => Boolean(answers[q.id])).length;
@@ -722,7 +733,9 @@ export function CheckupRunner({
   const cikisDonRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // Okuma boyu kökte: ilk çocuk betik sunucu çıktısında seçimi boyamadan önce yazar.
+    <div className="min-h-screen bg-gray-50" data-okuma-boyu={okumaBoyu} suppressHydrationWarning>
+      <OkumaBetigi />
       {/* Üst çubuk */}
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-3 sm:h-16 sm:gap-5 sm:px-6">
@@ -790,6 +803,8 @@ export function CheckupRunner({
               />
             </div>
           </div>
+
+          <OkumaBoyuDugmeleri boyut={okumaBoyu} onDegis={setOkumaBoyu} />
 
           {/* Süre — kritikte yanıp sönmüyor: son iki dakikada ekranda titreyen
               bir sayaç, matematik sorusu çözen öğrenciyi sorudan koparıyor. */}
@@ -916,10 +931,12 @@ export function CheckupRunner({
             </Alert>
           ) : null}
 
+          {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
           <article
             key={current.id}
             ref={soruRef}
             aria-labelledby={baslikId}
+            onClick={gorselYakala}
             className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
           >
             <div className="flex items-center gap-2">
@@ -957,7 +974,9 @@ export function CheckupRunner({
               </button>
             </div>
 
-            <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">{current.stem}</div>
+            <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
+              <div className="okuma">{current.stem}</div>
+            </div>
 
             <div
               role="radiogroup"
@@ -992,7 +1011,7 @@ export function CheckupRunner({
                       {choice.label}
                     </span>
                     <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
-                      {choice.content}
+                      <span className="okuma block">{choice.content}</span>
                     </span>
                     {secili ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
                   </button>
@@ -1307,6 +1326,9 @@ export function CheckupRunner({
           </p>
         ) : null}
       </Modal>
+
+      {/* Şekil tam ekranda — süre doldu penceresi açılırsa o önde kalsın diye kapanır. */}
+      <GorselBuyutec gorsel={kapandi ? null : gorsel} onKapat={gorselKapat} />
     </div>
   );
 }

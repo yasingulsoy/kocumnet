@@ -283,6 +283,8 @@ model Question {
   items         SessionItem[]
   exposures     QuestionExposure[]
   notebookItems NotebookItem[]
+  /// Panelde soru üstüne inceleme notları (QuestionNote).
+  notes         QuestionNote[]
 
   /// Eski: yönetim bu uygulamanın içindeyken kullanılıyordu. Yeni kayıtlar
   /// aşağıdaki personel damgalarını kullanır.
@@ -333,6 +335,27 @@ model Choice {
   @@index([questionId, sortOrder])
 }
 
+/// Panelde bir soru üstüne inceleme notu ("anahtarı kontrol et", madde
+/// analizi bulgusu). Yalnızca personel görür; öğrenciye hiçbir yoldan gitmez.
+/// Personel başka veritabanında: yazan ve çözen "e-posta (#id)" damgası.
+model QuestionNote {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  authorStaff String
+  /// Düz metin; en fazla ~2000 karakter (panelde denetlenir).
+  body        String
+
+  createdAt       DateTime  @default(now())
+  /// Çözüldü: boşsa not açık. Yeniden açılınca ikisi de boşalır.
+  resolvedAt      DateTime?
+  resolvedByStaff String?
+
+  /// Soru ekranındaki liste ve "açık notu olanlar" süzgeci.
+  @@index([questionId, resolvedAt])
+}
+
 /// Geometri şekilleri ve grafikler. LaTeX ile çizilmeyen her şey.
 model MediaAsset {
   id         String @id @default(cuid())
@@ -373,7 +396,7 @@ model ImportBatch {
   filename String
   format   String // "json" | "xlsx" | "csv"
 
-  status       String @default("PENDING") // PENDING | DONE | FAILED
+  status       String @default("PENDING") // PENDING | DONE | FAILED | REVERTED_PARTIAL | REVERTED
   totalRows    Int    @default(0)
   createdCount Int    @default(0)
   skippedCount Int    @default(0)
@@ -389,6 +412,11 @@ model ImportBatch {
 
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+
+  /// Son geri alma: ne zaman, kim ("e-posta (#id)"; komut satırında --personel).
+  /// Geri alınan parti silinmez, geçmişte "geri alındı" olarak durur.
+  rolledBackAt      DateTime?
+  rolledBackByStaff String?
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -443,8 +471,35 @@ model User {
 
   levelRuns     LevelRun[]
   notebookItems NotebookItem[]
+  parentLinks   ParentLink[]
 
   @@index([role])
+}
+
+/// Veli bağlantısı: öğrencinin velisiyle paylaştığı salt okunur, süreli rapor
+/// adresi (/veli/<jeton>). Giriş istemez; jeton bilen raporu görür.
+///
+/// Jetonun kendisi SAKLANMAZ, yalnızca SHA-256'sı: veritabanı sızarsa kimse
+/// rapor açamasın. Bu yüzden bağlantı yalnızca oluşturulduğu an gösterilir.
+/// Rapor genel tablodur (lib/veli-raporu.ts); soru, cevap, e-posta içermez.
+model ParentLink {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  /// Öğrenci kaldırdı: hemen kapanır. Süresi dolan ya da kaldırılan satırı
+  /// bakım 30 gün sonra siler (lib/veli.ts VELI_KAYIT_SAKLAMA_GUN).
+  revokedAt DateTime?
+
+  /// Kim açtı tutulmaz (IP, tarayıcı yok); yalnızca kaç kez ve en son ne zaman.
+  lastViewedAt DateTime?
+  viewCount    Int       @default(0)
+
+  /// Profildeki liste ve "en fazla 3 etkin" sayımı.
+  @@index([userId, expiresAt])
 }
 
 /// Parola sıfırlama jetonu.

@@ -1,12 +1,15 @@
 import "server-only";
+import { BackendError, backend } from "./backend";
 import { listBlogs, listMessages } from "./data";
 import type { AdminBlog } from "./types";
 
 /**
- * Genel bakış grafikleri — backend'in ZATEN verdiği listelerden türetilir,
- * yeni uç yok:
- *  · haftalık gelen mesaj: /api/admin/contact-messages (en yeni önce, sayfa
- *    başına en fazla 100) — dönemin başına inene kadar en fazla 5 sayfa;
+ * Genel bakış grafikleri:
+ *  · haftalık mesaj: backend'in /api/admin/stats/contact-messages ucu. Sayım
+ *    SQL'de, haftalar İstanbul saatiyle pazartesi başlar; gelenin yanında
+ *    yanıtlanan ya da arşivlenen sayısı da gelir. Uç yoksa (backend ayrı
+ *    dağıtılıyor, eski sürüm 404 verir) eski yol: mesaj listesini sayfa sayfa
+ *    çekip burada saymak (en fazla 5 × 100 mesaj, yalnızca gelen);
  *  · en çok okunanlar: /api/blogs yayındakiler (view_count birikimli
  *    toplamdır; dönemlik okuma verisi yok).
  */
@@ -23,17 +26,59 @@ function haftaBasi(gunAnahtari: string) {
   return gun(new Date(d.getTime() - fark * GUN));
 }
 
+/** "6 Eki" gibi hafta başı etiketi. */
+const etiket = (h: string) =>
+  new Date(`${h}T12:00:00Z`).toLocaleDateString("tr-TR", { day: "numeric", month: "short", timeZone: "UTC" });
+
 export interface HaftalikMesaj {
   /** "6 Eki" gibi hafta başı etiketleri, eskiden yeniye. */
   etiketler: string[];
+  /** Gelen mesaj (spam hariç). */
   sayilar: number[];
   /** Spam hariç dönemdeki toplam. */
   toplam: number;
-  /** Mesaj çoksa ve dönemin başına inilemediyse dönem kısaltıldı. */
+  /** O hafta yanıtlanan ya da arşivlenen; eski backend'de (yedek yol) null. */
+  kapanan: number[] | null;
+  kapananToplam: number | null;
+  /** Mesaj çoksa ve dönemin başına inilemediyse dönem kısaltıldı (yalnızca yedek yol). */
   kisaltildi: boolean;
 }
 
+/** GET /api/admin/stats/contact-messages yanıtı (backend routes/admin.js). */
+interface MesajIstatistigi {
+  timezone: string;
+  weeks: { week_start: string; received: number; answered: number }[];
+  totals: { received: number; answered: number };
+  /** Spam hariç bütün mesajların yanıtlanan ya da arşivlenen payı (0-1). */
+  answered_share: number | null;
+  unread: number;
+}
+
 export async function haftalikMesajlar(hafta = 12): Promise<HaftalikMesaj> {
+  let veri: MesajIstatistigi;
+  try {
+    veri = (await backend<{ data: MesajIstatistigi }>(`/api/admin/stats/contact-messages?weeks=${hafta}`)).data;
+  } catch (e) {
+    // Backend henüz bu ucu tanımıyor: eski yol.
+    if (e instanceof BackendError && e.status === 404) return sayfalayarak(hafta);
+    throw e;
+  }
+  if (!Array.isArray(veri?.weeks)) throw new Error("Mesaj istatistiği beklenmeyen biçimde geldi.");
+
+  const sayilar = veri.weeks.map((w) => w.received);
+  const kapanan = veri.weeks.map((w) => w.answered);
+  return {
+    etiketler: veri.weeks.map((w) => etiket(w.week_start)),
+    sayilar,
+    toplam: sayilar.reduce((a, b) => a + b, 0),
+    kapanan,
+    kapananToplam: kapanan.reduce((a, b) => a + b, 0),
+    kisaltildi: false,
+  };
+}
+
+/** Yedek yol: en yeni mesajlardan geriye, dönemin başına inene kadar en fazla 5 sayfa. */
+async function sayfalayarak(hafta: number): Promise<HaftalikMesaj> {
   const buHafta = haftaBasi(gun(new Date()));
   const haftalar: string[] = [];
   for (let i = hafta - 1; i >= 0; i--) haftalar.push(gun(new Date(new Date(`${buHafta}T12:00:00Z`).getTime() - i * 7 * GUN)));
@@ -65,13 +110,13 @@ export async function haftalikMesajlar(hafta = 12): Promise<HaftalikMesaj> {
     gecerli = haftalar.filter((h) => h > enEskiHafta);
   }
 
-  const etiket = (h: string) =>
-    new Date(`${h}T12:00:00Z`).toLocaleDateString("tr-TR", { day: "numeric", month: "short", timeZone: "UTC" });
   const sayilar = gecerli.map((h) => sayac.get(h) ?? 0);
   return {
     etiketler: gecerli.map(etiket),
     sayilar,
     toplam: sayilar.reduce((a, b) => a + b, 0),
+    kapanan: null,
+    kapananToplam: null,
     kisaltildi: gecerli.length < haftalar.length,
   };
 }

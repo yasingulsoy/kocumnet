@@ -1,4 +1,5 @@
 import katex from "katex";
+import { ZoomIn } from "lucide-react";
 import type { ContentBlock, InlineNode, QuestionContent } from "@/lib/question-content";
 
 /**
@@ -83,8 +84,12 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
  * `compact`: şık içeriği. Şıkta formül ortalanmaz ve dikey boşluk almaz —
  * "16" gibi tek sayılık bir cevabın satırın ortasına kaçması ve şıkları
  * gereksizce uzatması okumayı zorlaştırıyor.
+ *
+ * `buyutulebilir`: şekil bir düğmenin içinde, dokununca tam ekranda açılır
+ * (components/GorselBuyutec.tsx tıklamayı `data-gorsel-buyut` ile yakalar).
+ * Yalnızca o pencereyi kuran ekranlarda ver: başka yerde ölü düğme olur.
  */
-function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
+function Block({ block, compact, buyutulebilir }: { block: ContentBlock; compact: boolean; buyutulebilir: boolean }) {
   switch (block.type) {
     case "paragraph":
       return (
@@ -106,15 +111,38 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
         />
       );
 
-    case "image":
+    case "image": {
+      const gorsel = (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={mediaUrl(block.mediaId)}
+          alt={block.alt}
+          className="mx-auto max-w-full rounded-lg border border-gray-200 bg-white"
+        />
+      );
       return (
         <figure className="my-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={mediaUrl(block.mediaId)}
-            alt={block.alt}
-            className="mx-auto max-w-full rounded-lg border border-gray-200 bg-white"
-          />
+          {buyutulebilir ? (
+            // İpucu şeklin altında, üstünde değil: köşedeki bir rozet şeklin
+            // köşe harfini (A, B…) örtüyordu.
+            <button
+              type="button"
+              data-gorsel-buyut
+              aria-label={`Şekli büyüt: ${block.alt}`}
+              className="group/gorsel mx-auto block w-fit max-w-full cursor-zoom-in touch-manipulation rounded-lg"
+            >
+              {gorsel}
+              <span
+                aria-hidden
+                className="mt-1.5 flex items-center justify-end gap-1 text-theme-xs font-medium text-gray-500 transition group-hover/gorsel:text-brand-500"
+              >
+                <ZoomIn className="size-3.5" />
+                Büyüt
+              </span>
+            </button>
+          ) : (
+            gorsel
+          )}
           {block.caption ? (
             <figcaption className="mt-2 text-center text-xs text-gray-500">
               {block.caption}
@@ -122,6 +150,7 @@ function Block({ block, compact }: { block: ContentBlock; compact: boolean }) {
           ) : null}
         </figure>
       );
+    }
 
     case "table":
       return (
@@ -187,16 +216,19 @@ export function MathContent({
   content,
   className = "",
   compact = false,
+  buyutulebilir = false,
 }: {
   content: QuestionContent;
   className?: string;
   /** Şık içeriği için: formüller satır içi, dikey boşluk yok. */
   compact?: boolean;
+  /** Şekiller dokununca tam ekranda açılsın (sınav ve alıştırma ekranı). */
+  buyutulebilir?: boolean;
 }) {
   return (
     <div className={className}>
       {content.blocks.map((block, i) => (
-        <Block key={i} block={block} compact={compact} />
+        <Block key={i} block={block} compact={compact} buyutulebilir={buyutulebilir && !compact} />
       ))}
     </div>
   );

@@ -281,6 +281,7 @@ derlenmiş JS değil TypeScript kaynağı ve uzantısız import kullanıyor (bun
 | 20 | Adaptif soru seçimi (soru başına ≥300 cevap sonrası) | 3 | ⬜ |
 | 21 | Alıştırma: "Benzerini çöz", "Bu konuda çalış" (§12) | 2 | ✅ |
 | 22 | Yanlış defteri + aralıklı tekrar, "Bugünkü tekrar" (§12) | 2 | ✅ (aralıklar hoca onayı bekliyor) |
+| 23 | Veli bağlantısı: girişsiz, süreli, salt okunur genel tablo (§13) | 2 | ✅ (kapsam hoca kararı bekliyor, metin hukukçu) |
 
 **Doğrulama:** `npm run smoke` (saf mantık: puanlama, teşhis, parola, içerik şeması) ·
 `npm run test:markup` (yazım biçimi + gidiş-dönüş) · `npm run test:leak` (uçtan uca akış,
@@ -497,3 +498,33 @@ soru; vadeler Türkiye saatiyle gün başına yuvarlı.
    kendiliğinden giriyor. Bu iş başka bir işe mi dönüşsün (ör. "defterdeki
    çözümleri oku"), yoksa kontrol testi gibi bugünkü tekrar bitince sistem mi
    kapatsın?
+
+---
+
+## 13. Veli bağlantısı (2026-10-10)
+
+Veli bugün yalnızca öğrencinin bastığı PDF'i görebiliyordu. Öğrenci artık profilden
+girişsiz, salt okunur, süreli bir adres verebiliyor (`/veli/<jeton>`, WhatsApp ya da
+kopyala). Kurallar README'de ("Veli bağlantısı").
+
+### 13.1 Neden yalnızca genel tablo
+
+Hocaya sorduk (HOCAYA-SORULAR 10.10): veli genel tabloyu mu, soru soru ayrıntıyı mı
+görsün? Cevap gelene kadar dar olanı seçtik: ilk ad, hedef sınav, son ölçüm ve eğilim,
+güçlü/zayıf konular, son 5 check-up, bu haftanın plan tamamlaması, açık defter sayısı.
+Kullanıcıların çoğu 18 yaş altı ve bağlantıyı bilen herkes sayfayı görür; soru, cevap
+ve iletişim bilgisi bu yüzden yok. Genişletmek kolay (VeliRaporu tipine alan eklenir,
+`test:veli` alan listesini güncellemeyi ister), daraltmak ise dağılmış bağlantılar
+yüzünden geç kalır.
+
+### 13.2 Neden jeton saklanmıyor
+
+Oturum ve parola sıfırlamayla aynı: yalnızca SHA-256'sı. Veritabanı sızarsa kimse rapor
+açamaz. Bedeli: bağlantı yalnızca oluşturulduğu an görünür; kaybolursa kaldırılıp yenisi
+açılır (en fazla 3 etkin, 7/30/90 gün).
+
+### 13.3 Açık konular
+
+- Hukukçu: `/gizlilik`'teki "Veli bağlantısı" paragrafı TASLAK. 18 yaş altı için velinin
+  açık rızası sorusu (lib/legal.ts başındaki not) bu özellikten bağımsız değil.
+- Hoca: 10.10'un cevabına göre rapora soru soru ayrıntı eklenecek mi.

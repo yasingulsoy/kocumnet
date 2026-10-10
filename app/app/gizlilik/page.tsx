@@ -97,6 +97,33 @@ export default function PrivacyPage() {
           velinizin bilgisi ve onayı gerekir.
         </p>
 
+        {/* TASLAK: hukuki inceleme bekliyor (lib/legal.ts başındaki not). Hoca kararı HOCAYA-SORULAR 10.10. */}
+        <h2 id="veli-baglantisi" className={`${BASLIK} flex flex-wrap items-center gap-2 scroll-mt-6`}>
+          Veli bağlantısı
+          <Badge size="sm" color="warning">
+            taslak
+          </Badge>
+        </h2>
+        <p className={METIN}>
+          Profil sayfanızdan velinizle paylaşmak için salt okunur bir bağlantı oluşturabilirsiniz. Bağlantıyı açan
+          kişi giriş yapmadan yalnızca genel durumu görür: adınızın ilk kelimesi, hedef sınavınız, son ölçümünüz ve
+          gelişim grafiğiniz, güçlü ve zayıf konularınız, son 5 check-up&apos;ınızın tarihi, adı ve puanı, bu haftaki
+          planınızın ne kadarının tamamlandığı ve yanlış defterinizde bekleyen soru sayısı. Sorular, cevaplarınız,
+          çözümler, alıştırmalarınız, e-posta adresiniz ve diğer kişisel bilgileriniz bu sayfada yer almaz.
+        </p>
+        <p className={METIN}>
+          Bağlantı seçtiğiniz süre kadar açık kalır: 7, 30 ya da 90 gün (varsayılan 30). Aynı anda en fazla 3
+          bağlantınız olabilir. Profil sayfanızdaki &quot;Veli bağlantısı&quot; bölümünden istediğiniz an
+          kaldırabilirsiniz; kaldırılan ya da süresi dolan bağlantı hemen kapanır. Bağlantıyı bilen herkes raporu
+          görebileceği için yalnızca velinizle paylaşın. Bağlantının kendisini saklamayız, yalnızca geri çevrilemez
+          özetini; kaç kez ve en son ne zaman açıldığını kaydederiz, açan kişinin IP adresini ya da tarayıcısını
+          kaydetmeyiz. Sayfa arama motorlarına kapalıdır. Süresi dolan ya da kaldırılan bağlantının kaydı 30 gün
+          sonra silinir.
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          Bu bölüm taslaktır; hukuki incelemeden sonra kesinleşecektir.
+        </p>
+
         <h2 className={BASLIK}>Haklarınız</h2>
         <p className={METIN}>
           KVKK 11. madde kapsamında; verilerinizin işlenip işlenmediğini öğrenme, düzeltilmesini

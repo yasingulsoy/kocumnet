@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { ApexOptions } from "apexcharts";
+import type { GrafikTarihi } from "@/components/grafik-tarihleri";
 import { ApexChart, GRAFIK_RENKLERI, temelAyarlar } from "@/components/tailadmin/extras/charts/ApexChart";
 
 /*
@@ -20,8 +21,8 @@ import { ApexChart, GRAFIK_RENKLERI, temelAyarlar } from "@/components/tailadmin
  */
 
 export interface BasariNoktasi {
-  /** Eksen etiketi (kısa tarih). */
-  etiket: string;
+  /** Eksen etiketi (grafikTarihleri): satırlar ve veri tablosu için tam yazım. */
+  etiket: GrafikTarihi;
   /** 0-100 */
   deger: number;
   /** Balonda ve tabloda: "TYT Çekirdek · 12,50 net". */
@@ -52,18 +53,25 @@ function bantRengi(deger: number) {
   return deger >= 75 ? GRAFIK_RENKLERI.success500 : deger >= 45 ? GRAFIK_RENKLERI.warning500 : GRAFIK_RENKLERI.error500;
 }
 
-function ortakEksenler(noktalar: BasariNoktasi[]): Pick<ApexOptions, "xaxis" | "yaxis"> {
+/**
+ * `hepsiniYaz`: her etiket çizilir (en fazla sekiz sütunluk pano grafiği;
+ * kısa satırlar telefonda da sığar). Yoksa sığmayan etiket gizlenir — kesilmez
+ * ("10 Eki 1…" yazmaz); ApexCharts iki satırlı etiketi tek satır gibi ölçüp
+ * sığanı da gizlediği için sütun grafiğinde kapalı. Balon ve görünmez tablo
+ * tarihi her durumda söyler.
+ */
+function ortakEksenler(noktalar: BasariNoktasi[], hepsiniYaz = false): Pick<ApexOptions, "xaxis" | "yaxis" | "responsive"> {
   return {
     xaxis: {
       type: "category",
-      categories: noktalar.map((n) => n.etiket),
+      categories: noktalar.map((n) => n.etiket.eksen),
       axisBorder: { show: false },
       axisTicks: { show: false },
       tooltip: { enabled: false },
       labels: {
         rotate: 0,
-        hideOverlappingLabels: true,
-        trim: true,
+        hideOverlappingLabels: !hepsiniYaz,
+        trim: false,
         style: { colors: GRAFIK_RENKLERI.gray500, fontSize: "12px" },
       },
     },
@@ -73,6 +81,16 @@ function ortakEksenler(noktalar: BasariNoktasi[]): Pick<ApexOptions, "xaxis" | "
       tickAmount: 4,
       labels: { formatter: yuzde, style: { colors: [GRAFIK_RENKLERI.gray500], fontSize: "12px" } },
     },
+    // Telefonda eksen yazısı küçük: sekiz sütunun etiketi birbirine değmesin.
+    responsive: [
+      {
+        breakpoint: 480,
+        options: {
+          xaxis: { labels: { style: { fontSize: hepsiniYaz ? "10px" : "11px" } } },
+          yaxis: { labels: { style: { fontSize: "11px" } } },
+        },
+      },
+    ],
   };
 }
 
@@ -96,7 +114,7 @@ function VeriTablosu({ baslik, noktalar }: { baslik: string; noktalar: BasariNok
         <tbody>
           {noktalar.map((n, i) => (
             <tr key={i}>
-              <th scope="row">{n.etiket}</th>
+              <th scope="row">{n.etiket.tam}</th>
               <td>{n.ayrinti}</td>
               <td>{yuzde(n.deger)}</td>
             </tr>
@@ -182,7 +200,7 @@ export function SonTestlerGrafigi({
     },
     legend: { show: false },
     grid: { ...temel.grid, yaxis: { lines: { show: true } }, padding: { left: 4, right: 8 } },
-    ...ortakEksenler(noktalar),
+    ...ortakEksenler(noktalar, noktalar.length <= 8),
     states: { hover: { filter: { type: "none" } }, active: { filter: { type: "none" } } },
     tooltip: {
       ...temel.tooltip,

@@ -20,7 +20,8 @@
     "test:levels": "tsx scripts/level-test.mts",
     "test:practice": "tsx scripts/practice-test.mts",
     "import:questions": "tsx scripts/import-questions.mts",
-    "test:import": "tsx scripts/import-test.mts"
+    "test:import": "tsx scripts/import-test.mts",
+    "test:veli": "tsx scripts/veli-test.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

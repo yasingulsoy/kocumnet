@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 import { alistirmaCevaplaAction } from "@/lib/actions/practice";
+import { GorselBuyutec, useGorselBuyutec } from "@/components/GorselBuyutec";
+import { OkumaBetigi, OkumaBoyuDugmeleri, useOkumaBoyu } from "@/components/OkumaBoyu";
 import { Logo } from "@/components/ui/logo";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
@@ -113,6 +115,9 @@ export function PracticeRunner({
   const [hata, setHata] = useState<string | null>(null);
   const [oturumYok, setOturumYok] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Okuma rahatlığı (yalnızca görünüm): yazı boyu ve şekli tam ekranda büyütme.
+  const [okumaBoyu, setOkumaBoyu] = useOkumaBoyu();
+  const { gorsel, yakala: gorselYakala, kapat: gorselKapat, acikRef: gorselAcikRef } = useGorselBuyutec();
 
   const current = questions[index];
   const cevapli = Boolean(current?.feedback);
@@ -185,7 +190,7 @@ export function PracticeRunner({
   // ── klavye: harfle seç, Enter ile kontrol et, → ile geç ────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (ozet || !current) return;
+      if (ozet || !current || gorselAcikRef.current) return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       const hedef = e.target;
       if (hedef instanceof HTMLElement && (hedef.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(hedef.tagName))) {
@@ -214,14 +219,16 @@ export function PracticeRunner({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cevapli, current, gonder, ozet, sec, secili, sonraki]);
+  }, [cevapli, current, gonder, gorselAcikRef, ozet, sec, secili, sonraki]);
 
   const cevaplanan = questions.filter((q) => q.feedback).length;
   const dogru = questions.filter((q) => q.feedback?.isCorrect === true).length;
   const sonSoru = questions.every((q, i) => i === index || q.feedback);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // Okuma boyu kökte: ilk çocuk betik sunucu çıktısında seçimi boyamadan önce yazar.
+    <div className="min-h-screen bg-gray-50" data-okuma-boyu={okumaBoyu} suppressHydrationWarning>
+      <OkumaBetigi />
       {/* Üst çubuk: süre yok, yalnızca ilerleme. */}
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-2.5 px-3 sm:h-16 sm:gap-4 sm:px-6">
@@ -261,6 +268,7 @@ export function PracticeRunner({
               })}
             </ol>
           ) : null}
+          {!ozet ? <OkumaBoyuDugmeleri boyut={okumaBoyu} onDegis={setOkumaBoyu} /> : null}
           <span className="tabular shrink-0 rounded-lg bg-gray-100 px-2 py-1 text-[12px] font-semibold text-gray-700 ring-1 ring-gray-200 ring-inset">
             {cevaplanan}/{questions.length}
           </span>
@@ -290,9 +298,11 @@ export function PracticeRunner({
           />
         ) : current ? (
           <>
+            {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
             <article
               key={current.id}
               aria-labelledby={baslikId}
+              onClick={gorselYakala}
               className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
             >
               <div className="flex items-center gap-2">
@@ -310,7 +320,9 @@ export function PracticeRunner({
                 <span className="ms-auto shrink-0 text-[11px] font-medium text-gray-500 sm:text-theme-xs">Süre yok</span>
               </div>
 
-              <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">{current.stem}</div>
+              <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
+                <div className="okuma">{current.stem}</div>
+              </div>
 
               <div
                 role={cevapli ? "list" : "radiogroup"}
@@ -347,7 +359,9 @@ export function PracticeRunner({
                         >
                           {c.label}
                         </span>
-                        <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">{c.content}</span>
+                        <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
+                          <span className="okuma block">{c.content}</span>
+                        </span>
                         {dogruSik ? (
                           <Badge size="sm" color="success">
                             Doğru
@@ -387,7 +401,9 @@ export function PracticeRunner({
                       >
                         {c.label}
                       </span>
-                      <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">{c.content}</span>
+                      <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
+                        <span className="okuma block">{c.content}</span>
+                      </span>
                       {bu ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
                     </button>
                   );
@@ -445,6 +461,8 @@ export function PracticeRunner({
           </div>
         </div>
       ) : null}
+
+      <GorselBuyutec gorsel={gorsel} onKapat={gorselKapat} />
     </div>
   );
 }
@@ -559,7 +577,9 @@ function GeriBildirim({
           <p className="flex items-center gap-2 text-theme-xs font-semibold tracking-wide text-brand-500 uppercase">
             <Lightbulb className="size-4" aria-hidden /> Çözüm
           </p>
-          <div className="mt-2.5 text-body leading-relaxed text-gray-800">{fb.solution}</div>
+          <div className="mt-2.5 text-body leading-relaxed text-gray-800">
+            <div className="okuma">{fb.solution}</div>
+          </div>
         </div>
       ) : (
         <p className="text-theme-xs text-gray-500">Bu soruya henüz çözüm eklenmemiş.</p>

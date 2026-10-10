@@ -6,6 +6,9 @@ import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { trDate } from "@/lib/checkup/format";
 import { loadQuestionAnalysis } from "@/lib/checkup/item-analysis";
+import { BULGU_SIRASI } from "@/lib/checkup/item-flags";
+import { bulgularNotu } from "@/lib/checkup/question-note";
+import { soruNotlari } from "@/lib/checkup/question-notes";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
 import { komsular, listeSuzgeciSorgudan } from "@/lib/checkup/question-query";
 import { parseQuestionContent } from "@/lib/checkup/shared/question-content";
@@ -13,6 +16,7 @@ import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/quest
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { ItemAnalysisCard } from "@/components/checkup/ItemAnalysis";
 import { CopyIdButton } from "@/components/checkup/CopyIdButton";
+import { NotTaslagiSaglayici, SoruNotlari } from "@/components/checkup/QuestionNotes";
 import { QuestionForm } from "@/components/checkup/QuestionForm";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { ButtonLink, buttonClass } from "@/components/tailadmin/ui/Button";
@@ -37,7 +41,7 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     { href: listeAdresi(geri), label: "Sorular" },
   ];
 
-  const [question, topics, objectives] = await Promise.all([
+  const [question, topics, objectives, notlar] = await Promise.all([
     db.question.findUnique({
       where: { id },
       select: {
@@ -77,6 +81,7 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
       select: { id: true, topicId: true, code: true, name: true, status: true },
     }),
+    soruNotlari(id),
   ]);
 
   if (!question) notFound();
@@ -89,10 +94,11 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     return (
       <>
         <PageBreadcrumb crumbs={crumbs} pageTitle="Soruyu düzenle" />
-        <Alert variant="warning" title="Bu soru metin editöründe düzenlenemiyor">
+        <Alert variant="warning" title="Bu soru metin editöründe düzenlenemiyor" className="mb-6">
           Soru, yazım biçiminin temsil edemediği bir blok (tablo ya da altyazılı şekil)
           içeriyor. Bu formda kaydetmek o bloğu silerdi, bu yüzden düzenleme kapalı.
         </Alert>
+        <SoruNotlari questionId={question.id} notlar={notlar} yazabilir={yazabilir} />
       </>
     );
   }
@@ -111,6 +117,22 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
       errorType: c.errorType,
     })),
   });
+
+  /*
+   * Madde analizi listesindeki "Not ekle" (?not=hepsi ya da bulgu anahtarı):
+   * not kutusu o bulguların metniyle dolu açılır. Metin sunucuda bulgudan
+   * kurulur; adresten metin alınmaz.
+   */
+  const notParam = typeof sp.not === "string" ? sp.not : "";
+  const istenenBulgular =
+    yazabilir && notParam
+      ? analysis.bulgular.filter(
+          (b) => notParam === "hepsi" || ((BULGU_SIRASI as string[]).includes(notParam) && b.key === notParam)
+        )
+      : [];
+  const ilkTaslak = istenenBulgular.length
+    ? bulgularNotu(istenenBulgular, { version: question.version, n: analysis.stats.n })
+    : "";
 
   const initial = {
     id: question.id,
@@ -203,7 +225,11 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
         </Alert>
       ) : null}
 
-      <ItemAnalysisCard analysis={analysis} version={question.version} />
+      {/* Not kutusunun metni sağlayıcıda: analiz kartındaki "Not ekle" ona yazar. key: soru değişince taslak sıfırlansın. */}
+      <NotTaslagiSaglayici key={question.id} ilkTaslak={ilkTaslak}>
+        <ItemAnalysisCard analysis={analysis} version={question.version} notEklenebilir={yazabilir} />
+        <SoruNotlari questionId={question.id} notlar={notlar} yazabilir={yazabilir} />
+      </NotTaslagiSaglayici>
 
       <QuestionForm
         canEdit={yazabilir}

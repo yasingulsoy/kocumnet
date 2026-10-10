@@ -66,6 +66,8 @@ export interface MailIcerik {
   sonMetin?: string | string[];
   /** Alıntı kutusu (ham metin). */
   kutu?: string;
+  /** Düğmenin altında ikincil not: başlık, metin ve bir bağlantı (ör. yanlış defteri). */
+  ekNot?: { baslik: string; metin: string; baglanti: { etiket: string; url: string } };
   dipnot?: string;
   /** Alt bilgideki küçük bağlantı (abonelik kapatma gibi). */
   altBaglanti?: { etiket: string; url: string };
@@ -74,7 +76,7 @@ export interface MailIcerik {
 const dizi = (p?: string | string[]) => (Array.isArray(p) ? p : p ? [p] : []);
 
 /** Marka şablonu: satır içi CSS (e-posta istemcileri <style> bloğuna güvenmez). */
-export function renderMail({ baslik, metin, eylem, sonMetin, kutu, dipnot, altBaglanti }: MailIcerik): { html: string; text: string } {
+export function renderMail({ baslik, metin, eylem, sonMetin, kutu, ekNot, dipnot, altBaglanti }: MailIcerik): { html: string; text: string } {
   const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://kocum.net").replace(/\/$/, "");
   const on = dizi(metin);
   const son = dizi(sonMetin);
@@ -101,6 +103,15 @@ export function renderMail({ baslik, metin, eylem, sonMetin, kutu, dipnot, altBa
            <p style="margin:0 0 14px;font-size:12px;line-height:1.6;color:#6b7392;word-break:break-all;">Düğme çalışmazsa bu adresi tarayıcına yapıştır:<br><a href="${kacir(eylem.url)}" style="color:#1a5fb4;">${kacir(eylem.url)}</a></p>`
         : ""
     }
+    ${
+      ekNot
+        ? `<div style="margin:4px 0 18px;padding:14px 16px;background:#f6f8fc;border:1px solid #e6eaf2;border-radius:12px;">
+             <p style="margin:0 0 4px;font-size:15px;line-height:1.5;font-weight:600;color:#111834;">${kacir(ekNot.baslik)}</p>
+             <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#4b5471;">${kacir(ekNot.metin)}</p>
+             <a href="${kacir(ekNot.baglanti.url)}" style="font-size:14px;font-weight:600;color:#1a5fb4;">${kacir(ekNot.baglanti.etiket)} →</a>
+           </div>`
+        : ""
+    }
     ${son.map(p).join("")}
   </td></tr>
   <tr><td style="padding:14px 28px 26px;border-top:1px solid #e6eaf2;">
@@ -110,7 +121,18 @@ export function renderMail({ baslik, metin, eylem, sonMetin, kutu, dipnot, altBa
   </td></tr>
 </table></td></tr></table></body></html>`;
 
-  const text = [baslik, "", ...on, kutu ? `\n${kutu}\n` : null, eylem ? `${eylem.etiket}: ${eylem.url}` : null, ...son, dipnot ? `\n${dipnot}` : null, altBaglanti ? `${altBaglanti.etiket}: ${altBaglanti.url}` : null, `\n— Koçum.Net Check-up · ${appUrl()}`]
+  const text = [
+    baslik,
+    "",
+    ...on,
+    kutu ? `\n${kutu}\n` : null,
+    eylem ? `${eylem.etiket}: ${eylem.url}` : null,
+    ekNot ? `\n${ekNot.baslik}: ${ekNot.metin}\n${ekNot.baglanti.etiket}: ${ekNot.baglanti.url}\n` : null,
+    ...son,
+    dipnot ? `\n${dipnot}` : null,
+    altBaglanti ? `${altBaglanti.etiket}: ${altBaglanti.url}` : null,
+    `\n— Koçum.Net Check-up · ${appUrl()}`,
+  ]
     .filter((s): s is string => typeof s === "string")
     .join("\n");
 

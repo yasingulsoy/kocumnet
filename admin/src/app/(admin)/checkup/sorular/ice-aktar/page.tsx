@@ -20,7 +20,16 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 
 export const metadata: Metadata = { title: "Check-up · Toplu içe aktar" };
 
-const DURUM_RENGI: Record<string, BadgeColor> = { DONE: "success", FAILED: "error", PENDING: "warning", REVERTED_PARTIAL: "light" };
+const DURUM_RENGI: Record<string, BadgeColor> = {
+  DONE: "success",
+  FAILED: "error",
+  PENDING: "warning",
+  REVERTED_PARTIAL: "light",
+  REVERTED: "light",
+};
+
+/** Personel damgasından "(#id)" kısmı: ekranda e-posta, tamamı üstüne gelince. */
+const damgaAdi = (damga: string | null) => damga?.replace(/\s*\(#\d+\)$/, "") ?? "—";
 
 /**
  * Toplu soru içe aktarma: SORU-SABLONU biçimindeki .md dosyası + görseller.
@@ -105,11 +114,12 @@ export default async function ImportPage() {
 function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
   const silinecek = p.kalan - p.korunacak;
   // Teste girmiş sorular hiç silinmez; hepsi öyleyse geri alacak bir şey yok.
-  const geriAlinabilir = yazabilir && !p.suruyor && (silinecek > 0 || p.kalan === 0);
+  // Geri alınmış parti kayıt olarak kalır (kim, ne zaman): onun kaydı silinmez.
+  const geriAlinabilir = yazabilir && !p.suruyor && p.durum !== "REVERTED" && (silinecek > 0 || p.kalan === 0);
   const durumlar = Object.entries(p.durumlar)
     .sort(([, a], [, b]) => b - a)
     .map(([d, n]) => n + " " + (QUESTION_STATUS_LABEL[d] ?? d).toLocaleLowerCase("tr-TR"));
-  const kim = p.kim?.replace(/\s*\(#\d+\)$/, "") ?? "—";
+  const kim = damgaAdi(p.kim);
 
   return (
     <TableRow className="align-top">
@@ -138,10 +148,15 @@ function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
           </details>
         ) : null}
       </TableCell>
-      <TableCell>
+      <TableCell className="min-w-36">
         <Badge size="sm" color={DURUM_RENGI[p.durum] ?? "light"}>
           {p.durumEtiketi}
         </Badge>
+        {p.geriAlindi ? (
+          <span className="mt-1 block text-theme-xs" title={p.geriAlan ?? undefined}>
+            {trDate(p.geriAlindi, { time: true })} · {damgaAdi(p.geriAlan)}
+          </span>
+        ) : null}
       </TableCell>
       <TableCell nowrap>
         <span className="tabular text-gray-800">{p.alinan}</span> alındı

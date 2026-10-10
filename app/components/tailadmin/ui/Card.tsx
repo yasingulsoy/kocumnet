@@ -5,6 +5,9 @@
  * ComponentCard: başlıklı kart. Eklenenler: başlığın yanında eylem alanı
  * (actions), başlık düzeyi (sayfada h1 varsa kart h2), `flush` (gövde
  * dolgusuz: liste/tablo için) ve `tone="danger"` (tehlikeli bölge).
+ * Başlık en az 12rem ister: dar kartta eylem (düğme) başlığı sıkıştırmak
+ * yerine alt satıra geçer — telefonda başlık düğmenin yanında kelime kelime
+ * kırılıyordu. "Tümü" gibi kısa bağlantılar yine aynı satırda kalır.
  *
  * `tone` (kenar ve zemin): className'le `border-*`/`bg-*` vermek işe
  * yaramaz — Tailwind aynı özelliği yazan iki sınıfı kendi sırasıyla dizer,
@@ -68,8 +71,8 @@ export function ComponentCard({
         className
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 py-4 sm:px-6 sm:py-5">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-5 py-4 sm:px-6 sm:py-5">
+        <div className="min-w-0 flex-[1_1_12rem]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Baslik
               className={cx(

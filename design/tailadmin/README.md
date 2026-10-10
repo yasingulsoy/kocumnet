@@ -287,6 +287,8 @@ dizer, kartın gri kenarı/beyazı kazanabilir — `tone` kullan. `ComponentCard
 `title` · `desc` · `badge` (başlığın yanında) · `actions` (sağda) · `icon` ·
 `flush` (gövde dolgusuz: tablo, liste) · `titleAs` h2 | h3 (h2) · `tone`
 default | danger | brand · `id`. Kartlar `min-w-0`: ızgarada tablo kartı taşırmaz.
+Başlık sütunu en az 12rem ister: dar kartta `actions` (düğme) başlığı
+sıkıştırmaz, alt satıra geçer; "Tümü" gibi kısa bağlantı aynı satırda kalır.
 `MetricCard`: `label` · `value` · `icon` · `badge` · `hint` · `href` · `tone`
 gray | brand | success | warning | error (gray) · `compact` (telefonda küçük
 ikon ve sayı: 2x2 dört kart ekranı doldurmasın). `EmptyState`: `icon` · `title`
@@ -334,7 +336,7 @@ kendi id'ni verdiysen) · `labelAction` (etiket satırının sonunda, ör. "Paro
 | `Select` | `options` { value, label, disabled }[] ya da `<option>` çocukları · `placeholder` · `error` · `compact` · `wrapperClassName` (genişlik buraya) |
 | `Checkbox` | `label` · `description` · `indeterminate` · `wrapperClassName`; etiketsizse `aria-label` ver |
 | `Radio` | `label` · `description` · `card` (seçenek kartı) · `size` sm \| md |
-| `Switch` | `label` · `description` · `color` blue \| gray; `role="switch"` |
+| `Switch` | `label` · `description` · `color` blue \| gray; `role="switch"`. Kapalı ray gray-500 (beyazda 4.97:1; TailAdmin'in gray-200'ü 1.2:1'di), devre dışıyken soluk ama açık/kapalı rengi korunur |
 | `FileInput` | `error` (yerel dosya alanı, kit görünümü) |
 | `DateInput` | `type` date \| datetime-local \| month \| time · `error` · `compact` · `wrapperClassName`; yerel tarih alanı, takvim simgesi tıklanınca açılır, değer `yyyy-aa-gg` |
 | `MultiSelect` | `label` (görünür) · `options` { value, text }[] · `defaultSelected` ya da `value` + `onChange` · `name` (her seçim gizli alanla formla gider) · `placeholder` · `disabled` · `removeLabel(metin)` |
@@ -464,7 +466,9 @@ TailAdmin'in ApexCharts kartlarının görünümü, kütüphanesiz. Çizim
   { label, value }[] (gri alt şerit) · `note` · `titleAs`.
 - `BarChart`: `categories` · `series` { name, data }[] (en fazla iki seri) ·
   `ariaLabel` · `height` (180) · `valueFormat` · `labelEvery` (sıkışık eksende
-  her n'inci etiket). Üstüne gelince değer balonu.
+  her n'inci etiket). Üstüne gelince değer balonu. Kutusundan taşmaz (kart
+  `overflow-hidden` olmasa da, ör. `stats` şeritli ChartCard ya da düz Card):
+  ilk/son eksen etiketi ve balon kenarda içe hizalı, görünmez tablo sr-only kapta.
 - `RadialGauge`: `value` 0–100 · `label` (ortadaki yazı) · `ariaLabel` · `tone`
   brand | success | warning | error · `size` sm (en fazla 10rem, küçük yazı:
   dar yerde yazı yaya değmesin) | md (md).

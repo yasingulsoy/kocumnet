@@ -70,14 +70,15 @@ Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-o
 | Proje | Komutlar |
 | --- | --- |
 | Hepsi | `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app | `npm run smoke` · `npm run test:markup` · `npm run test:leak` · `npm run test:levels` |
+| app | `npm run smoke` · `npm run test:markup` · `npm run test:import` · `npm run test:leak` · `npm run test:levels` · `npm run test:practice` · `npm run test:veli` |
 | admin | `npm run checkup:check` (şema kopyası eşit mi) |
 | backend | `npm run smoke` (çalışan sunucuya istek atar) |
 | kök | `node design/sync.mjs --check` (tasarım ve marka kopyaları eşit mi) |
 
 GitHub Actions her push'ta bunları çalıştırır: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 `test:leak` öğrenciye giden veride cevap anahtarı olmadığını denetler; bozulursa
-yayına çıkmayın.
+yayına çıkmayın. `test:veli` girişsiz veli raporunda soru metni, cevap anahtarı ve
+e-posta olmadığını denetler; o da bozulursa yayına çıkmayın.
 
 ## Tasarım ve marka
 

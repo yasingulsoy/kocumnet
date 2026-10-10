@@ -64,8 +64,10 @@ jobs:
   checkup-e2e:
     # Öğrenciye giden veride cevap anahtarı var mı (test:leak), telafide soru
     # tekrar ediyor mu (test:levels) ve alıştırma cevabı yalnızca cevaplanan
-    # soruda mı açıyor, ölçümü kirletiyor mu (test:practice). Hepsi sessiz kusur:
-    # arayüz çalışmaya devam eder, ölçüm anlamsızlaşır. Gerçek bir Postgres'e karşı koşar.
+    # soruda mı açıyor, ölçümü kirletiyor mu (test:practice). Girişsiz veli
+    # raporunda soru metni, cevap anahtarı, e-posta var mı; jeton saklanıyor mu
+    # (test:veli). Hepsi sessiz kusur: arayüz çalışmaya devam eder, ölçüm
+    # anlamsızlaşır ya da veri sızar. Gerçek bir Postgres'e karşı koşar.
     name: Check-up uçtan uca (sızıntı + seviyeler)
     runs-on: ubuntu-latest
     services:
@@ -105,6 +107,7 @@ jobs:
       - run: npm run test:leak
       - run: npm run test:levels
       - run: npm run test:practice
+      - run: npm run test:veli
 
   backend:
     name: backend

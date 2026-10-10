@@ -5,12 +5,9 @@ import {
   ArrowRight,
   CalendarDays,
   ClipboardList,
-  Hourglass,
   Layers,
   NotebookPen,
-  Play,
   Repeat,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -21,9 +18,11 @@ import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
 import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
 import { aktifPlan } from "@/lib/plan";
 import { aktifKosu } from "@/lib/level-run";
+import { bugunkuIs } from "@/lib/bugun";
 import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
 import { daysUntilExam, examShort } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
+import { BugunKarti } from "@/components/BugunKarti";
 import { PackageCard } from "@/components/PackageCard";
 import { PlanCard } from "@/components/PlanCard";
 import { PlanOlusturKarti } from "@/components/PlanOlusturKarti";
@@ -41,7 +40,6 @@ import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
 import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
-import { GridShape } from "@/components/tailadmin/ui/GridShape";
 import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
@@ -173,10 +171,29 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     .sort((a, b) => a.ratio - b.ratio)
     .slice(0, 3);
 
-  const oneriler = siradakiPaketler(katalog);
+  // Üç öneri: biri "Bugün" kartına giderse altta yine iki seçenek kalsın.
+  const oneriler = siradakiPaketler(katalog, 3);
 
   const ilkAd = user.name.split(" ")[0];
   const yeni = sonuclar.length === 0;
+
+  /*
+   * "Bugün": yarım test → seviyeli devam → bugünkü tekrar → planın sıradaki
+   * işi → önerilen test (lib/bugun.ts). Veri yukarıda zaten yüklendi; kartın
+   * gösterdiği iş aşağıda ikinci kez yazılmaz.
+   */
+  const seviyeliBekliyor = seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? seviyeliKosu : null;
+  const bugun = bugunkuIs({
+    acikTest: acik,
+    seviyeli: seviyeliBekliyor,
+    tekrar: defter,
+    planIsleri: plan?.items ?? null,
+    oneri: oneriler[0] ?? null,
+  });
+  const defterBugunde = bugun.tur === "TEKRAR" || bugun.tur === "TEKRAR_DEVAM";
+  const digerOneriler = oneriler
+    .filter((p) => bugun.tur !== "ONERI" || p.slug !== bugun.paket.slug)
+    .slice(0, 2);
   const kalanGun = daysUntilExam(user.targetExam, now);
   const haftalikHedef = user.weeklyTestGoal ?? null;
   const temponunDurumu = haftalikHedef !== null && buHaftakiTest >= haftalikHedef;
@@ -240,29 +257,33 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
           </Alert>
         ) : null}
 
-        {/* ── 1. Bu hafta ─────────────────────────────────── */}
+        {/* ── 1. Bugün: tek iş, tek düğme ─────────────────── */}
+        {/* Hiç testi olmayan öğrencide iş yoksa (katalog boş) alttaki boş durum konuşur. */}
+        {bugun.tur !== "YOK" || !yeni ? <BugunKarti is={bugun} yeni={yeni} /> : null}
+
+        {/* ── 2. Bu hafta ─────────────────────────────────── */}
         {plan ? <PlanCard plan={plan} haftaEtiketi={haftaEtiketi(plan.weekStart)} /> : !yeni ? <PlanOlusturKarti /> : null}
 
         {/* ── Seviyeli check-up devam ediyor ──────────────── */}
-        {/* Aşama zaten açıksa aşağıdaki "yarım kalan test" kartı aynı yere
-            götürüyor; iki ayrı "Devam et" göstermiyoruz. */}
-        {seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? (
+        {/* "Bugün" kartı bunu söylüyorsa ikinci kez yazılmaz; aşama zaten
+            açıksa "Bugün" kartı yarım testi gösteriyor. */}
+        {seviyeliBekliyor && bugun.tur !== "SEVIYELI" ? (
           <Card tone="brand" className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5">
             <IkonKutusu>
               <Layers aria-hidden />
             </IkonKutusu>
             <div className="min-w-0 flex-1">
               <p className="font-display text-base font-semibold text-gray-800">
-                {seviyeliKosu.pendingRemedialIds.length > 0
+                {seviyeliBekliyor.pendingRemedialIds.length > 0
                   ? "Teyit turun bekliyor"
-                  : `Seviye ${seviyeliKosu.unlockedLevel} seni bekliyor`}
+                  : `Seviye ${seviyeliBekliyor.unlockedLevel} seni bekliyor`}
               </p>
               <p className="mt-0.5 text-theme-sm text-gray-500">
-                {examShort(seviyeliKosu.examScope)} seviyeli check-up · yarım kaldı
+                {examShort(seviyeliBekliyor.examScope)} seviyeli check-up · yarım kaldı
               </p>
             </div>
             <ButtonLink
-              href={`/seviye/${seviyeliKosu.id}`}
+              href={`/seviye/${seviyeliBekliyor.id}`}
               endIcon={<ArrowRight className="rtl:rotate-180" />}
               className="max-sm:w-full"
             >
@@ -271,98 +292,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
           </Card>
         ) : null}
 
-        {/* ── 2. Tek eylem ────────────────────────────────── */}
-        {acik ? (
-          <Card tone="dark" className="relative z-1 overflow-hidden p-5 sm:p-6">
-            <GridShape />
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-theme-xs font-semibold tracking-[0.14em] text-gray-300 uppercase">
-                  <Hourglass className="size-3.5" aria-hidden /> Yarım kalan test
-                </p>
-                <h2 className="mt-1.5 font-display text-xl font-semibold text-balance text-white sm:text-2xl">
-                  {acik.kind === "TOPIC_RETEST" && acik.focusTopic
-                    ? `${acik.focusTopic.name} kontrol testi`
-                    : acik.kind === "LEVEL_STAGE"
-                      ? `${acik.stageKind === "REMEDIAL" ? "Teyit turu" : `Seviye ${acik.stageLevel ?? 1}`} · ${acik.package.name}`
-                      : acik.package.name}
-                </h2>
-                <p className="tabular mt-1 text-theme-sm text-gray-300">
-                  {acik.items.length}/{acik._count.items} işaretli · süre{" "}
-                  {acik.expiresAt.toLocaleTimeString("tr-TR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "Europe/Istanbul",
-                  })}
-                  {"'"}e kadar
-                </p>
-              </div>
-              <ButtonLink href={`/checkup/${acik.id}`} variant="outline" size="md" startIcon={<Play />} className="w-full sm:w-auto">
-                Devam et
-              </ButtonLink>
-            </div>
-          </Card>
-        ) : seviyeliKosu || (yeni && katalog.length === 0) ? null : yeni ? (
-          /* Tek sonraki adım: seviyeli koşu yarımsa onun kartı, katalog boşsa
-             alttaki boş durum; ikisi yoksa ilk test. */
-          <Card tone="brand" className="p-5 sm:p-8">
-            <p className="flex items-center gap-1.5 text-theme-xs font-semibold tracking-[0.14em] text-brand-500 uppercase">
-              <Sparkles className="size-3.5" aria-hidden /> İlk adım
-            </p>
-            <h2 className="mt-1.5 font-display text-2xl font-semibold text-balance text-gray-800">
-              Kısa bir testle başlayalım
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Sonunda hangi konuda güçlü, hangisinde eksiğin olduğunu ve her yanlışının çözümünü göreceksin.
-            </p>
-            {oneriler[0] ? (
-              <ButtonLink
-                href={"/paketler/" + oneriler[0].slug}
-                size="md"
-                block
-                className="mt-5"
-                endIcon={<ArrowRight className="rtl:rotate-180" />}
-              >
-                {oneriler[0].name} · {oneriler[0].durationMinutes} dk
-              </ButtonLink>
-            ) : (
-              <ButtonLink href="/paketler" size="md" block className="mt-5" endIcon={<ArrowRight className="rtl:rotate-180" />}>
-                Testleri gör
-              </ButtonLink>
-            )}
-            <ol className="mt-5 flex items-center gap-2 border-t border-gray-100 pt-4 text-theme-xs text-gray-500">
-              {["Paket seç", "Soruları çöz", "Haritanı gör"].map((t, i) => (
-                <li key={t} className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="tabular flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[0.625rem] font-bold text-brand-500">
-                    {i + 1}
-                  </span>
-                  <span className="truncate">{t}</span>
-                </li>
-              ))}
-            </ol>
-          </Card>
-        ) : oneriler[0] ? (
-          <Card tone="brand" className="p-5 sm:p-6">
-            <p className="text-theme-xs font-semibold tracking-[0.14em] text-brand-500 uppercase">Sıradaki adımın</p>
-            <h2 className="mt-1.5 font-display text-xl font-semibold text-balance text-gray-800">{oneriler[0].name}</h2>
-            <p className="tabular mt-1 text-theme-sm text-gray-500">
-              {oneriler[0].questionCount} soru · {oneriler[0].durationMinutes} dk · {oneriler[0].topicCount} konu
-            </p>
-            <ButtonLink
-              href={"/paketler/" + oneriler[0].slug}
-              size="md"
-              block
-              className="mt-4"
-              endIcon={<ArrowRight className="rtl:rotate-180" />}
-            >
-              Teste göz at
-            </ButtonLink>
-          </Card>
-        ) : null}
-
         {/* ── Yanlış defteri: günlük tekrar ───────────────── */}
-        {/* Hiç testi olmayan öğrenciye gösterilmez: boş panoda tek çağrı ilk test. */}
-        {!yeni || defter.acikMadde > 0 ? <DefterKarti durum={defter} now={now} /> : null}
+        {/* Hiç testi olmayan öğrenciye gösterilmez: boş panoda tek çağrı ilk test.
+            Bugünkü tekrar "Bugün" kartındaysa burada tekrar etmiyoruz. */}
+        {(!yeni || defter.acikMadde > 0) && !defterBugunde ? <DefterKarti durum={defter} now={now} /> : null}
 
         {/* ── 3. İlerleme: sayılar ve grafikler ───────────── */}
         {olcumler.length > 0 && sonOlcum ? (
@@ -562,13 +495,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         ) : null}
 
         {/* ── 5. Öneriler ─────────────────────────────────── */}
-        {!yeni && oneriler.length > 0 ? (
+        {/* "Bugün" kartının önerdiği test burada yinelenmez. */}
+        {!yeni && digerOneriler.length > 0 ? (
           <section aria-labelledby="siradaki-testler">
             <h2 id="siradaki-testler" className="text-theme-xs font-semibold tracking-[0.14em] text-gray-500 uppercase">
               Sıradaki testler
             </h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 sm:gap-4 md:gap-6">
-              {oneriler.map((p) => (
+              {digerOneriler.map((p) => (
                 <PackageCard key={p.slug} p={p} />
               ))}
             </div>

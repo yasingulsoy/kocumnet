@@ -132,6 +132,10 @@ async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
     ok('oturumsuz denetim kaydı reddediliyor', res.status === 401);
   }
   {
+    const { res } = await iste('/api/admin/stats/contact-messages');
+    ok('oturumsuz mesaj istatistiği reddediliyor', res.status === 401);
+  }
+  {
     // Giriş sınırı hesap başına: A hesabının yanlış denemeleri B'nin hakkını yemez.
     const kavanoz = cerezKabi();
     await iste('/api/csrf-token', { cerez: kavanoz });
@@ -312,6 +316,8 @@ async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
       }
 
       await mesajTestleri(cerez, giris.json.user);
+      await istatistikTestleri(cerez);
+      await rolTestleri(cerez);
       await sablonTestleri(cerez);
       await gorselTestleri(cerez);
       await cakismaTestleri(cerez);
@@ -334,11 +340,21 @@ async function iste(yol, { method = 'GET', body, cerez, headers = {} } = {}) {
 async function mesajTestleri(cerez, ben) {
   console.log('\nMesaj kutusu (oturumlu):');
   const etiket = `duman-${Date.now().toString(36)}`;
+  // Haftalık istatistiğin bu haftası: mesaj gelince, yanıtlanınca, silinince değişmeli.
+  const buHafta = async () => {
+    const r = await iste('/api/admin/stats/contact-messages?weeks=1', { cerez });
+    const w = r.json && r.json.data && r.json.data.weeks;
+    return w && w.length === 1 ? w[0] : null;
+  };
+  const ist0 = await buHafta();
   const gonder = await iste('/api/contact', {
     method: 'POST',
     body: { name: 'Duman Testi', email: `${etiket}@example.com`, message: `Otomatik test mesajı ${etiket}, silinecek.` },
   });
   ok('iletişim formu kaydediyor', gonder.res.status === 201);
+  const ist1 = await buHafta();
+  // Hafta sınırı iki istek arasına denk gelirse karşılaştırma anlamsız: atla.
+  const ayniHafta = (a, b) => Boolean(a && b && a.week_start === b.week_start);
 
   const liste = await iste(`/api/admin/contact-messages?status=new,read&search=${etiket}`, { cerez });
   const m = liste.json && liste.json.data && liste.json.data[0];
@@ -352,6 +368,18 @@ async function mesajTestleri(cerez, ben) {
 
   const yanit = await iste(`/api/admin/contact-messages/${m.id}`, { method: 'PATCH', body: { status: 'answered' }, cerez });
   ok('yanıtlandı olarak işaretleniyor', Boolean(yanit.json && yanit.json.data && yanit.json.data.answered_at));
+  const ist2 = await buHafta();
+  if (!ist0 || !ist1 || !ist2) {
+    ok('istatistik: bu hafta okunuyor', false, JSON.stringify({ ist0, ist1, ist2 }));
+  } else if (ayniHafta(ist0, ist2)) {
+    ok(
+      'istatistik: gelen mesaj bu haftaya sayılıyor, yanıtlanınca kapanan da artıyor',
+      ist1.received === ist0.received + 1 && ist1.answered === ist0.answered && ist2.received === ist1.received && ist2.answered === ist1.answered + 1,
+      JSON.stringify({ ist0, ist1, ist2 })
+    );
+  } else {
+    console.log('  · Hafta sınırı denk geldi: istatistik karşılaştırması atlandı.');
+  }
   const not = await iste(`/api/admin/contact-messages/${m.id}`, { method: 'PATCH', body: { note: 'Telefonla arandı' }, cerez });
   ok('ekip notu kaydediliyor', Boolean(not.json && not.json.data && not.json.data.note === 'Telefonla arandı'));
 
@@ -364,11 +392,19 @@ async function mesajTestleri(cerez, ben) {
 
   const toplu = await iste('/api/admin/contact-messages', { method: 'PATCH', body: { ids: [m.id], status: 'archived' }, cerez });
   ok('toplu durum değişikliği', Boolean(toplu.json && toplu.json.updated === 1));
+  const ist3 = await buHafta();
+  if (ayniHafta(ist2, ist3)) {
+    ok('istatistik: yanıtlanıp arşivlenen mesaj iki kez sayılmıyor', ist3.received === ist2.received && ist3.answered === ist2.answered, JSON.stringify({ ist2, ist3 }));
+  }
   const bozuk = await iste('/api/admin/contact-messages', { method: 'PATCH', body: { ids: [m.id], status: 'yok' }, cerez });
   ok('toplu işlemde geçersiz durum 400', bozuk.res.status === 400);
 
   const sil = await iste(`/api/admin/contact-messages/${m.id}`, { method: 'DELETE', cerez });
   ok('test mesajı silindi', Boolean(sil.json && sil.json.success));
+  const ist4 = await buHafta();
+  if (ayniHafta(ist0, ist4)) {
+    ok('istatistik: silinen mesaj sayılardan düşüyor', ist4.received === ist0.received && ist4.answered === ist0.answered, JSON.stringify({ ist0, ist4 }));
+  }
 
   const iz = await iste('/api/admin/audit?area=message&limit=20', { cerez });
   const satirlar = (iz.json && iz.json.data) || [];
@@ -379,6 +415,101 @@ async function mesajTestleri(cerez, ben) {
     eylemler.join(',')
   );
   ok('denetim kaydında gönderenin e-postası yok', satirlar.every((r) => !String(r.summary).includes(etiket)));
+}
+
+/**
+ * Haftalık mesaj istatistiği (genel bakış grafiği): biçim, hafta sınırları
+ * (İstanbul saati, pazartesi), parametre denetimi, spam'in sayılmaması.
+ * Kendi oluşturduğu mesajı siler.
+ */
+async function istatistikTestleri(cerez) {
+  console.log('\nMesaj istatistiği:');
+  const yol = '/api/admin/stats/contact-messages';
+  const r = await iste(yol, { cerez });
+  const d = r.json && r.json.data;
+  const haftalar = (d && d.weeks) || [];
+  ok('varsayılan 12 hafta dönüyor', r.res.status === 200 && haftalar.length === 12, `${r.res.status} ${haftalar.length}`);
+
+  const GUN = 86_400_000;
+  const tarih = (s) => Date.parse(`${s}T00:00:00Z`);
+  ok(
+    'haftalar pazartesi başlıyor, ardışık, eskiden yeniye',
+    haftalar.length > 0 &&
+      haftalar.every((h, i) => new Date(tarih(h.week_start)).getUTCDay() === 1 && (i === 0 || tarih(h.week_start) - tarih(haftalar[i - 1].week_start) === 7 * GUN)),
+    haftalar.map((h) => h.week_start).join(',')
+  );
+  // İstanbul'da bugünün haftasının pazartesisi (sunucu ile aynı saatte koştuğumuz varsayımıyla).
+  const bugun = tarih(new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' }));
+  const pazartesi = new Date(bugun - ((new Date(bugun).getUTCDay() + 6) % 7) * GUN).toISOString().slice(0, 10);
+  const son = haftalar[haftalar.length - 1];
+  ok('son hafta İstanbul saatiyle bu hafta', Boolean(son && son.week_start === pazartesi), `${son && son.week_start} / ${pazartesi}`);
+  ok(
+    'toplamlar haftaların toplamı',
+    Boolean(d && d.totals.received === haftalar.reduce((t, h) => t + h.received, 0) && d.totals.answered === haftalar.reduce((t, h) => t + h.answered, 0))
+  );
+  ok(
+    'yanıtlanma oranı (0-1) ve okunmamış sayısı var',
+    Boolean(d && (d.answered_share === null || (d.answered_share >= 0 && d.answered_share <= 1)) && Number.isInteger(d.unread))
+  );
+
+  const dort = await iste(`${yol}?weeks=4`, { cerez });
+  ok('?weeks=4 dört hafta', Boolean(dort.json && dort.json.data && dort.json.data.weeks.length === 4));
+  const kotuler = await Promise.all(['0', '53', 'abc', '1.5', '-2'].map((w) => iste(`${yol}?weeks=${w}`, { cerez })));
+  ok(
+    'geçersiz hafta sayısı 400 + INVALID_WEEKS (tek hata biçimi)',
+    kotuler.every((k) => k.res.status === 400 && k.json && k.json.success === false && k.json.code === 'INVALID_WEEKS' && typeof k.json.error === 'string'),
+    kotuler.map((k) => k.res.status).join(',')
+  );
+
+  // Spam sayılmaz: gelen mesaj spam işaretlenince bu haftanın sayısı geri düşer.
+  const once = await iste(`${yol}?weeks=1`, { cerez });
+  const etiket = `duman-spam-${Date.now().toString(36)}`;
+  await iste('/api/contact', {
+    method: 'POST',
+    body: { name: 'Duman Testi', email: `${etiket}@example.com`, message: `Otomatik spam denemesi ${etiket}, silinecek.` },
+  });
+  const liste = await iste(`/api/admin/contact-messages?search=${etiket}`, { cerez });
+  const m = liste.json && liste.json.data && liste.json.data[0];
+  if (!m) {
+    ok('spam denemesi mesajı bulundu', false);
+    return;
+  }
+  await iste(`/api/admin/contact-messages/${m.id}`, { method: 'PATCH', body: { status: 'spam' }, cerez });
+  const sonra = await iste(`${yol}?weeks=1`, { cerez });
+  const a = once.json && once.json.data && once.json.data.weeks[0];
+  const b = sonra.json && sonra.json.data && sonra.json.data.weeks[0];
+  if (a && b && a.week_start === b.week_start) {
+    ok('spam işaretlenen mesaj sayılmıyor', a.received === b.received && a.answered === b.answered, JSON.stringify({ a, b }));
+  }
+  await iste(`/api/admin/contact-messages/${m.id}`, { method: 'DELETE', cerez });
+}
+
+/**
+ * Mesaj istatistiği yalnızca yönetici ve müdüre açık. Geçici bir editör
+ * hesabı açar, onunla dener, en sonda siler.
+ */
+async function rolTestleri(cerez) {
+  console.log('\nRol sınırı:');
+  const eposta = `duman-editor-${Date.now().toString(36)}@kocum.local`;
+  const parola = crypto.randomBytes(16).toString('hex');
+  const ac = await iste('/api/admin/users', {
+    method: 'POST',
+    body: { email: eposta, first_name: 'Duman', last_name: 'Editör', role: 'editor', password: parola },
+    cerez,
+  });
+  const id = ac.json && ac.json.data && ac.json.data.id;
+  ok('geçici editör hesabı açıldı', Boolean(id), ac.json && ac.json.error);
+  if (!id) return;
+  try {
+    const kap = cerezKabi();
+    await iste('/api/csrf-token', { cerez: kap });
+    const giris = await iste('/api/admin/auth/login', { method: 'POST', body: { usernameOrEmail: eposta, password: parola }, cerez: kap });
+    const ist = await iste('/api/admin/stats/contact-messages', { cerez: kap });
+    ok('editör mesaj istatistiğini göremiyor (403)', Boolean(giris.json && giris.json.success) && ist.res.status === 403, String(ist.res.status));
+  } finally {
+    const sil = await iste(`/api/admin/users/${id}`, { method: 'DELETE', cerez });
+    ok('geçici editör hesabı silindi', Boolean(sil.json && sil.json.success));
+  }
 }
 
 /** "Diğer cihazlardan çıkış": eski oturum düşer, bu cihaz açık kalır. */

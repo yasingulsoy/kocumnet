@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { LogOut, Mail, ShieldCheck, Target, Ticket, User } from "lucide-react";
+import { LogOut, Mail, ShieldCheck, Target, Ticket, User, UsersRound } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
+import { etkinVeliBaglantilari } from "@/lib/veli-raporu";
 import { logoutAction } from "@/lib/actions/auth";
 import { GRADE_LABEL, examShort, isGrade } from "@/lib/exams";
 import { trDate } from "@/components/ui";
@@ -13,6 +14,7 @@ import { ProfileCard, type ProfileDetail } from "@/components/tailadmin/profile/
 import { SettingRow, SettingsCard } from "@/components/tailadmin/profile/SettingsCard";
 import { DeleteAccount, HedefForm, MailTercihForm, PasswordDialogButton, ProfileForm } from "./forms";
 import { SessionsCard } from "./SessionsCard";
+import { VeliBaglantisi } from "./VeliBaglantisi";
 
 export const metadata: Metadata = { title: "Profil" };
 
@@ -20,7 +22,7 @@ export default async function ProfilePage() {
   const oturum = await requirePageUser();
   const now = new Date();
 
-  const [user, haklar, testSayisi] = await Promise.all([
+  const [user, haklar, testSayisi, veliBaglantilari] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: oturum.id },
       select: {
@@ -44,6 +46,7 @@ export default async function ProfilePage() {
       select: { id: true, expiresAt: true, package: { select: { name: true } } },
     }),
     prisma.checkupSession.count({ where: { userId: oturum.id, status: "SUBMITTED", kind: { not: "PRACTICE" } } }),
+    etkinVeliBaglantilari(oturum.id, now),
   ]);
 
   // Kişi kartının altındaki özet: yalnızca zaten okunan alanlar, boş olanlar yazılmaz.
@@ -121,6 +124,15 @@ export default async function ProfilePage() {
 
         <ComponentCard icon={<Mail aria-hidden />} title="E-posta" desc="Koçun sana ne zaman yazsın">
           <MailTercihForm optOut={user.mailOptOut} />
+        </ComponentCard>
+
+        <ComponentCard
+          id="veli-baglantisi"
+          icon={<UsersRound aria-hidden />}
+          title="Veli bağlantısı"
+          desc="Velin girişsiz, salt okunur bir özet görsün"
+        >
+          <VeliBaglantisi baglantilar={veliBaglantilari} />
         </ComponentCard>
 
         <SessionsCard userId={oturum.id} />

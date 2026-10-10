@@ -130,7 +130,8 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
     id: q.id,
     order: q.order,
     topicName: q.topicName,
-    stem: <MathContent content={q.stem} />,
+    // Şekle dokununca tam ekran (PracticeRunner'ın büyüteci); çözümdeki şekil de.
+    stem: <MathContent content={q.stem} buyutulebilir />,
     choices: q.choices.map((c) => ({
       id: c.id,
       label: c.label,
@@ -143,7 +144,7 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
           correctChoiceId: q.feedback.correctChoiceId,
           errorLabel: q.feedback.errorLabel,
           errorAdvice: q.feedback.errorAdvice,
-          solution: q.feedback.solution ? <MathContent content={q.feedback.solution} /> : null,
+          solution: q.feedback.solution ? <MathContent content={q.feedback.solution} buyutulebilir /> : null,
           note: q.feedback.defterNotu,
         }
       : null,

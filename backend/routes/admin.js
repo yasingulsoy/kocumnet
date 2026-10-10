@@ -2,7 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { Op, fn, col } = require('sequelize');
+const { Op, fn, col, QueryTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 const { User, Blog, ContactMessage, StaffToken, AuditLog, ReplyTemplate } = require('../models');
 const { authenticateAdmin, requireRole, resolveStaff } = require('../middleware/auth');
 const { setAdminAuthCookie, clearAdminAuthCookie } = require('../utils/authCookie');
@@ -1109,6 +1110,97 @@ router.get(
     }
 
     res.json({ success: true, data: { blogs, messages, staff } });
+  })
+);
+
+/**
+ * Haftalık mesaj istatistiği — genel bakıştaki "haftalık gelen mesajlar"
+ * grafiği. Eskiden panel mesaj listesini sayfa sayfa çekip (en fazla 500
+ * mesaj) kendisi sayıyordu; şimdi sayım SQL'de.
+ *
+ * Haftalar Europe/Istanbul saatiyle, pazartesi başlar; boş haftalar 0 döner.
+ *  · received: o hafta gelen mesaj (spam hariç), created_at'e göre;
+ *  · answered: o hafta yanıtlanan ya da arşivlenen (kapatılan) mesaj. Şu anki
+ *    durumu answered/archived olanlar; an = answered_at (yanıtlandıysa, sonra
+ *    arşivlense de), yoksa handled_at (son durum değişikliği = arşivlendiği an).
+ *    Yeniden açılan (new/read'e dönen) ve spam sayılmaz.
+ * answered_share ve unread genel bakıştaki gösterge ile aynı tanım (tüm
+ * zamanlar, spam hariç).
+ */
+const SAAT_DILIMI = 'Europe/Istanbul';
+const HAFTA_VARSAYILAN = 12;
+const HAFTA_EN_FAZLA = 52;
+
+/** ?weeks= değeri: yoksa varsayılan, geçersizse null. */
+function haftaSayisi(v) {
+  if (v === undefined || v === '') return HAFTA_VARSAYILAN;
+  const s = String(v).trim();
+  if (!/^\d{1,3}$/.test(s)) return null;
+  const n = Number(s);
+  return n >= 1 && n <= HAFTA_EN_FAZLA ? n : null;
+}
+
+const HAFTALIK_MESAJ_SQL = `
+  WITH haftalar AS (
+    SELECT (date_trunc('week', now() AT TIME ZONE :tz)::date - 7 * g)::date AS hafta
+    FROM generate_series(0, :hafta - 1) AS g
+  ),
+  sinir AS (
+    SELECT MIN(hafta)::timestamp AT TIME ZONE :tz AS bas FROM haftalar
+  ),
+  gelen AS (
+    SELECT date_trunc('week', m.created_at AT TIME ZONE :tz)::date AS hafta, COUNT(*)::int AS n
+    FROM contact_messages m, sinir
+    WHERE m.status <> 'spam' AND m.created_at >= sinir.bas
+    GROUP BY 1
+  ),
+  kapanan AS (
+    SELECT date_trunc('week', COALESCE(m.answered_at, m.handled_at) AT TIME ZONE :tz)::date AS hafta, COUNT(*)::int AS n
+    FROM contact_messages m, sinir
+    WHERE m.status IN ('answered', 'archived') AND COALESCE(m.answered_at, m.handled_at) >= sinir.bas
+    GROUP BY 1
+  )
+  SELECT to_char(h.hafta, 'YYYY-MM-DD') AS week_start,
+         COALESCE(g.n, 0) AS received,
+         COALESCE(k.n, 0) AS answered
+  FROM haftalar h
+  LEFT JOIN gelen g ON g.hafta = h.hafta
+  LEFT JOIN kapanan k ON k.hafta = h.hafta
+  ORDER BY h.hafta`;
+
+router.get(
+  '/stats/contact-messages',
+  requireRole('admin', 'manager'),
+  asyncHandler(async (req, res) => {
+    const hafta = haftaSayisi(req.query.weeks);
+    if (hafta === null) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_WEEKS',
+        error: `Hafta sayısı 1 ile ${HAFTA_EN_FAZLA} arasında bir tam sayı olmalı.`,
+      });
+    }
+
+    const [haftalar, sayilar] = await Promise.all([
+      sequelize.query(HAFTALIK_MESAJ_SQL, { replacements: { tz: SAAT_DILIMI, hafta }, type: QueryTypes.SELECT }),
+      mesajSayilari(),
+    ]);
+
+    const tumu = sayilar.new + sayilar.read + sayilar.answered + sayilar.archived;
+    const kapanan = sayilar.answered + sayilar.archived;
+    res.json({
+      success: true,
+      data: {
+        timezone: SAAT_DILIMI,
+        weeks: haftalar.map((h) => ({ week_start: h.week_start, received: h.received, answered: h.answered })),
+        totals: {
+          received: haftalar.reduce((t, h) => t + h.received, 0),
+          answered: haftalar.reduce((t, h) => t + h.answered, 0),
+        },
+        answered_share: tumu ? Math.round((kapanan / tumu) * 10000) / 10000 : null,
+        unread: sayilar.new,
+      },
+    });
   })
 );
 

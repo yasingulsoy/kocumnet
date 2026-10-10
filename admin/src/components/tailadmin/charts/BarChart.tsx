@@ -9,6 +9,10 @@
  * ApexCharts lisansı kabul edilmeden de çalışır; etkileşimli grafik
  * gerekirse extras/charts.
  *
+ * Kendi kutusundan taşmaz (telefonda sayfayı yana kaydırmasın; kart
+ * overflow-hidden olmasa da): ilk ve son eksen etiketi ile değer balonu
+ * kenarda içe hizalanır, görünmez tablo sr-only bir KABIN içinde.
+ *
  *   <BarChart categories={["1 Eyl", "8 Eyl"]} series={[{ name: "Gelen", data: [4, 7] }]} ariaLabel="Haftalık gelen mesaj" />
  */
 import { cx } from "../cx";
@@ -34,6 +38,17 @@ export interface BarChartProps {
 const RENK = ["bg-brand-500", "bg-brand-300"];
 const NOKTA = ["bg-brand-500", "bg-brand-300"];
 
+/**
+ * Kenardaki öğe sütunun ortasından değil kenarından hizalanır: ortalanmış
+ * bir etiket ya da balon ilk/son sütunda grafiğin dışına taşıyordu.
+ */
+function hiza(i: number, son: number) {
+  if (son === 0) return "start-1/2 -translate-x-1/2 rtl:translate-x-1/2";
+  if (i === 0) return "start-0";
+  if (i === son) return "end-0";
+  return "start-1/2 -translate-x-1/2 rtl:translate-x-1/2";
+}
+
 /** 1-2-5 dizisinden "güzel" bir üst sınır ve 4 aralık. */
 function eksen(enBuyuk: number) {
   if (enBuyuk <= 0) return { ust: 4, adim: 1 };
@@ -50,9 +65,10 @@ export function BarChart({ categories, series, ariaLabel, height = 180, valueFor
   const { ust, adim } = eksen(enBuyuk);
   const cizgiler: number[] = [];
   for (let d = 0; d <= ust; d += adim) cizgiler.push(d);
+  const son = categories.length - 1;
 
   return (
-    <figure aria-label={ariaLabel} className={cx("w-full", className)}>
+    <figure aria-label={ariaLabel} className={cx("w-full min-w-0", className)}>
       {seriler.length > 1 ? (
         <figcaption aria-hidden className="mb-4 flex flex-wrap items-center gap-4 text-theme-xs text-gray-500">
           {seriler.map((s, i) => (
@@ -92,7 +108,12 @@ export function BarChart({ categories, series, ariaLabel, height = 180, valueFor
                     />
                   );
                 })}
-                <span className="pointer-events-none absolute bottom-full start-1/2 z-10 mb-1 hidden -translate-x-1/2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-start whitespace-nowrap shadow-theme-sm group-hover:block rtl:translate-x-1/2">
+                <span
+                  className={cx(
+                    "pointer-events-none absolute bottom-full z-10 mb-1 hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-start whitespace-nowrap shadow-theme-sm group-hover:block",
+                    hiza(i, son)
+                  )}
+                >
                   <span className="block text-[0.625rem] leading-4 text-gray-800">{k}</span>
                   {seriler.map((s, si) => (
                     <span key={s.name} className="mt-0.5 flex items-center gap-1.5 text-theme-xs text-gray-700">
@@ -108,41 +129,48 @@ export function BarChart({ categories, series, ariaLabel, height = 180, valueFor
 
         {/* x ekseni etiketleri */}
         <div />
-        {/* Etiket kendi sütununa sığmazsa yanlara taşar (labelEvery boş komşu bırakır). */}
+        {/* Etiket kendi sütununa sığmazsa yanlara taşar (labelEvery boş komşu
+            bırakır); ilk ve son etiket kenardan içe hizalı, grafiğin dışına çıkmaz. */}
         <div className="mt-2 flex">
           {categories.map((k, i) => (
             <span key={`${k}-${i}`} className="relative h-4 flex-1">
               {i % labelEvery === 0 ? (
-                <span className="absolute start-1/2 top-0 -translate-x-1/2 text-theme-xs whitespace-nowrap text-gray-500 rtl:translate-x-1/2">{k}</span>
+                <span className={cx("absolute top-0 text-theme-xs whitespace-nowrap text-gray-500", hiza(i, son))}>
+                  {k}
+                </span>
               ) : null}
             </span>
           ))}
         </div>
       </div>
 
-      <table className="sr-only">
-        <caption>{ariaLabel}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Dönem</th>
-            {seriler.map((s) => (
-              <th key={s.name} scope="col">
-                {s.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {categories.map((k, i) => (
-            <tr key={`${k}-${i}`}>
-              <th scope="row">{k}</th>
+      {/* sr-only KABIN içinde: tabloya doğrudan sr-only verilince tablo daralmıyor
+          ve kart overflow-hidden değilse telefonda sayfayı yana taşırıyordu. */}
+      <div className="sr-only">
+        <table>
+          <caption>{ariaLabel}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Dönem</th>
               {seriler.map((s) => (
-                <td key={s.name}>{valueFormat(s.data[i] ?? 0)}</td>
+                <th key={s.name} scope="col">
+                  {s.name}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {categories.map((k, i) => (
+              <tr key={`${k}-${i}`}>
+                <th scope="row">{k}</th>
+                {seriler.map((s) => (
+                  <td key={s.name}>{valueFormat(s.data[i] ?? 0)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

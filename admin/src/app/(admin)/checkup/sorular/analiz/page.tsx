@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChartColumn, Download } from "lucide-react";
+import { ChartColumn, Download, MessageSquarePlus, MessageSquareText } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { loadItemAnalysis, type ItemRow } from "@/lib/checkup/item-analysis";
@@ -83,6 +83,19 @@ export default async function ItemAnalysisPage({ searchParams }: PageProps<"/che
   const sonSayfa = Math.max(1, Math.ceil(liste.length / SAYFA_BOYU));
   const gecerliSayfa = Math.min(s.sayfa, sonSayfa);
   const sayfadakiler = liste.slice((gecerliSayfa - 1) * SAYFA_BOYU, gecerliSayfa * SAYFA_BOYU);
+
+  // Bu sayfadaki soruların çözülmemiş inceleme notları: aynı bulgu ikinci kez not edilmesin.
+  const acikNotlar = sayfadakiler.length
+    ? new Map(
+        (
+          await db.questionNote.groupBy({
+            by: ["questionId"],
+            where: { questionId: { in: sayfadakiler.map((x) => x.questionId) }, resolvedAt: null },
+            _count: { _all: true },
+          })
+        ).map((r) => [r.questionId, r._count._all])
+      )
+    : new Map<string, number>();
 
   const adres = (ek: Parameters<typeof analizParametreleri>[1]) => qs(BASE, analizParametreleri(s, ek));
   const siralaAdresi = (sutun: Sutun) =>
@@ -300,7 +313,7 @@ export default async function ItemAnalysisPage({ searchParams }: PageProps<"/che
             </TableHeader>
             <TableBody>
               {sayfadakiler.map((x) => (
-                <Satir key={x.questionId} x={x} />
+                <Satir key={x.questionId} x={x} acikNot={acikNotlar.get(x.questionId) ?? 0} yazabilir={yazabilir} />
               ))}
             </TableBody>
           </Table>
@@ -354,7 +367,7 @@ export default async function ItemAnalysisPage({ searchParams }: PageProps<"/che
   );
 }
 
-function Satir({ x }: { x: ItemRow }) {
+function Satir({ x, acikNot, yazabilir }: { x: ItemRow; acikNot: number; yazabilir: boolean }) {
   const r = gorunenR(x);
   const ae = ayirtEdicilik(r);
   const bosOran = x.blank / x.n;
@@ -447,6 +460,28 @@ function Satir({ x }: { x: ItemRow }) {
             ) : null}
           </div>
         )}
+        {acikNot > 0 || (yazabilir && x.bulgular.length > 0) ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-theme-xs">
+            {acikNot > 0 ? (
+              <Link
+                href={"/checkup/sorular/" + x.questionId + "#notlar"}
+                className="inline-flex items-center gap-1 font-medium text-warning-700 hover:underline"
+              >
+                <MessageSquareText className="size-3.5" aria-hidden />
+                <span className="tabular">{acikNot}</span> açık not
+              </Link>
+            ) : null}
+            {yazabilir && x.bulgular.length > 0 ? (
+              // Soru ekranında not kutusu bu satırın bulgularıyla dolu açılır (?not=hepsi).
+              <Link
+                href={"/checkup/sorular/" + x.questionId + "?not=hepsi#notlar"}
+                className="inline-flex items-center gap-1 font-medium text-brand-500 hover:text-brand-600"
+              >
+                <MessageSquarePlus className="size-3.5" aria-hidden /> Not ekle
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
       </TableCell>
     </TableRow>
   );

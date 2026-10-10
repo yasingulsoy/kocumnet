@@ -61,6 +61,19 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
   const [items, setItems] = useState(plan.items);
   const [, start] = useTransition();
   const [hata, setHata] = useState<string | null>(null);
+  /** Plandan çıkarılıp "geri al" süresini bekleyen iş (henüz sunucuda duruyor). */
+  const [kaldirilan, setKaldirilan] = useState<PlanIsi | null>(null);
+
+  /*
+   * Sunucu planı tazelediyse (ör. iş "Bugün" kartından işaretlendi) liste
+   * ona uysun; yoksa kart ilk açılıştaki hâlde kalıyordu. Geri alınmayı
+   * bekleyen iş ekrana geri gelmez.
+   */
+  const [sunucudaki, setSunucudaki] = useState(plan.items);
+  if (sunucudaki !== plan.items) {
+    setSunucudaki(plan.items);
+    setItems(kaldirilan ? plan.items.filter((i) => i.id !== kaldirilan.id) : plan.items);
+  }
 
   const biten = items.filter((i) => i.done).length;
   const kalanDakika = items.filter((i) => !i.done).reduce((t, i) => t + i.estimatedMinutes, 0);
@@ -99,7 +112,6 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
    * üretilemiyor). İş önce ekrandan kalkıyor; sunucuya ancak birkaç saniye
    * sonra gidiyor. Sayfadan çıkılırsa bekleyen çıkarma hemen gönderilir.
    */
-  const [kaldirilan, setKaldirilan] = useState<PlanIsi | null>(null);
   const bekleyenRef = useRef<{ isi: PlanIsi; sira: number } | null>(null);
   const zamanlayiciRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

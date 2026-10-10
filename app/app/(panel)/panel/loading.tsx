@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui";
 
 /**
- * Pano iskeleti: selam satırı, haftanın planı, tek eylem kartı, sayı kartları
+ * Pano iskeleti: selam satırı, "Bugün" kartı, haftanın planı, sayı kartları
  * ve grafikler — sayfanın gerçek sırasıyla (kitin kart kabukları). Yükleme
  * bitince her şey yer değiştirmesin.
  */
@@ -13,6 +13,7 @@ export default function Loading() {
         <Skeleton className="h-5 w-24 rounded-full" />
       </div>
       <div className="space-y-4 md:space-y-6">
+        <Skeleton className="h-32 rounded-2xl" />
         <div className="rounded-2xl border border-gray-200 bg-white">
           <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5">
             <Skeleton className="h-5 w-32" />
@@ -27,7 +28,6 @@ export default function Loading() {
             ))}
           </div>
         </div>
-        <Skeleton className="h-32 rounded-2xl" />
         <div className="grid grid-cols-2 gap-4 md:gap-6 xl:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-36 rounded-2xl" />

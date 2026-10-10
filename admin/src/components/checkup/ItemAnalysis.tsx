@@ -5,18 +5,31 @@ import { ERROR_TYPE_LABELS, type ErrorTypeValue } from "@/lib/checkup/shared/err
 import { ESIK, ayirtEdicilik, gorunenR, rYaz, type Bulgu } from "@/lib/checkup/item-flags";
 import type { QuestionAnalysis } from "@/lib/checkup/item-analysis";
 import { percent, secondsLabel } from "@/lib/checkup/format";
+import { bulguNotu } from "@/lib/checkup/question-note";
 import { cx } from "@/components/tailadmin/cx";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
 import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
+import { BulgudanNotDugmesi } from "./QuestionNotes";
 import { BULGU_COLOR, Meter } from "./ui";
 
 /**
  * Soru ekranındaki madde analizi kartı (sunucu bileşeni). Hesaplar
  * lib/checkup/item-analysis.ts'te; buradaki iş okunur kılmak.
+ *
+ * `notEklenebilir`: her bulgunun yanında "Not ekle" (bulgu metnini inceleme
+ * notu kutusuna yazar; kutu NotTaslagiSaglayici'nin içinde olmalı).
  */
-export function ItemAnalysisCard({ analysis, version }: { analysis: QuestionAnalysis; version: number }) {
+export function ItemAnalysisCard({
+  analysis,
+  version,
+  notEklenebilir = false,
+}: {
+  analysis: QuestionAnalysis;
+  version: number;
+  notEklenebilir?: boolean;
+}) {
   const { stats, groups } = analysis;
   const n = stats.n;
 
@@ -70,7 +83,9 @@ export function ItemAnalysisCard({ analysis, version }: { analysis: QuestionAnal
             </p>
           ) : null}
 
-          {n >= ESIK.minN ? <Bulgular liste={analysis.bulgular} /> : null}
+          {n >= ESIK.minN ? (
+            <Bulgular liste={analysis.bulgular} not={notEklenebilir ? { version, n } : null} />
+          ) : null}
         </>
       )}
     </ComponentCard>
@@ -246,7 +261,7 @@ function SikDagilimi({ analysis }: { analysis: QuestionAnalysis }) {
   );
 }
 
-function Bulgular({ liste }: { liste: Bulgu[] }) {
+function Bulgular({ liste, not }: { liste: Bulgu[]; not: { version: number; n: number } | null }) {
   if (liste.length === 0) {
     return (
       <Alert variant="success" compact>
@@ -264,6 +279,7 @@ function Bulgular({ liste }: { liste: Bulgu[] }) {
               {b.baslik}
             </Badge>
             <p className="min-w-0 flex-1 basis-64 text-theme-sm text-gray-500">{b.aciklama}</p>
+            {not ? <BulgudanNotDugmesi metin={bulguNotu(b, not)} /> : null}
           </li>
         ))}
       </ul>

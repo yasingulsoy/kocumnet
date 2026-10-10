@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { pruneExpiredSessions } from "@/lib/auth";
 import { expireStaleSessions } from "@/lib/checkup";
 import { haftalikPostalariGonder } from "@/lib/digest";
+import { eskiVeliBaglantilariniSil } from "@/lib/veli-raporu";
 
 /**
  * Zamanlanmış bakım. Dışarıdan bir zamanlayıcı (Dokploy "Schedule", cron,
@@ -17,6 +18,7 @@ import { haftalikPostalariGonder } from "@/lib/digest";
  *    cevabı veritabanında duruyor ama sonuç hiç hesaplanmıyordu — ta ki aynı
  *    paketi yeniden başlatana kadar.
  *  · Süresi geçmiş giriş oturumlarını ve parola sıfırlama jetonlarını siler.
+ *  · Süresi dolalı ya da kaldırılalı 30 gün geçen veli bağlantılarını siler.
  *  · Pazartesi 07:00 (TR) sonrası haftalık koçluk postasını gönderir (lib/digest.ts).
  *
  * CRON_SECRET yoksa uç kapalıdır (503) — açık bırakılmış bir bakım ucu,
@@ -40,16 +42,25 @@ export async function GET(req: NextRequest) {
   if (!yetkili(req)) return NextResponse.json({ ok: false }, { status: 401 });
 
   const basladi = Date.now();
-  const [puanlanan, silinenOturum, silinenJeton, posta] = await Promise.all([
+  const [puanlanan, silinenOturum, silinenJeton, posta, silinenVeliBaglantisi] = await Promise.all([
     expireStaleSessions(),
     pruneExpiredSessions(),
     prisma.passwordResetToken
       .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { usedAt: { not: null } }] } })
       .then((r) => r.count),
     haftalikPostalariGonder(),
+    eskiVeliBaglantilariniSil(),
   ]);
 
-  const sonuc = { ok: true, puanlananTest: puanlanan, silinenOturum, silinenJeton, haftalikPosta: posta, sureMs: Date.now() - basladi };
+  const sonuc = {
+    ok: true,
+    puanlananTest: puanlanan,
+    silinenOturum,
+    silinenJeton,
+    haftalikPosta: posta,
+    silinenVeliBaglantisi,
+    sureMs: Date.now() - basladi,
+  };
   console.log("[cron]", JSON.stringify(sonuc));
   return NextResponse.json(sonuc);
 }

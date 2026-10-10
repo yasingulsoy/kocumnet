@@ -30,11 +30,16 @@ export function ImportHistoryShell({ children }: { children: ReactNode }) {
         <div className="border-b border-gray-100 p-4 sm:px-6">
           <Alert
             variant={sonuc.korunan ? "warning" : "success"}
-            title={'"' + sonuc.dosyaAdi + '" ' + (sonuc.partiSilindi ? "geri alındı." : "kısmen geri alındı.")}
+            title={
+              '"' +
+              sonuc.dosyaAdi +
+              '" ' +
+              (sonuc.partiSilindi ? "kaydı silindi." : sonuc.korunan ? "kısmen geri alındı." : "geri alındı.")
+            }
             onClose={() => setSonuc(null)}
             closeLabel="Mesajı kapat"
           >
-            {sonuc.silinen} soru silindi.
+            {sonuc.partiSilindi ? "Bu içe aktarmanın havuzda sorusu yoktu." : sonuc.silinen + " soru silindi."}
             {sonuc.korunan ? (
               <>
                 {" "}

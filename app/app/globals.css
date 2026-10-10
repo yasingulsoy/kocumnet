@@ -91,6 +91,35 @@ body {
   }
 }
 
+/* ── Okuma boyu (sınav ve alıştırma: A− / A+) ───────────────── */
+/*
+ * Seçim ekran kökünde `data-okuma-boyu` (components/OkumaBoyu.tsx). Soru
+ * metni, şıklar ve çözüm `.okuma` kabında: yazı em ile büyür; formül (KaTeX
+ * em kullanır), tablo, öncül numarası ve şekil alt yazısı da onunla. Ölçek
+ * yoksa (1) her şey bugünkü boyda. Küçültme yok: soru metni text-read'in,
+ * şık text-body'nin altına düşmez.
+ */
+[data-okuma-boyu="1"] {
+  --okuma-olcek: 1.15;
+}
+
+[data-okuma-boyu="2"] {
+  --okuma-olcek: 1.3;
+}
+
+.okuma {
+  font-size: calc(1em * var(--okuma-olcek, 1));
+}
+
+/* MathContent'in sabit boyları (tablo, I-II-III numarası, alt yazı). */
+.okuma .text-sm {
+  font-size: calc(0.875rem * var(--okuma-olcek, 1));
+}
+
+.okuma .text-xs {
+  font-size: calc(0.75rem * var(--okuma-olcek, 1));
+}
+
 /* ── Yazdırma (sonuç → PDF) ─────────────────────────────────── */
 @media print {
   body {
@@ -109,7 +138,17 @@ body {
     break-inside: avoid;
   }
 
-  /* Kapalı ayrıntı kutuları da basılsın: konu haritasının tamamı görünür. */
+  /*
+   * Kapalı ayrıntı kutuları da basılsın (cevap incelemesindeki kapalı
+   * sorular, konu haritası). Chrome kapalı <details>'in içini çocuklarda
+   * değil ::details-content kabında saklıyor (content-visibility); yalnızca
+   * çocuklara display vermek orada işe yaramıyordu.
+   */
+  details::details-content {
+    display: block;
+    content-visibility: visible;
+  }
+
   details > *:not(summary) {
     display: block !important;
   }

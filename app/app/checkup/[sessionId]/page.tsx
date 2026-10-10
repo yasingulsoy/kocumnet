@@ -62,7 +62,8 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
     id: q.id,
     order: q.order,
     topicName: q.topicName,
-    stem: <MathContent content={q.stem} />,
+    // Şekle dokununca tam ekran (CheckupRunner'ın büyüteci).
+    stem: <MathContent content={q.stem} buyutulebilir />,
     choices: q.choices.map((c) => ({
       id: c.id,
       label: c.label,

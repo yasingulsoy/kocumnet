@@ -123,7 +123,7 @@ export type GeriAlYaniti =
       gorselSilinen: number;
       gorselKorunan: number;
       kazanimSilinen: number;
-      /** Hiç soru kalmadıysa parti kaydı da silindi. */
+      /** Partinin hiç sorusu yoktu (başarısız ya da boş): kaydı silindi. Öteki partiler geçmişte kalır. */
       partiSilindi: boolean;
       partiId: string;
     }
@@ -135,4 +135,5 @@ export const PARTI_DURUM_ETIKETI: Record<string, string> = {
   DONE: "Tamamlandı",
   FAILED: "Başarısız",
   REVERTED_PARTIAL: "Kısmen geri alındı",
+  REVERTED: "Geri alındı",
 };

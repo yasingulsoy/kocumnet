@@ -36,15 +36,15 @@ function HepsiBaglantisi({ href, children = "Hepsi" }: { href: string; children?
 
 /**
  * Genel bakış: "bugün ne yapmalıyım?" sorusunun cevabı. Üstte sayı
- * kartları, yanında grafikler (backend'in verdiği listelerden; uydurma veri
- * yok), altta iş listeleri: yanıt bekleyen mesajlar, taslaklar, son
- * yayınlananlar, (yöneticiye) son etkinlik. Her kart bağımsız: biri düşerse
- * diğerleri çizilir.
+ * kartları, yanında grafikler (backend'in verdiği sayılar ve listelerden;
+ * uydurma veri yok), altta iş listeleri: yanıt bekleyen mesajlar, taslaklar,
+ * son yayınlananlar, (yöneticiye) son etkinlik. Her kart bağımsız: biri
+ * düşerse diğerleri çizilir.
  *
  * Grafikler kitin ApexCharts eklentisi (üstüne gelince değer ipucu):
- * haftalık mesaj alan grafiği, yanıtlanma oranı yarım daire göstergesi, en
- * çok okunanlar yatay sütun grafiği. Ekran okuyucu her grafiğin özetini
- * (ariaLabel) okur.
+ * haftalık gelen ve yanıtlanan mesaj alan grafiği (lib/admin/istatistik.ts),
+ * yanıtlanma oranı yarım daire göstergesi, en çok okunanlar yatay sütun
+ * grafiği. Ekran okuyucu her grafiğin özetini (ariaLabel) okur.
  */
 export default async function DashboardPage() {
   const { staff } = await requireStaff(undefined, "/admin");
@@ -175,19 +175,30 @@ export default async function DashboardPage() {
           {kartlar}
           {yonetim ? (
             <ChartCard
-              title="Haftalık gelen mesajlar"
+              title="Haftalık mesajlar"
               description={
                 haftalik
-                  ? `Son ${haftalik.etiketler.length} hafta, spam hariç: ${haftalik.toplam} mesaj.${haftalik.kisaltildi ? " Mesaj çok olduğu için dönem kısaltıldı." : ""}`
+                  ? `Son ${haftalik.etiketler.length} hafta, spam hariç: ${haftalik.toplam} mesaj geldi${
+                      haftalik.kapananToplam !== null ? `, ${haftalik.kapananToplam} mesaj yanıtlandı ya da arşivlendi` : ""
+                    }.${haftalik.kisaltildi ? " Mesaj çok olduğu için dönem kısaltıldı." : ""}`
                   : "Sayılar şu an alınamadı."
               }
               actions={<HepsiBaglantisi href="/admin/mesajlar?durum=hepsi">Bütün mesajlar</HepsiBaglantisi>}
+              note={haftalik?.kapanan ? <SeriAciklamasi /> : undefined}
             >
               {haftalik ? (
                 <ApexAreaChart
                   categories={haftalik.etiketler}
-                  series={[{ name: "Gelen mesaj", data: haftalik.sayilar }]}
-                  ariaLabel={`Haftalık gelen mesaj sayısı: ${haftalik.etiketler.map((e, i) => `${e} haftası ${haftalik.sayilar[i]}`).join(", ")}`}
+                  series={[
+                    { name: "Gelen", data: haftalik.sayilar },
+                    ...(haftalik.kapanan ? [{ name: "Yanıtlanan ya da arşivlenen", data: haftalik.kapanan }] : []),
+                  ]}
+                  ariaLabel={`Haftalık mesajlar, spam hariç: ${haftalik.etiketler
+                    .map(
+                      (e, i) =>
+                        `${e} haftası ${haftalik.sayilar[i]} gelen${haftalik.kapanan ? `, ${haftalik.kapanan[i]} yanıtlanan ya da arşivlenen` : ""}`
+                    )
+                    .join("; ")}`}
                   height={260}
                 />
               ) : (
@@ -350,6 +361,26 @@ export default async function DashboardPage() {
         ) : null}
       </div>
     </>
+  );
+}
+
+/**
+ * Haftalık mesaj grafiğinin seri açıklaması. Kitin alan grafiği açıklamayı
+ * gizliyor; renkler onun sırasıyla aynı (brand-500, brand-300). Ekran okuyucu
+ * grafiğin özetini (ariaLabel) okur, bu yüzden burası gizli.
+ */
+function SeriAciklamasi() {
+  return (
+    <ul aria-hidden className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-theme-xs text-gray-500">
+      <li className="inline-flex items-center gap-1.5">
+        <span className="size-2.5 rounded-full bg-brand-500" />
+        Gelen
+      </li>
+      <li className="inline-flex items-center gap-1.5">
+        <span className="size-2.5 rounded-full bg-brand-300" />
+        Yanıtlanan ya da arşivlenen
+      </li>
+    </ul>
   );
 }
 

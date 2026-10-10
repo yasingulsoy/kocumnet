@@ -1,6 +1,8 @@
+import type { CSSProperties } from "react";
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { Inter, Poppins } from "next/font/google";
+import localFont from "next/font/local";
 import { JsonLd } from "@/components/JsonLd";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
@@ -44,6 +46,50 @@ const poppins = Poppins({
   weight: ["500", "600", "700"],
   display: "swap",
 });
+
+/*
+ * Arapça: Readex Pro (OFL, @fontsource-variable/readex-pro). YALNIZCA /ar'da
+ * kullanılır: yığın globals.css'te, html[lang="ar"].
+ *
+ *  · Okunurluk için tasarlandı (Lexend'in Arapçası); değişken font, bütün
+ *    kalınlıklar tek dosyada, 22 KB. IBM Plex Sans Arabic üç kalınlıkta
+ *    132 KB tuttu, /ar'ın Lighthouse puanı 90'dan 84'e düştü.
+ *  · Yalnızca "arabic" alt kümesi + unicode-range: Latin harf, rakam ve
+ *    boşluk bu fonta düşmez; Koçum.Net, TYT ve rakamlar Inter/Poppins'le.
+ *  · preload: false. Bu düzen üç dilde ortak, ön yükleme dile göre
+ *    seçilemiyor; açık olsaydı TR ve EN de dosyayı indirirdi. @font-face
+ *    orada da CSS'te durur ama kullanan öğe olmadığı için dosya inmez.
+ *  · adjustFontFallback: false. Üretilen yedek unicode-range'siz Arial
+ *    olurdu ve listede önde durduğu için Latin harfleri de yakalardı.
+ *    Arapçaya özel yedek globals.css'te ("Readex Yedek").
+ */
+const readexPro = localFont({
+  src: "../../node_modules/@fontsource-variable/readex-pro/files/readex-pro-arabic-wght-normal.woff2",
+  weight: "160 700",
+  style: "normal",
+  display: "swap",
+  preload: false,
+  adjustFontFallback: false,
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC",
+    },
+  ],
+});
+
+/*
+ * globals.css /ar'da --font-inter ve --font-poppins'i Arapça önce gelecek
+ * biçimde yeniden kurar (tokens.css'teki --font-sans/--font-display bunları
+ * okur ve `@theme inline` ile sınıflara gömülüdür). Bir değişken kendine
+ * başvuramadığı için özgün aile adları ayrı adlarla buradan verilir.
+ */
+const ARAPCA_DEGISKENLER = {
+  "--ar-readex": readexPro.style.fontFamily,
+  "--ar-inter": inter.style.fontFamily,
+  "--ar-poppins": poppins.style.fontFamily,
+} as CSSProperties;
 
 const siteUrl = getSiteUrl();
 
@@ -139,6 +185,7 @@ export default async function RootLayout({
        * flex-col ve footer'daki mt-auto ile sağlanıyor.
        */
       className={`${inter.variable} ${poppins.variable} antialiased`}
+      style={locale === "ar" ? ARAPCA_DEGISKENLER : undefined}
     >
       <body className="flex min-h-screen flex-col bg-white font-sans text-gray-600">
         {/*

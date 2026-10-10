@@ -7,10 +7,10 @@ bağlanır; backend yalnızca giriş ve oturum doğrulaması için kullanılır.
 | Ekran | Adres | Kim görür |
 |---|---|---|
 | Genel bakış — kayıt/test sayıları, son 14 gün, içerik kuyruğu, dikkat isteyen paketler, zorlanılan konular | `/checkup` | tüm personel (öğrenci adları yalnızca yönetici/müdür) |
-| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım, içe aktarma partisi `?parti=`), hızlı ve toplu durum değiştirme | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
+| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım, içe aktarma partisi `?parti=`, "Açık notu olanlar" `?not=acik`), satırda açık not rozeti, hızlı ve toplu durum değiştirme | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
 | Toplu içe aktar — SORU-SABLONU `.md` + görseller (klasör seçimi ya da sürükle-bırak); **Denetle** (soru başına hata/uyarı, çift kayıt, hiçbir şey yazılmaz) → **Taslak olarak kaydet** (isteğe bağlı doğrudan yayın); içe aktarma geçmişi ve **Geri al** | `/checkup/sorular/ice-aktar` | geçmiş: tüm personel; içe aktarma ve geri alma: yazma rolleri |
-| Soru ekle / düzenle — `$…$` yazımı, canlı KaTeX önizleme, şekil yükleme, madde analizi kartı, "kaydet ve yenisini ekle", "benzerini oluştur", süzgeçli listede önceki/sonraki ve "kaydet ve sonrakine geç" | `/checkup/sorular/yeni`, `/[id]` | yazma: yönetici, müdür, editör |
-| Madde analizi — gerçek cevaplardan doğru oranı, ayırt edicilik, şık dağılımı, süre ve bulgular; sınav ve dönem süzgeci, CSV, önerilen zorluğu toplu uygulama (yazma rolleri) | `/checkup/sorular/analiz`, `/analiz/csv` | tüm personel (kişisel veri yok) |
+| Soru ekle / düzenle — `$…$` yazımı, canlı KaTeX önizleme, şekil yükleme, madde analizi kartı (bulguda "Not ekle"), inceleme notları (ekle, çözüldü / yeniden aç), "kaydet ve yenisini ekle", "benzerini oluştur", süzgeçli listede önceki/sonraki ve "kaydet ve sonrakine geç" | `/checkup/sorular/yeni`, `/[id]` | yazma ve not: yönetici, müdür, editör; notları okuma: tüm personel |
+| Madde analizi — gerçek cevaplardan doğru oranı, ayırt edicilik, şık dağılımı, süre ve bulgular; sınav ve dönem süzgeci, CSV, önerilen zorluğu toplu uygulama (yazma rolleri); satırda açık not sayısı ve "Not ekle" (soru ekranında not kutusu bulgularla dolu açılır) | `/checkup/sorular/analiz`, `/analiz/csv` | tüm personel (kişisel veri yok) |
 | Havuz durumu — katalog paketi × konu doldurulabilirlik, zorluk bantları | `/checkup/havuz` | tüm personel |
 | Öğrenciler + öğrenci detayı (test geçmişi, konu haritası, çalışma planı ve koç notu, seviyeli koşular, erişim hakları) | `/checkup/ogrenciler` | yönetici, müdür |
 | Riskli öğrenciler — pasif, düşüşte, planı yapmıyor, hiç başlamadı; eşikler `lib/checkup/risk.ts` | `/checkup/ogrenciler/riskli` | yönetici, müdür |
@@ -42,11 +42,13 @@ src/lib/checkup/
   package-rules.ts Paket düzenleme kuralları (MIN_PER_TOPIC, sınırlar, adres önerisi) — istemci ve sunucu ortak
   package-save.ts  Katalog paketi doğrulama ve yazma (server-only; yetkiyi eylem denetler)
   question-import.ts Toplu içe aktarma: dosya okuma, denetim bağlamı, görsel çevirme, yazma, geri alma, geçmiş (server-only)
+  question-note.ts İnceleme notu kuralları: 2000 karakter sınırı, temizlik, bulgudan not metni (istemci ve sunucu ortak)
+  question-notes.ts Bir sorunun notları (server-only); yazma actions/notes.ts
   import-report.ts İçe aktarma rapor tipleri ve sınırları (10 MB) — istemci ve sunucu ortak
   media-image.ts   Görsel → WebP (EXIF, 1200 px) — tek şekil yükleme ve toplu içe aktarma ortak
   format.ts        Etiketler (sınav, sınıf, durum), tarih/sayı biçimleri (Türkiye saati)
   actions/         Server action'lar: sorular (seviye, kazanım, hedef sınav; toplu durum; önerilen zorluk),
-                   kazanımlar, şekil, erişim hakkı, paket, plan (koç notu), toplu içe aktarma
+                   kazanımlar, şekil, erişim hakkı, paket, plan (koç notu), toplu içe aktarma, inceleme notu
   shared/          ⚠️ app/lib'den KOPYA — elle düzenlemeyin (aşağıya bakın)
   generated/       Prisma client (gitignore'da, üretilir)
 src/components/checkup/   Ekran bileşenleri (ortak tasarım belirteçleri: src/app/tokens.css)
@@ -76,10 +78,16 @@ bkz. [DEPLOY.md](DEPLOY.md).
 ## Kayıtlarda "kim yaptı"
 
 Personel başka veritabanında (backend `users`) olduğu için yabancı anahtar
-kurulamıyor. Soru, şekil ve erişim hakkı kayıtlarına `e-posta (#id)` biçiminde
-damga yazılıyor: `createdByStaff`, `updatedByStaff`, `uploadedByStaff`,
-`grantedByStaff`, `revokedByStaff`. Geri alınan erişim hakkı silinmez; kim, ne
-zaman verdi/aldı kayıtta kalır.
+kurulamıyor. Soru, şekil, erişim hakkı, inceleme notu ve içe aktarma kayıtlarına
+`e-posta (#id)` biçiminde damga yazılıyor: `createdByStaff`, `updatedByStaff`,
+`uploadedByStaff`, `grantedByStaff`, `revokedByStaff`, `authorStaff`,
+`resolvedByStaff`, `rolledBackByStaff`. Geri alınan erişim hakkı ve geri alınan içe
+aktarma silinmez; kim, ne zaman yaptı kayıtta kalır.
+
+**İnceleme notları** (`QuestionNote`) yalnızca personel içindir; öğrenci uygulaması
+bu tabloyu hiç okumaz. Not düz metin, en fazla 2000 karakter (`question-note.ts`);
+yazma, çözme ve yeniden açma içerik rollerinde, okuma herkeste. Notun metni sunucu
+günlüğüne yazılmaz, yalnızca kim ve hangi soru.
 
 ## Şema ve paylaşılan modüller
 
@@ -179,8 +187,11 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   soru zaten cevaplanmış olduğundan korunur. Kalanlar partide durur, parti
   "kısmen geri alındı" olur ve ekran neyin neden korunduğunu yazar. Görsel yalnızca artık
   hiçbir soruda geçmiyorsa silinir (korunan soru ya da "benzerini oluştur" kopyası
-  kullanıyor olabilir); kazanım yalnızca bu partiyle açılmış ve sorusu kalmamışsa. Geri
-  alanın adı tabloda tutulmuyor, sunucu günlüğüne yazılıyor.
+  kullanıyor olabilir); kazanım yalnızca bu partiyle açılmış ve sorusu kalmamışsa. Parti
+  kaydı silinmez: "geri alındı" ya da "kısmen geri alındı" olur, geri alan ve zamanı
+  `rolledBackByStaff` / `rolledBackAt`'e yazılır ve geçmişte görünür (komut satırında
+  `--personel` damgası). Yalnızca hiç sorusu olmayan (başarısız) partinin kaydı
+  "Kaydı sil" ile silinir.
 - **İçe aktarmanın gövde sınırı 10 MB** (`next.config.ts` ile `import-report.ts`
   `ISTEK_SINIRI` aynı olmalı). Next aşan isteği bağlantıyı keserek reddediyor, tarayıcı
   sebebi göremiyor; bu yüzden ekran dosya toplamını göndermeden önce denetler

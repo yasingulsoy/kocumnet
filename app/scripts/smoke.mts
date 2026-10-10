@@ -58,6 +58,8 @@ import {
   type BenzerSoru,
 } from "../lib/review";
 import { hataTipiTavsiyesi } from "../lib/coaching";
+import { bugunkuIs } from "../lib/bugun";
+import { grafikTarihleri } from "../components/grafik-tarihleri";
 import { cn } from "../lib/cn";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -838,6 +840,64 @@ console.log("Yanlış defteri — aralıklar:");
     vadeMetni(aksam, aksam) === "bugün" && vadeMetni(vade(aksam, 1), aksam) === "yarın" &&
       vadeMetni(vade(aksam, 3), aksam) === "3 gün sonra"
   );
+}
+
+// ── pano: "Bugün" kartı ───────────────────────────────────
+console.log("");
+console.log("Pano — Bugün kartı:");
+{
+  const bos = { acik: null, hazir: 0 };
+  const isler = [
+    { id: "i1", done: true },
+    { id: "i2", done: false },
+    { id: "i3", done: false },
+  ];
+  const tam = {
+    acikTest: { id: "t" },
+    seviyeli: { id: "s" },
+    tekrar: { acik: { id: "r", kalan: 2, toplam: 4 }, hazir: 3 },
+    planIsleri: isler,
+    oneri: { slug: "p" },
+  };
+  check("yarım test her şeyin önünde", bugunkuIs(tam).tur === "TEST");
+  check("sonra seviyeli check-up", bugunkuIs({ ...tam, acikTest: null }).tur === "SEVIYELI");
+  check("sonra yarım kalan tekrar", bugunkuIs({ ...tam, acikTest: null, seviyeli: null }).tur === "TEKRAR_DEVAM");
+  const tekrar = bugunkuIs({ ...tam, acikTest: null, seviyeli: null, tekrar: { acik: null, hazir: 3 } });
+  check("sonra bugünkü tekrar (soru sayısıyla)", tekrar.tur === "TEKRAR" && tekrar.soru === 3);
+  const plan = bugunkuIs({ ...tam, acikTest: null, seviyeli: null, tekrar: bos });
+  check(
+    "tekrar bittiyse planın bitmemiş ilk işi",
+    plan.tur === "PLAN" && plan.is.id === "i2" && plan.kalan === 2,
+    JSON.stringify(plan)
+  );
+  check(
+    "plan bittiyse önerilen test",
+    bugunkuIs({ ...tam, acikTest: null, seviyeli: null, tekrar: bos, planIsleri: isler.map((i) => ({ ...i, done: true })) }).tur === "ONERI"
+  );
+  check("plan yoksa önerilen test", bugunkuIs({ ...tam, acikTest: null, seviyeli: null, tekrar: bos, planIsleri: null }).tur === "ONERI");
+  check(
+    "hiçbiri yoksa YOK",
+    bugunkuIs({ acikTest: null, seviyeli: null, tekrar: bos, planIsleri: [], oneri: null }).tur === "YOK"
+  );
+}
+
+// ── grafik ekseni ─────────────────────────────────────────
+console.log("");
+console.log("Grafik ekseni (tarih etiketleri):");
+{
+  const e = grafikTarihleri([
+    new Date("2026-10-08T09:00:00Z"),
+    new Date("2026-10-10T08:05:00Z"),
+    new Date("2026-10-10T11:40:00Z"),
+    // 00:30 TR (önceki gün 21:30Z) Türkiye gününe yazılır: 11 Eki.
+    new Date("2026-10-10T21:30:00Z"),
+  ]);
+  check(
+    "tek testli gün tek satır; aynı günün testleri: gün bir kez, her birinde saat",
+    JSON.stringify(e.map((x) => x.eksen)) === JSON.stringify([["8 Eki"], ["10 Eki", "11:05"], ["", "14:40"], ["11 Eki"]]),
+    JSON.stringify(e.map((x) => x.eksen))
+  );
+  check("veri tablosu için tam yazım", e[2].tam === "10 Eki 14:40" && e[0].tam === "8 Eki", e[2].tam);
 }
 
 // ── sınıf birleştirici ────────────────────────────────────

@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db";
 import { aktifPlan } from "@/lib/plan";
 import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
 import { EXAMS } from "@/lib/exams";
-import { appUrl, isMailConfigured, renderMail, sendMail } from "@/lib/mailer";
+import { appUrl, isMailConfigured, renderMail, sendMail, type MailIcerik } from "@/lib/mailer";
+import { gunBasi } from "@/lib/review";
 
 /**
  * Haftalık koçluk postası — pazartesi sabahı "bu hafta ne çalışacaksın".
@@ -80,13 +81,22 @@ async function haftalikPosta(
   now: Date,
   hafta: Date
 ) {
-  const [plan, sonTest] = await Promise.all([
+  // Gelecek pazartesi 00:00 (TR): bu haftanın sonu.
+  const haftaSonu = new Date(hafta.getTime() + 7 * 86_400_000 - TR_OFFSET_MS);
+
+  const [plan, sonTest, defterVadeleri] = await Promise.all([
     aktifPlan(u.id, now),
     prisma.checkupSession.findFirst({
       // Alıştırma "son check-up" sayılmaz: ölçüm değil.
       where: { userId: u.id, status: "SUBMITTED", kind: { not: "PRACTICE" } },
       orderBy: { submittedAt: "desc" },
       select: { submittedAt: true },
+    }),
+    // Yanlış defteri: bu hafta vadesi gelen ya da günü geçmiş açık maddeler.
+    prisma.notebookItem.findMany({
+      where: { userId: u.id, resolvedAt: null, dueAt: { lt: haftaSonu } },
+      select: { dueAt: true },
+      take: 500,
     }),
   ]);
 
@@ -101,6 +111,25 @@ async function haftalikPosta(
       : null;
 
   const gunFarki = sonTest?.submittedAt ? Math.floor((now.getTime() - sonTest.submittedAt.getTime()) / 86_400_000) : null;
+
+  /*
+   * Yanlış defteri notu: plan kutusunun altında, kendi bağlantısıyla. Madde
+   * yoksa hiç yazılmaz ("0 madde" bilgi değil, gürültü). "Günü geçmiş" =
+   * vadesi bugünden önce olan; bugün vadeli olan geçmiş sayılmaz.
+   */
+  const bugun = gunBasi(now).getTime();
+  const gecikmis = defterVadeleri.filter((m) => m.dueAt.getTime() < bugun).length;
+  const ekNot: MailIcerik["ekNot"] =
+    defterVadeleri.length > 0
+      ? {
+          baslik: "Yanlış defteri",
+          metin:
+            `Bu hafta ${defterVadeleri.length} yanlışının tekrar sırası geliyor` +
+            (gecikmis > 0 ? `; ${gecikmis} tanesinin günü geçti.` : ".") +
+            " Her biri o yanlışın benzeri bir soru, süre yok. Günde birkaç soru yeter.",
+          baglanti: { etiket: "Yanlış defterini aç", url: `${appUrl()}/defter` },
+        }
+      : undefined;
 
   let icerik;
   if (plan && plan.items.length) {
@@ -134,6 +163,7 @@ async function haftalikPosta(
 
   const { html, text } = renderMail({
     ...icerik,
+    ekNot,
     dipnot: "Bu posta her pazartesi gelir. İstemiyorsan aşağıdaki bağlantıdan tek tıkla kapatabilirsin; parola ve hesap postaları bundan etkilenmez.",
     altBaglanti: { etiket: "Haftalık postayı kapat", url: kapatUrl },
   });
