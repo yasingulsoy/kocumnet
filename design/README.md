@@ -6,7 +6,8 @@
 ```
 design/
   tokens.css          TEK KAYNAK: renk, yazı tipi, ölçek, köşe, gölge, taban kuralları
-  sync.mjs            tokens.css'i ve marka dosyalarını üç projeye kopyalar; --check eşitliği doğrular
+  sync.mjs            tokens.css'i, marka dosyalarını ve TailAdmin kitini projelere kopyalar; --check eşitliği doğrular
+  tailadmin/          Yönetim arayüzü kiti (TailAdmin Free, MIT): tema + bileşenler — ayrıntı: tailadmin/README.md
   brand/              Marka kiti "Fosfor": logo, ikon, favicon, e-posta ve sosyal görseller
     build.mjs         Üretici (npm run marka) — ayrıntı: brand/README.md
     index.html        Marka rehberi ve indirme sayfası (tarayıcıda aç)
@@ -23,8 +24,9 @@ cd design && npm install && npm run marka   # logo/ikon değişince kiti yeniden
 ```
 
 Kopyalar **elle düzenlenmez**: `*/tokens.css`, `*/lib/brand-paths.ts`,
-`icon.svg`, `favicon.ico`, `apple-icon.png`, `public/icons/*`, `public/brand/*`
-ve `app/app/opengraph-image.png`. Tam liste `sync.mjs` içindeki `ISLER`.
+`icon.svg`, `favicon.ico`, `apple-icon.png`, `public/icons/*`, `public/brand/*`,
+`app/app/opengraph-image.png`, `frontend/app/tailadmin.css` ve
+`frontend/components/tailadmin/**`. Tam liste `sync.mjs` içindeki `ISLER` ve `KIT_HEDEFLERI`.
 
 ## Kararlar
 

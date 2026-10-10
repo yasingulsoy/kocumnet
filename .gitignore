@@ -54,3 +54,6 @@ Desktop.ini
 
 # Certificates / keys
 *.pem
+
+# İndirilen şablonlar (TailAdmin ücretsiz sürüm, MIT) — yalnızca kaynak olarak
+vendor/
