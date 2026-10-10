@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { RotateCcw, ServerCrash } from "lucide-react";
-import { Button, Container, LinkButton } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { ErrorPage } from "@/components/tailadmin/pages/ErrorPage";
 
 const METIN = {
   tr: { baslik: "Bir şeyler ters gitti", metin: "Sayfa yüklenirken beklenmeyen bir hata oldu. Yeniden deneyebilirsiniz.", tekrar: "Tekrar dene", ana: "Ana sayfa" },
@@ -11,8 +12,12 @@ const METIN = {
   ar: { baslik: "حدث خطأ ما", metin: "حدث خطأ غير متوقع أثناء تحميل الصفحة. يمكنك المحاولة مرة أخرى.", tekrar: "حاول مجدداً", ana: "الرئيسية" },
 } as const;
 
-/** Next 16: kurtarma fonksiyonunun adı `retry` (`reset` değil). */
-export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+/**
+ * Dil düzeninin hata sınırı — kitin hata sayfası, site düzeninin içinde.
+ * Hata kodu sayısı yok (istemci hatası da olabilir): yerinde kitin ikon kutusu.
+ * Next 16: kurtarma fonksiyonunun adı `retry` (`reset` değil).
+ */
+export default function HataSayfasi({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   const pathname = usePathname() ?? "/";
   // "/enerji" gibi Türkçe bir adres İngilizce sayılmasın: önek tam segment olmalı.
   const onek = pathname.split("/")[1];
@@ -24,23 +29,28 @@ export default function ErrorPage({ error, retry }: { error: Error & { digest?: 
   }, [error]);
 
   return (
-    <main className="flex flex-1 flex-col">
-      <Container className="flex flex-1 flex-col items-center justify-center py-24 text-center">
-        <span className="flex size-16 items-center justify-center rounded-2xl bg-bad-wash text-bad">
-          <ServerCrash className="size-7" aria-hidden />
+    <ErrorPage
+      embedded
+      code={null}
+      top={
+        <span className="flex size-16 items-center justify-center rounded-2xl bg-error-50 text-error-600">
+          <ServerCrash className="size-8" aria-hidden />
         </span>
-        <h1 className="font-display mt-6 text-h2 font-semibold tracking-tight text-ink">{t.baslik}</h1>
-        <p className="mt-3 max-w-md text-body text-ink-soft">{t.metin}</p>
-        {error.digest ? <p className="mt-2 font-mono text-micro text-ink-faint">{error.digest}</p> : null}
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Button onClick={() => retry()}>
-            <RotateCcw aria-hidden /> {t.tekrar}
+      }
+      title={t.baslik}
+      message={t.metin}
+      actions={
+        <>
+          <Button size="md" onClick={() => retry()} startIcon={<RotateCcw aria-hidden />}>
+            {t.tekrar}
           </Button>
-          <LinkButton href={dil === "tr" ? "/" : `/${dil}`} variant="secondary">
+          <ButtonLink href={dil === "tr" ? "/" : `/${dil}`} variant="outline" size="md">
             {t.ana}
-          </LinkButton>
-        </div>
-      </Container>
-    </main>
+          </ButtonLink>
+        </>
+      }
+    >
+      {error.digest ? <p className="mt-6 font-mono text-theme-xs text-gray-500">{error.digest}</p> : null}
+    </ErrorPage>
   );
 }

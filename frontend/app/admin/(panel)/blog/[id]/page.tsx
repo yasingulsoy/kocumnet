@@ -4,7 +4,11 @@ import { notFound } from "next/navigation";
 import { Eye, History, Layers, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/admin/ActionButtons";
 import { BlogForm } from "@/components/admin/BlogForm";
-import { Card, Notice, PageHeader, Pill, relative, trDate } from "@/components/admin/ui";
+import { relative, trDate } from "@/components/admin/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { deleteBlogAction, restoreRevisionAction } from "@/lib/admin/actions";
 import { requireStaff } from "@/lib/admin/auth";
 import { BackendError } from "@/lib/admin/backend";
@@ -14,11 +18,19 @@ import { authorName } from "@/lib/blog";
 
 export const metadata: Metadata = { title: "Yazıyı düzenle" };
 
-const KAYIT_BILDIRIMI: Record<string, { tone: "ok" | "info"; text: string }> = {
-  "1": { tone: "ok", text: "Kaydedildi." },
-  yayinlandi: { tone: "ok", text: "Yazı yayınlandı. Sitede birkaç saniye içinde görünür." },
-  taslak: { tone: "info", text: "Yazı taslağa alındı; artık sitede görünmüyor." },
-  geri: { tone: "ok", text: "Yazı seçilen sürüme döndü. Yayındaysa sitede de bu hâli görünür; istersen yine sürümlerden geri alabilirsin." },
+const KAYIT_BILDIRIMI: Record<string, { variant: "success" | "info"; text: string }> = {
+  "1": { variant: "success", text: "Kaydedildi." },
+  yayinlandi: { variant: "success", text: "Yazı yayınlandı. Sitede birkaç saniye içinde görünür." },
+  taslak: { variant: "info", text: "Yazı taslağa alındı; artık sitede görünmüyor." },
+  geri: { variant: "success", text: "Yazı seçilen sürüme döndü. Yayındaysa sitede de bu hâli görünür; istersen yine sürümlerden geri alabilirsin." },
+};
+
+const SURUME_DON = {
+  title: "Yazı bu sürüme dönsün mü?",
+  description:
+    "Başlık, içerik, özet, meta alanları ve etiketler değişir; adres ve yayın durumu aynı kalır. Editörde kaydedilmemiş değişiklik varsa kaybolur.",
+  confirmLabel: "Bu sürüme dön",
+  tone: "warning" as const,
 };
 
 /** Sürüm satırı: zaman, kaydeden; başlık şimdikinden farklıysa o başlık. */
@@ -39,13 +51,13 @@ function SurumSatiri({
   acilanSurum: string | null;
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 sm:px-6">
       <div className="min-w-0 flex-1">
-        <p className="text-caption text-ink">
+        <p className="text-theme-sm text-gray-800">
           <span className="font-medium">{guncel ? "Şu anki sürüm" : relative(s.created_at)}</span>
-          <span className="text-ink-faint"> · {personName(s.author) ?? "Silinmiş hesap"}</span>
+          <span className="text-gray-500"> · {personName(s.author) ?? "Silinmiş hesap"}</span>
         </p>
-        <p className="mt-0.5 truncate text-micro text-ink-faint">
+        <p className="mt-0.5 truncate text-theme-xs text-gray-500">
           <time dateTime={s.created_at}>{trDate(s.created_at, { time: true })}</time>
           {s.title !== baslik ? <> · başlık: “{s.title}”</> : null}
         </p>
@@ -53,17 +65,12 @@ function SurumSatiri({
       <Link
         href={`/admin/blog/${blogId}/onizleme?surum=${s.id}`}
         target="_blank"
-        className="inline-flex items-center gap-1 text-caption font-medium text-brand hover:underline"
+        className="inline-flex items-center gap-1 text-theme-sm font-medium text-brand-500 hover:text-brand-600"
       >
         <Eye className="size-3.5" aria-hidden /> Önizle
       </Link>
       {!guncel && geriAlabilir ? (
-        <ActionButton
-          action={restoreRevisionAction.bind(null, blogId, s.id, acilanSurum)}
-          variant="ghost"
-          size="sm"
-          confirm="Yazı bu sürüme dönsün mü? Başlık, içerik, özet, meta alanları ve etiketler değişir; adres ve yayın durumu aynı kalır. Editörde kaydedilmemiş değişiklik varsa kaybolur."
-        >
+        <ActionButton action={restoreRevisionAction.bind(null, blogId, s.id, acilanSurum)} variant="ghost" confirm={SURUME_DON}>
           Bu sürüme dön
         </ActionButton>
       ) : null}
@@ -97,24 +104,32 @@ export default async function BlogDuzenlePage({ params, searchParams }: PageProp
 
   return (
     <>
-      <PageHeader
-        title={blog.title}
+      <PageBreadcrumb
+        pageTitle={blog.title}
+        currentLabel="Düzenle"
         crumbs={[{ href: "/admin/blog", label: "Blog" }]}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <Pill tone={blog.is_published ? "ok" : "warn"}>{blog.is_published ? "Yayında" : "Taslak"}</Pill>
-            <span className="text-caption text-ink-faint">
-              {authorName(blog) ?? "—"} · oluşturuldu {trDate(blog.created_at)} · güncellendi {trDate(blog.updated_at, { time: true })} · {blog.view_count ?? 0} görüntülenme
+            <Badge size="sm" color={blog.is_published ? "success" : "warning"}>
+              {blog.is_published ? "Yayında" : "Taslak"}
+            </Badge>
+            <span>
+              {authorName(blog) ?? "—"} · oluşturuldu {trDate(blog.created_at)} · güncellendi {trDate(blog.updated_at, { time: true })} ·{" "}
+              {blog.view_count ?? 0} görüntülenme
             </span>
           </span>
         }
       />
 
-      {kayit ? <Notice tone={kayit.tone} className="mb-4">{kayit.text}</Notice> : null}
+      {kayit ? (
+        <Alert variant={kayit.variant} className="mb-4">
+          {kayit.text}
+        </Alert>
+      ) : null}
       {sp.hata === "kapak" ? (
-        <Notice tone="warn" className="mb-4" title="Yazı kaydedildi, kapak yüklenemedi">
+        <Alert variant="warning" className="mb-4" title="Yazı kaydedildi, kapak yüklenemedi">
           Görsel JPEG, PNG veya WebP olmalı ve 10 MB&apos;ı aşmamalı. Aşağıdan yeniden dene.
-        </Notice>
+        </Alert>
       ) : null}
 
       {/* Her başarılı kayıttan sonra form sunucudaki yeni değerlerle, "kaydedilmedi" izi temiz başlar. */}
@@ -125,79 +140,72 @@ export default async function BlogDuzenlePage({ params, searchParams }: PageProp
         kaydedildi={Boolean(kayit) || sp.hata === "kapak"}
       />
 
-      {surumler && surumler.length ? (
-        <Card className="mt-8 p-5">
-          <h2 className="flex items-center gap-2 font-display text-body font-semibold text-ink">
-            <Layers className="size-4 text-ink-faint" aria-hidden /> Sürümler
-          </h2>
-          <p className="mt-0.5 text-caption text-ink-soft">
-            Metni değiştiren her kayıt saklanır (son 30). Önizleyip istediğine dönebilirsin; adres, kapak ve yayın durumu değişmez.
-          </p>
-          <ol className="mt-2 divide-y divide-line">
-            {surumler.slice(0, 8).map((s, i) => (
-              <SurumSatiri
-                key={s.id}
-                s={s}
-                guncel={i === 0}
-                baslik={blog.title}
-                blogId={blog.id}
-                geriAlabilir={yazar}
-                acilanSurum={blog.updated_at}
-              />
-            ))}
-          </ol>
-          {surumler.length > 8 ? (
-            <details className="mt-1">
-              <summary className="cursor-pointer py-2 text-caption font-medium text-ink-soft hover:text-ink">
-                Daha eski {surumler.length - 8} sürüm
-              </summary>
-              <ol className="divide-y divide-line">
-                {surumler.slice(8).map((s) => (
-                  <SurumSatiri
-                    key={s.id}
-                    s={s}
-                    guncel={false}
-                    baslik={blog.title}
-                    blogId={blog.id}
-                    geriAlabilir={yazar}
-                    acilanSurum={blog.updated_at}
-                  />
-                ))}
-              </ol>
-            </details>
-          ) : null}
-        </Card>
-      ) : null}
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        {surumler && surumler.length ? (
+          <ComponentCard
+            title="Sürümler"
+            icon={<Layers />}
+            desc="Metni değiştiren her kayıt saklanır (son 30). Önizleyip istediğine dönebilirsin; adres, kapak ve yayın durumu değişmez."
+            flush
+          >
+            <ol className="divide-y divide-gray-100">
+              {surumler.slice(0, 8).map((s, i) => (
+                <SurumSatiri key={s.id} s={s} guncel={i === 0} baslik={blog.title} blogId={blog.id} geriAlabilir={yazar} acilanSurum={blog.updated_at} />
+              ))}
+            </ol>
+            {surumler.length > 8 ? (
+              <details className="border-t border-gray-100">
+                <summary className="cursor-pointer px-5 py-3 text-theme-sm font-medium text-gray-600 hover:text-gray-800 sm:px-6">
+                  Daha eski {surumler.length - 8} sürüm
+                </summary>
+                <ol className="divide-y divide-gray-100">
+                  {surumler.slice(8).map((s) => (
+                    <SurumSatiri key={s.id} s={s} guncel={false} baslik={blog.title} blogId={blog.id} geriAlabilir={yazar} acilanSurum={blog.updated_at} />
+                  ))}
+                </ol>
+              </details>
+            ) : null}
+          </ComponentCard>
+        ) : null}
 
-      {gecmis && gecmis.data.length ? (
-        <Card className="mt-8 p-5">
-          <h2 className="flex items-center gap-2 font-display text-body font-semibold text-ink">
-            <History className="size-4 text-ink-faint" aria-hidden /> Geçmiş
-          </h2>
-          <ol className="mt-3 space-y-2">
-            {gecmis.data.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-baseline gap-x-2 text-caption">
-                <span className="font-medium text-ink">{personName(e.actor) ?? "Silinmiş hesap"}</span>
-                <span className="text-ink-soft">{e.summary.replace(/^“[^”]*”(: | yazısını )?/, "")}</span>
-                <time dateTime={e.created_at} className="text-micro text-ink-faint" title={trDate(e.created_at, { time: true })}>
-                  {relative(e.created_at)}
-                </time>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      ) : null}
+        {gecmis && gecmis.data.length ? (
+          <ComponentCard title="Geçmiş" icon={<History />} desc="Bu yazıda kim ne zaman ne yaptı.">
+            <ol className="space-y-2.5">
+              {gecmis.data.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-baseline gap-x-2 text-theme-sm">
+                  <span className="font-medium text-gray-800">{personName(e.actor) ?? "Silinmiş hesap"}</span>
+                  <span className="text-gray-500">{e.summary.replace(/^“[^”]*”(: | yazısını )?/, "")}</span>
+                  <time dateTime={e.created_at} className="text-theme-xs text-gray-500" title={trDate(e.created_at, { time: true })}>
+                    {relative(e.created_at)}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          </ComponentCard>
+        ) : null}
+      </div>
 
       {yazar ? (
-        <Card className="mt-8 border-bad/20 p-5">
-          <h2 className="font-display text-body font-semibold text-bad">Tehlikeli bölge</h2>
-          <p className="mt-1 text-caption text-ink-soft">Yazı ve tüm görselleri kalıcı olarak silinir; geri alınamaz. Yayından kaldırmak için yukarıdaki &quot;Taslağa al&quot; düğmesi yeter.</p>
-          <div className="mt-4">
-            <ActionButton action={deleteBlogAction.bind(null, blog.id)} variant="secondary" size="sm" className="text-bad ring-bad/30 hover:bg-bad-wash" confirm={`"${blog.title}" kalıcı olarak silinsin mi?`}>
-              <Trash2 /> Yazıyı sil
-            </ActionButton>
-          </div>
-        </Card>
+        <ComponentCard
+          className="mt-6"
+          tone="danger"
+          title="Tehlikeli bölge"
+          desc="Yazı ve tüm görselleri kalıcı olarak silinir; geri alınamaz. Yayından kaldırmak için yukarıdaki “Taslağa al” düğmesi yeter."
+        >
+          <ActionButton
+            action={deleteBlogAction.bind(null, blog.id)}
+            variant="danger-outline"
+            icon={<Trash2 aria-hidden />}
+            confirm={{
+              title: `"${blog.title}" kalıcı olarak silinsin mi?`,
+              description: "Yazı ve tüm görselleri silinir; bu işlem geri alınamaz.",
+              confirmLabel: "Yazıyı sil",
+              tone: "danger",
+            }}
+          >
+            Yazıyı sil
+          </ActionButton>
+        </ComponentCard>
       ) : null}
     </>
   );

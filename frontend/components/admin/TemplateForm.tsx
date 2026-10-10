@@ -1,10 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { saveReplyTemplateAction } from "@/lib/admin/actions";
 import { CONTENT_LOCALES, LOCALE_LABEL, TEMPLATE_PLACEHOLDERS, type ContentLocale, type ReplyTemplate } from "@/lib/admin/types";
-import { Button, Field, INPUT_CLASS, Notice, SELECT_CLASS, TEXTAREA_CLASS, cn } from "./ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
 import { useFormAction } from "./useFormAction";
 
 const EN_FAZLA = 3000;
@@ -31,66 +37,60 @@ export function TemplateForm({ sablon, varsayilanDil = "tr" }: { sablon?: ReplyT
   }
 
   return (
-    <form {...formProps} onReset={() => setUzunluk(sablon?.body.length ?? 0)} className="space-y-4">
+    <form {...formProps} onReset={() => setUzunluk(sablon?.body.length ?? 0)} className="space-y-5">
       {sablon ? <input type="hidden" name="id" value={sablon.id} /> : null}
-      {state.error ? <Notice>{state.error}</Notice> : null}
-      {state.ok ? <Notice tone="ok">{state.message}</Notice> : null}
+      {state.error ? <Alert variant="error" compact>{state.error}</Alert> : null}
+      {state.ok ? <Alert variant="success" compact>{state.message}</Alert> : null}
 
-      <div className="grid gap-4 sm:grid-cols-[1fr_9rem]">
-        <Field label="Ad" error={state.fields?.title} hint="Listede görünür: “Teşekkür, sizi arayacağız”">
-          <input name="title" defaultValue={sablon?.title ?? ""} required maxLength={80} className={INPUT_CLASS} />
+      <div className="grid gap-5 sm:grid-cols-[1fr_9rem]">
+        <Field label="Ad" error={state.fields?.title} hint="Listede görünür: “Teşekkür, sizi arayacağız”" required>
+          <Input name="title" defaultValue={sablon?.title ?? ""} required maxLength={80} />
         </Field>
         <Field label="Dil" error={state.fields?.locale}>
-          <select name="locale" defaultValue={sablon?.locale ?? varsayilanDil} className={SELECT_CLASS}>
+          <Select name="locale" defaultValue={sablon?.locale ?? varsayilanDil}>
             {CONTENT_LOCALES.map((d) => (
               <option key={d} value={d}>
                 {LOCALE_LABEL[d]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
 
-      <div>
-        <label className="block">
-          <span className="mb-1.5 block text-caption font-medium text-ink">Metin</span>
-          <textarea
-            ref={govdeRef}
-            name="body"
-            defaultValue={sablon?.body ?? ""}
-            required
-            rows={8}
-            maxLength={EN_FAZLA}
-            dir="auto"
-            onChange={(e) => setUzunluk(e.target.value.length)}
-            className={TEXTAREA_CLASS}
-          />
-        </label>
-        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-          <span className="flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
-            Ekle:
-            {TEMPLATE_PLACEHOLDERS.map((p) => (
-              <button
-                key={p.kod}
-                type="button"
-                onClick={() => ekle(p.kod)}
-                title={p.aciklama}
-                className="rounded-md bg-surface-sunk px-1.5 py-0.5 font-mono text-micro text-ink-soft ring-1 ring-inset ring-line transition hover:bg-brand-wash hover:text-brand"
-              >
-                {p.kod}
-              </button>
-            ))}
-          </span>
-          <span className={cn("tabular text-micro", uzunluk > UZUN_UYARISI ? "text-warn" : "text-ink-faint")}>
-            {uzunluk} / {EN_FAZLA}
-            {uzunluk > UZUN_UYARISI ? " · uzun, bazı posta programları keser" : ""}
-          </span>
-        </div>
-        {state.fields?.body ? <p className="mt-1.5 text-caption text-bad">{state.fields.body}</p> : null}
+      <Field label="Metin" error={state.fields?.body} required>
+        <TextArea
+          ref={govdeRef}
+          name="body"
+          defaultValue={sablon?.body ?? ""}
+          required
+          rows={8}
+          maxLength={EN_FAZLA}
+          dir="auto"
+          onChange={(e) => setUzunluk(e.target.value.length)}
+        />
+      </Field>
+      <div className="-mt-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="flex flex-wrap items-center gap-1.5 text-theme-xs text-gray-500">
+          Ekle:
+          {TEMPLATE_PLACEHOLDERS.map((p) => (
+            <button
+              key={p.kod}
+              type="button"
+              onClick={() => ekle(p.kod)}
+              title={p.aciklama}
+              className="cursor-pointer rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-theme-xs text-gray-700 transition hover:bg-brand-50 hover:text-brand-500"
+            >
+              {p.kod}
+            </button>
+          ))}
+        </span>
+        <span className={cx("tabular text-theme-xs", uzunluk > UZUN_UYARISI ? "text-warning-700" : "text-gray-500")}>
+          {uzunluk} / {EN_FAZLA}
+          {uzunluk > UZUN_UYARISI ? " · uzun, bazı posta programları keser" : ""}
+        </span>
       </div>
 
-      <Button type="submit" size="sm" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : <Save />}
+      <Button type="submit" size="xs" loading={pending} startIcon={<Save />}>
         {pending ? "Kaydediliyor…" : sablon ? "Kaydet" : "Şablonu ekle"}
       </Button>
     </form>

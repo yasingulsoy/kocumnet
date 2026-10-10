@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Link2 } from "lucide-react";
-import { cn } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
 
 /**
  * Yazının bağlantısını panoya kopyalar — Instagram, Telegram, e-posta ya da
  * okul grubuna yapıştırmak için. Paylaşım düğmelerinin hiçbiri bunu
  * karşılamıyordu.
  *
- * Kopyalanınca simge ✓ olur ve ekran okuyucuya "kopyalandı" duyurulur.
+ * Görünüm TailAdmin üst çubuğundaki yuvarlak ikon düğmeleri (paylaşım
+ * düğmeleriyle aynı). Kopyalanınca simge ✓ olur, düğme yeşile döner ve
+ * ekran okuyucuya "kopyalandı" duyurulur.
  * Pano API'si yoksa (eski tarayıcı, güvensiz bağlam) gizli bir metin alanı
  * üstünden eski yönteme düşer.
  */
@@ -67,11 +69,11 @@ export function CopyLinkButton({
         onClick={kopyala}
         aria-label={label}
         title={label}
-        className={cn(
-          "flex size-10 items-center justify-center rounded-full ring-1 ring-inset transition",
+        className={cx(
+          "flex size-10 cursor-pointer items-center justify-center rounded-full border shadow-theme-xs transition",
           kopyalandi
-            ? "bg-ok-wash text-ok ring-ok/25"
-            : "bg-surface-sunk text-ink-soft ring-line hover:bg-brand-wash hover:text-brand hover:ring-brand/20",
+            ? "border-success-200 bg-success-50 text-success-700"
+            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-700",
           className
         )}
       >

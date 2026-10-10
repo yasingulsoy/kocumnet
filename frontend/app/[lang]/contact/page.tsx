@@ -6,7 +6,10 @@ import { Reveal } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
 import { SayfaYoluJsonLd } from "@/components/JsonLd";
 import { ContactForm } from "@/components/ContactForm";
-import { Card, Container, Section, SectionHead } from "@/components/ui";
+import { Container, IconBox, KART_GOLGE, Section, SectionHead } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { isLocale } from "@/lib/i18n/config";
 import { sayfaMetadata } from "@/lib/seo";
@@ -31,17 +34,14 @@ export async function generateMetadata({
   });
 }
 
+const SATIR = "flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4";
+
 export default async function ContactPage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
   if (!isLocale(lang)) notFound();
   const t = await getDictionary(lang);
   const c = t.contact;
 
-  /*
-   * İkonlar artık lucide-react'ten. Eskiden bu dosyanın içinde dört ayrı
-   * SVG fonksiyonu vardı ve aynı path verisi Header/Footer'da da kopyaydı
-   * (Instagram ikonu sitede üç kez, konum ikonu iki kez yazılıydı).
-   */
   const contactInfo = [
     { icon: Mail, label: c.email, value: SITE_BRAND.email, href: `mailto:${SITE_BRAND.email}` },
     ...(SITE_BRAND.phone
@@ -83,12 +83,15 @@ export default async function ContactPage({ params }: { params: Promise<{ lang: 
               {contactInfo.map(({ icon: Icon, label, value, href }) => {
                 const govde = (
                   <>
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-brand-wash text-brand">
-                      <Icon className="size-5" />
-                    </span>
+                    <IconBox>
+                      <Icon />
+                    </IconBox>
                     <span className="min-w-0">
-                      <span className="block text-caption text-ink-faint">{label}</span>
-                      <span className="block truncate text-body font-medium text-ink">{value}</span>
+                      <span className="block text-theme-xs text-gray-500">{label}</span>
+                      {/* bdi: Arapça sayfada "@kocum_net" ters dizilmesin. */}
+                      <span className="block truncate text-base font-medium text-gray-800">
+                        <bdi>{value}</bdi>
+                      </span>
                     </span>
                   </>
                 );
@@ -98,37 +101,29 @@ export default async function ContactPage({ params }: { params: Promise<{ lang: 
                     {href ? (
                       <a
                         href={href}
-                        {...(href.startsWith("http")
-                          ? { target: "_blank", rel: "noopener noreferrer" }
-                          : {})}
-                        className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4 transition hover:border-line-strong hover:bg-surface-hover"
+                        {...(href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                        className={cx(SATIR, KART_GOLGE, "transition hover:border-gray-300 hover:shadow-theme-md")}
                       >
                         {govde}
                       </a>
                     ) : (
-                      <div className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4">
-                        {govde}
-                      </div>
+                      <div className={cx(SATIR, KART_GOLGE)}>{govde}</div>
                     )}
                   </li>
                 );
               })}
             </ul>
 
-            <p className="mt-8 rounded-2xl bg-surface-sunk p-5 text-caption leading-relaxed text-ink-soft">
+            <Alert variant="info" className="mt-8">
               {c.note}
-            </p>
+            </Alert>
           </Reveal>
 
-          {/* Sağ: form */}
+          {/* Sağ: form — kitin başlıklı kartı */}
           <Reveal delay={0.1}>
-            <Card className="p-6 shadow-raised sm:p-8">
-              <h2 className="font-display text-h3 font-semibold text-ink">{c.formTitle}</h2>
-              <p className="mt-1.5 text-caption text-ink-soft">{c.formDesc}</p>
-              <div className="mt-7">
-                <ContactForm dict={t} locale={lang} source="contact" />
-              </div>
-            </Card>
+            <ComponentCard title={c.formTitle} desc={c.formDesc} className="shadow-theme-md">
+              <ContactForm dict={t} locale={lang} source="contact" />
+            </ComponentCard>
           </Reveal>
         </Container>
       </Section>

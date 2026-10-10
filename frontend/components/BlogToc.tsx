@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
 import type { IcindekilerOgesi } from "@/lib/blog-content";
 
 /**
- * Bölüm başlığı ekranın üstünden bu kadar piksele (sabit header 120-128px +
+ * Bölüm başlığı ekranın üstünden bu kadar piksele (sabit header 104-112px +
  * pay) çıkınca o bölüm "okunuyor" sayılır. globals.css'teki scroll-padding-top
- * (8.5rem = 136px) ile uyumlu: içindekilerden tıklanan başlık tam bu çizginin
+ * (8rem = 128px) ile uyumlu: içindekilerden tıklanan başlık tam bu çizginin
  * altına gelir ve hemen vurgulanır.
  */
-const OKUMA_CIZGISI = 160;
+const OKUMA_CIZGISI = 150;
 
 /**
  * Geniş ekranda (xl) yazının yanında yapışkan duran içindekiler; okunan
@@ -60,8 +60,8 @@ export function BlogToc({ items, label }: { items: IcindekilerOgesi[]; label: st
 
   return (
     <nav aria-label={label}>
-      <p className="text-micro font-semibold uppercase tracking-[0.18em] text-brand">{label}</p>
-      <ol className="mt-4 border-s border-line">
+      <p className="text-theme-xs font-medium tracking-wide text-gray-500 uppercase">{label}</p>
+      <ol className="mt-4 border-s border-gray-200">
         {items.map((oge) => {
           const secili = oge.id === aktif;
           return (
@@ -69,12 +69,12 @@ export function BlogToc({ items, label }: { items: IcindekilerOgesi[]; label: st
               <a
                 href={`#${oge.id}`}
                 aria-current={secili ? "true" : undefined}
-                className={cn(
-                  "-ms-px block border-s-2 py-1.5 text-caption leading-snug transition-colors",
+                className={cx(
+                  "-ms-px block border-s-2 py-1.5 text-sm leading-snug transition-colors",
                   oge.seviye === 3 ? "ps-6" : "ps-4",
                   secili
-                    ? "border-brand font-medium text-brand"
-                    : "border-transparent text-ink-faint hover:border-line-strong hover:text-ink"
+                    ? "border-brand-500 font-medium text-brand-500"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-800"
                 )}
               >
                 {oge.metin}

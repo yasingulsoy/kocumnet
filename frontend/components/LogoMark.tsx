@@ -1,5 +1,5 @@
 import { BRAND_COLORS, MONOGRAM, WORDMARK } from "@/lib/brand-paths";
-import { cn } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
 
 /*
  * Koçum.Net marka işaretleri — "Fosfor".
@@ -15,7 +15,7 @@ export function LogoMark({ className, title }: { className?: string; title?: str
   return (
     <svg
       viewBox={MONOGRAM.viewBox}
-      className={cn("size-9 shrink-0", className)}
+      className={cx("size-9 shrink-0", className)}
       role={title ? "img" : undefined}
       aria-label={title}
       aria-hidden={title ? undefined : true}
@@ -47,7 +47,7 @@ export function Wordmark({
       viewBox={WORDMARK.viewBox}
       role="img"
       aria-label="Koçum.Net"
-      className={cn("w-auto shrink-0", size === "lg" ? "h-10" : size === "sm" ? "h-6" : "h-8", className)}
+      className={cx("w-auto shrink-0", size === "lg" ? "h-10" : size === "sm" ? "h-6" : "h-8", className)}
     >
       <path d={WORDMARK.swipe} fill={BRAND_COLORS.highlight} />
       <path d={WORDMARK.koc} fill={tone === "light" ? "#ffffff" : BRAND_COLORS.ink} />

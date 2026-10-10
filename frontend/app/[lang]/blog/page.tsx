@@ -6,8 +6,11 @@ import { StaggerGroup, StaggerItem } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
 import { BlogCard } from "@/components/BlogCard";
 import { SayfaYoluJsonLd } from "@/components/JsonLd";
-import { Pagination } from "@/components/Pagination";
-import { Container, EmptyStateBox, LinkButton, Section } from "@/components/ui";
+import { Container, KART_GOLGE, Section } from "@/components/ui";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { Pagination } from "@/components/tailadmin/ui/Pagination";
 import { getDictionary, type Dictionary } from "@/lib/i18n/dictionaries";
 import { isLocale, type Locale } from "@/lib/i18n/config";
 import { sayfaMetadata } from "@/lib/seo";
@@ -80,22 +83,28 @@ export default async function BlogPage({ params, searchParams }: Props) {
 
       <Section>
         <Container>
+          {/* Boş durumlar kitin EmptyState'i, kart içinde. */}
           {kapsamDisi ? (
-            <EmptyStateBox
-              icon={<SearchX />}
-              title={t.blog.pageEmptyTitle}
-              description={t.blog.pageEmptyDesc}
-              action={
-                <LinkButton href={blogListPath(lang, 1)} variant="secondary">
-                  {t.blog.firstPage}
-                </LinkButton>
-              }
-            />
+            <Card className={KART_GOLGE}>
+              <EmptyState
+                className="py-16"
+                icon={<SearchX />}
+                title={t.blog.pageEmptyTitle}
+                description={t.blog.pageEmptyDesc}
+                action={
+                  <ButtonLink href={blogListPath(lang, 1)} variant="outline">
+                    {t.blog.firstPage}
+                  </ButtonLink>
+                }
+              />
+            </Card>
           ) : blogs.length === 0 ? (
-            <EmptyStateBox icon={<BookOpen />} title={t.blog.emptyTitle} description={t.blog.emptyDesc} />
+            <Card className={KART_GOLGE}>
+              <EmptyState className="py-16" icon={<BookOpen />} title={t.blog.emptyTitle} description={t.blog.emptyDesc} />
+            </Card>
           ) : (
             <>
-              <StaggerGroup className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              <StaggerGroup className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {blogs.map((blog) => (
                   <StaggerItem key={blog.id} className="h-full">
                     <BlogCard
@@ -115,18 +124,21 @@ export default async function BlogPage({ params, searchParams }: Props) {
   );
 }
 
+/** Kitin sayfalaması: bağlantılar (?sayfa=), telefonda "s / N", oklar RTL'de döner. */
 function BlogPagination({ lang, t, mevcut, toplam }: { lang: Locale; t: Dictionary; mevcut: number; toplam: number }) {
   return (
-    <Pagination
-      mevcut={mevcut}
-      toplam={toplam}
-      href={(n) => blogListPath(lang, n)}
-      etiketler={{
-        nav: t.blog.paginationLabel,
-        onceki: t.blog.prevPage,
-        sonraki: t.blog.nextPage,
-        sayfa: (n) => sayfaAdi(t, n),
-      }}
-    />
+    <div className="mt-12">
+      <Pagination
+        currentPage={mevcut}
+        totalPages={toplam}
+        href={(n) => blogListPath(lang, n)}
+        labels={{
+          nav: t.blog.paginationLabel,
+          previous: t.blog.prevPage,
+          next: t.blog.nextPage,
+          page: (n) => sayfaAdi(t, n),
+        }}
+      />
+    </div>
   );
 }

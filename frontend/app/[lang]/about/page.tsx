@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
-import { Apple, ArrowRight, Compass, GraduationCap, HeartHandshake, Rocket, Telescope } from "lucide-react";
+import { Apple, ArrowRight, Compass, GraduationCap, HeartHandshake, Rocket, Telescope, UserRound } from "lucide-react";
 import { Reveal, StaggerGroup, StaggerItem } from "@/components/Reveal";
 import { PageHero } from "@/components/PageHero";
 import { SayfaYoluJsonLd } from "@/components/JsonLd";
-import { Card, Container, Eyebrow, LinkButton, Section, SectionHead } from "@/components/ui";
+import { CtaCard } from "@/components/CtaCard";
+import { Container, Eyebrow, IconBox, KART_GOLGE, Section, SectionHead } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Avatar } from "@/components/tailadmin/ui/Avatar";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { ResponsiveImage } from "@/components/tailadmin/media/ResponsiveImage";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { isLocale } from "@/lib/i18n/config";
 import { sayfaMetadata } from "@/lib/seo";
@@ -31,12 +36,10 @@ export async function generateMetadata({
 }
 
 /*
- * Kurumsal sayfa ortak tasarım diline taşındı. Bu sayfa eski kalıpta
- * kalmıştı: ham hex (#1a5fb4, #17305e, rgba gölge), keyfi ölçüler
- * (text-[11px], tracking-[0.28em], text-[15px]), elle yazılmış düğmeler,
- * satır içi SVG ikonlar ve tıklanmadığı halde üstüne gelince havalanan
- * ekip kartları (yanlış "tıkla" ipucu). Vizyon etiketi camgöbeği renkte
- * açık zeminde 3,3:1 kontrastla okunmuyordu. İçerik aynı.
+ * Kurumsal sayfa — TailAdmin kitinin dilinde: ikon kutulu kartlar, ekip
+ * kartlarında kitin avatarı (fotoğraf Next ile küçültülür; fotoğrafı
+ * olmayan uzmanda kişi simgesi), görsel kitin görsel kutusu. Kartlar
+ * tıklanmıyor; üstüne gelince havalanmıyorlar (yanlış "tıkla" ipucu).
  */
 export default async function AboutPage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
@@ -56,8 +59,13 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
     { icon: Telescope, eyebrow: a.visionSubtitle, title: a.visionTitle, body: a.visionBody },
   ];
 
+  /*
+   * Avatar fotoğrafları: portrelerde yüz üstte (object-top). Serhat Bey'in
+   * fotoğrafı yatay ve boydan; avatar için aynı fotoğraftan kare portre
+   * kesildi (serhat-portre.webp), hizmetler sayfası boydan hâlini kullanır.
+   */
   const team: { name: string; role: string; photo?: string }[] = [
-    { name: a.team1Name, role: a.team1Role, photo: "/images/team/serhat.webp" },
+    { name: a.team1Name, role: a.team1Role, photo: "/images/team/serhat-portre.webp" },
     { name: a.team2Name, role: a.team2Role, photo: "/images/team/ozlem.webp" },
     { name: a.team3Name, role: a.team3Role, photo: "/images/team/dilek.webp" },
     { name: a.team4Name, role: a.team4Role },
@@ -75,29 +83,26 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
         <Container className="grid items-center gap-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
           <Reveal>
             <SectionHead eyebrow={a.whoTitle} title={a.whoHeading} />
-            <div className="mt-6 space-y-5 text-body text-ink-soft sm:text-lead">
+            <div className="mt-6 space-y-5 text-base text-gray-600 sm:text-lg">
               <p>{a.whoBody}</p>
               <p>{a.whoClosing}</p>
             </div>
           </Reveal>
-          <Reveal delay={0.1} className="relative">
-            <div aria-hidden className="absolute -top-4 -start-4 size-full rounded-3xl border-2 border-brand/20" />
-            <div className="relative overflow-hidden rounded-3xl shadow-pop">
-              <Image
-                src="/images/biz-kimiz-kocluk.webp"
-                alt={a.imageAlt}
-                width={1600}
-                height={1067}
-                className="h-full w-full object-cover"
-                sizes="(min-width: 1024px) 520px, 100vw"
-              />
-            </div>
+          <Reveal delay={0.1}>
+            <ResponsiveImage
+              src="/images/biz-kimiz-kocluk.webp"
+              alt={a.imageAlt}
+              width={1600}
+              height={1067}
+              className="shadow-theme-lg"
+              sizes="(min-width: 1024px) 520px, 100vw"
+            />
           </Reveal>
         </Container>
       </Section>
 
       {/* Uzmanlık alanları */}
-      <Section tone="sunk" className="border-y border-line">
+      <Section tone="sunk">
         <Container>
           <Reveal>
             <SectionHead center title={a.expertiseTitle} />
@@ -105,11 +110,11 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
           <StaggerGroup className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {expertise.map(({ icon: Icon, text }) => (
               <StaggerItem key={text} className="h-full">
-                <Card className="flex h-full flex-col items-center gap-4 px-5 py-7 text-center">
-                  <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-wash text-brand">
-                    <Icon className="size-6" aria-hidden />
-                  </span>
-                  <p className="font-display text-h4 font-semibold text-ink text-balance">{text}</p>
+                <Card className={cx(KART_GOLGE, "flex h-full flex-col items-center gap-4 px-5 py-7 text-center")}>
+                  <IconBox>
+                    <Icon />
+                  </IconBox>
+                  <p className="font-display text-base font-semibold text-balance text-gray-800">{text}</p>
                 </Card>
               </StaggerItem>
             ))}
@@ -123,13 +128,13 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
           <StaggerGroup className="grid gap-6 md:grid-cols-2">
             {missionVision.map(({ icon: Icon, eyebrow, title, body }) => (
               <StaggerItem key={title} className="h-full">
-                <Card className="h-full p-8 sm:p-10">
-                  <span className="flex size-12 items-center justify-center rounded-2xl bg-brand-wash text-brand">
-                    <Icon className="size-6" aria-hidden />
-                  </span>
+                <Card className={cx(KART_GOLGE, "h-full p-6 sm:p-8")}>
+                  <IconBox>
+                    <Icon />
+                  </IconBox>
                   <Eyebrow className="mt-6">{eyebrow}</Eyebrow>
-                  <h2 className="font-display mt-2 text-h2 font-semibold tracking-tight text-ink">{title}</h2>
-                  <p className="mt-4 text-body text-ink-soft">{body}</p>
+                  <h2 className="font-display mt-3 text-title-sm font-semibold tracking-tight text-gray-800">{title}</h2>
+                  <p className="mt-4 text-base text-gray-600">{body}</p>
                 </Card>
               </StaggerItem>
             ))}
@@ -138,7 +143,7 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
       </Section>
 
       {/* Uzman kadro */}
-      <Section tone="sunk" className="border-t border-line">
+      <Section tone="sunk">
         <Container>
           <Reveal>
             <SectionHead center title={a.teamTitle} description={a.teamDesc} />
@@ -146,22 +151,24 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
           <StaggerGroup className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {team.map((member) => (
               <StaggerItem key={member.name} className="h-full">
-                <Card className="flex h-full flex-col items-center p-6 text-center">
+                <Card className={cx(KART_GOLGE, "flex h-full flex-col items-center p-6 text-center")}>
                   {member.photo ? (
-                    <div className="relative size-24 overflow-hidden rounded-full shadow-raised ring-2 ring-brand/15">
-                      {/* Ad hemen altında: alt metin aynı adı ikinci kez okutmasın. */}
-                      <Image src={member.photo} alt="" fill className="object-cover object-top" sizes="96px" />
-                    </div>
+                    /* Ad hemen altında: avatar ekran okuyucudan gizli, aynı ad iki kez okunmasın. */
+                    <Avatar
+                      src={member.photo}
+                      name={member.name}
+                      size="huge"
+                      decorative
+                      unoptimized={false}
+                      className="ring-4 ring-brand-50 [&_img]:object-top"
+                    />
                   ) : (
-                    <div
-                      aria-hidden
-                      className="font-display flex size-24 items-center justify-center rounded-full bg-brand-gradient text-h2 font-semibold text-white shadow-raised"
-                    >
-                      {member.name.charAt(0)}
-                    </div>
+                    <span aria-hidden className="flex size-20 items-center justify-center rounded-full bg-gray-100 text-gray-500 ring-4 ring-gray-50">
+                      <UserRound className="size-9" />
+                    </span>
                   )}
-                  <h3 className="font-display mt-4 text-h4 font-semibold text-ink">{member.name}</h3>
-                  <p className="mt-1 text-caption text-brand">{member.role}</p>
+                  <h3 className="font-display mt-5 text-base font-semibold text-gray-800">{member.name}</h3>
+                  <p className="mt-1 text-sm text-gray-500">{member.role}</p>
                 </Card>
               </StaggerItem>
             ))}
@@ -169,22 +176,20 @@ export default async function AboutPage({ params }: { params: Promise<{ lang: st
         </Container>
       </Section>
 
-      {/* Kapanış */}
-      <Section>
-        <Container>
-          <Reveal>
-            <SectionHead center title={t.home.ctaTitle} description={t.home.ctaDesc} />
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <LinkButton href={localizedPath("contact", lang)} size="lg">
-                {t.nav.contact} <ArrowRight className="rtl:rotate-180" />
-              </LinkButton>
-              <LinkButton href={localizedPath("services", lang)} variant="secondary" size="lg">
-                {t.nav.services}
-              </LinkButton>
-            </div>
-          </Reveal>
-        </Container>
-      </Section>
+      <CtaCard
+        title={t.home.ctaTitle}
+        description={t.home.ctaDesc}
+        actions={
+          <>
+            <ButtonLink href={localizedPath("contact", lang)} size="md" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+              {t.nav.contact}
+            </ButtonLink>
+            <ButtonLink href={localizedPath("services", lang)} variant="outline" size="md">
+              {t.nav.services}
+            </ButtonLink>
+          </>
+        }
+      />
     </main>
   );
 }

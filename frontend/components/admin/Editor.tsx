@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { EditorContent, useEditor, useEditorState, type Editor as TiptapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -25,7 +25,8 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { cn } from "@/components/ui";
+import { cx } from "@/components/tailadmin/cx";
+import { usePrompt, type PromptOptions } from "@/components/tailadmin/ui/Dialogs";
 import { uploadBlogImageAction } from "@/lib/admin/actions";
 import { PUBLIC_BACKEND_URL } from "@/lib/api";
 
@@ -41,6 +42,10 @@ import { PUBLIC_BACKEND_URL } from "@/lib/api";
  * yalnızca adresi girer. Eskiden base64 gömülüyordu; büyük yazıda 12 MB gövde
  * sınırı ve tarayıcı yedeğinin kotası doluyordu. Eski base64 içerikler
  * açılmaya ve kaydedilmeye devam eder (backend kayıtta dosyaya çevirir).
+ *
+ * Görünüm TailAdmin kitinin form alanlarıyla aynı: gri kenar, odakta marka
+ * rengi kenar + halka; araç çubuğu gri şerit. Bağlantı adresi ve görsel
+ * açıklaması kitin metin penceresiyle sorulur (eskiden window.prompt).
  */
 
 const IZINLI_TURLER = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -73,9 +78,9 @@ function Arac({
       aria-label={label}
       aria-pressed={active}
       title={label}
-      className={cn(
-        "flex size-8 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-hover hover:text-ink disabled:opacity-40 [&_svg]:size-4",
-        active && "bg-brand-wash text-brand"
+      className={cx(
+        "flex size-8 cursor-pointer items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-4",
+        active ? "bg-brand-50 text-brand-500" : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"
       )}
     >
       {children}
@@ -83,16 +88,18 @@ function Arac({
   );
 }
 
-const Ayrac = () => <span aria-hidden className="mx-1 h-5 w-px bg-line" />;
+const Ayrac = () => <span aria-hidden className="mx-1 h-5 w-px bg-gray-200" />;
 
 function Toolbar({
   editor,
   yukleniyor,
   onGorselSec,
+  sor,
 }: {
   editor: TiptapEditor;
   yukleniyor: number;
   onGorselSec: (dosyalar: File[]) => void;
+  sor: (o: PromptOptions) => Promise<string | null>;
 }) {
   const dosya = useRef<HTMLInputElement>(null);
   const s = useEditorState({
@@ -114,9 +121,19 @@ function Toolbar({
     }),
   });
 
-  function baglanti() {
+  async function baglanti() {
     const mevcut = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("Bağlantı adresi (https://…)", mevcut ?? "https://");
+    // Pencere açılınca seçim editörde kalır (ProseMirror odağı kaybetse de seçimi tutar).
+    const url = await sor({
+      title: mevcut ? "Bağlantıyı düzenle" : "Bağlantı ekle",
+      description: "Seçili metin bağlantı olur. Boş bırakıp kaydedersen bağlantı kaldırılır.",
+      label: "Bağlantı adresi",
+      defaultValue: mevcut ?? "https://",
+      placeholder: "https://…",
+      inputMode: "url",
+      confirmLabel: "Kaydet",
+      allowEmpty: true,
+    });
     if (url === null) return;
     const temiz = url.trim();
     if (!temiz || temiz === "https://") {
@@ -126,14 +143,14 @@ function Toolbar({
     editor.chain().focus().extendMarkRange("link").setLink({ href: temiz }).run();
   }
 
-  function gorsel(e: React.ChangeEvent<HTMLInputElement>) {
+  function gorsel(e: ChangeEvent<HTMLInputElement>) {
     const secilen = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (secilen.length) onGorselSec(secilen);
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-line bg-surface-sunk px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-200 bg-gray-50 px-2 py-1.5" role="toolbar" aria-label="Biçimlendirme">
       <Arac label="Kalın" active={s.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
         <Bold />
       </Arac>
@@ -170,32 +187,25 @@ function Toolbar({
         <Minus />
       </Arac>
       <Ayrac />
-      <Arac label={s.link ? "Bağlantıyı düzenle" : "Bağlantı ekle"} active={s.link} onClick={baglanti}>
+      <Arac label={s.link ? "Bağlantıyı düzenle" : "Bağlantı ekle"} active={s.link} onClick={() => void baglanti()}>
         {s.link ? <Link2Off /> : <Link2 />}
       </Arac>
       <Arac label="Görsel ekle (yapıştırabilir ya da sürükleyebilirsin)" onClick={() => dosya.current?.click()}>
         <ImagePlus />
       </Arac>
-      <input
-        ref={dosya}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        multiple
-        className="hidden"
-        onChange={gorsel}
-      />
+      <input ref={dosya} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden" onChange={gorsel} />
       {yukleniyor > 0 ? (
-        <span role="status" className="ms-1 inline-flex items-center gap-1.5 rounded-lg bg-brand-wash px-2 py-1 text-micro font-medium text-brand">
+        <span role="status" className="ms-1 inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-theme-xs font-medium text-brand-500">
           <Loader2 className="size-3.5 animate-spin" aria-hidden />
           {yukleniyor > 1 ? `${yukleniyor} görsel yükleniyor…` : "Görsel yükleniyor…"}
         </span>
       ) : null}
       <span className="flex-1" />
       <Arac label="Geri al" disabled={!s.undo} onClick={() => editor.chain().focus().undo().run()}>
-        <Undo2 />
+        <Undo2 className="rtl:-scale-x-100" />
       </Arac>
       <Arac label="Yinele" disabled={!s.redo} onClick={() => editor.chain().focus().redo().run()}>
-        <Redo2 />
+        <Redo2 className="rtl:-scale-x-100" />
       </Arac>
     </div>
   );
@@ -208,7 +218,7 @@ function Sayac({ editor }: { editor: TiptapEditor }) {
     selector: ({ editor: e }) => e.state.doc.textContent.split(/\s+/).filter(Boolean).length,
   });
   return (
-    <div className="tabular flex justify-end border-t border-line bg-surface-sunk px-3 py-1.5 text-micro text-ink-faint" aria-live="off">
+    <div className="tabular flex justify-end border-t border-gray-200 bg-gray-50 px-3 py-1.5 text-theme-xs text-gray-500" aria-live="off">
       {kelime.toLocaleString("tr-TR")} kelime · ~{Math.max(1, Math.ceil(kelime / 200))} dk okuma
     </div>
   );
@@ -243,6 +253,7 @@ export function Editor({
   const [yukleniyor, setYukleniyor] = useState(0);
   const [gorselHatasi, setGorselHatasi] = useState<string | null>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
+  const [soruPenceresi, sor] = usePrompt();
 
   useEffect(() => {
     onUploadingChange?.(yukleniyor);
@@ -250,47 +261,60 @@ export function Editor({
 
   /**
    * Görselleri sırayla yükleyip ekler. `konum` verilirse (sürükle-bırak)
-   * oraya, yoksa imlecin olduğu yere. Yalnızca ref ve setState kullanır:
-   * editör seçeneklerindeki (yapıştır/bırak) ilk kapanış da güncel çalışır.
+   * oraya, yoksa imlecin olduğu yere. Yalnızca ref, setState ve kararlı
+   * `sor` kullanır: editör seçeneklerindeki (yapıştır/bırak) ilk kapanış da
+   * güncel çalışır.
    */
-  const yukleVeEkle = useCallback(async (dosyalar: File[], konum?: number) => {
-    setGorselHatasi(null);
-    for (const dosya of dosyalar) {
-      if (!IZINLI_TURLER.has(dosya.type)) {
-        setGorselHatasi("Yalnızca JPEG, PNG, WebP ya da GIF eklenebilir (SVG olmaz).");
-        continue;
-      }
-      if (dosya.size > EN_BUYUK) {
-        setGorselHatasi(`Görsel 10 MB'ı aşıyor (${(dosya.size / 1024 / 1024).toFixed(1)} MB). Daha küçük bir dosya seç.`);
-        continue;
-      }
-      // "İptal" görseli eklemekten vazgeçmek demek; boş açıklama da kabul.
-      const alt = window.prompt("Görsel açıklaması (erişilebilirlik için kısa bir cümle)", "");
-      if (alt === null) continue;
-      setYukleniyor((n) => n + 1);
-      try {
-        const fd = new FormData();
-        fd.append("image", dosya, dosya.name || "gorsel");
-        const r = await uploadBlogImageAction(fd);
-        if (!r.ok || !r.url) {
-          setGorselHatasi(r.error ?? "Görsel yüklenemedi.");
+  const yukleVeEkle = useCallback(
+    async (dosyalar: File[], konum?: number) => {
+      setGorselHatasi(null);
+      for (const dosya of dosyalar) {
+        if (!IZINLI_TURLER.has(dosya.type)) {
+          setGorselHatasi("Yalnızca JPEG, PNG, WebP ya da GIF eklenebilir (SVG olmaz).");
           continue;
         }
-        const ed = editorRef.current;
-        if (!ed || ed.isDestroyed) continue;
-        const ozellikler = { src: `${PUBLIC_BACKEND_URL}${r.url}`, alt, width: r.width, height: r.height };
-        if (konum !== undefined && konum <= ed.state.doc.content.size) {
-          ed.chain().focus().insertContentAt(konum, { type: "image", attrs: ozellikler }).run();
-        } else {
-          ed.chain().focus().setImage(ozellikler).run();
+        if (dosya.size > EN_BUYUK) {
+          setGorselHatasi(`Görsel 10 MB'ı aşıyor (${(dosya.size / 1024 / 1024).toFixed(1)} MB). Daha küçük bir dosya seç.`);
+          continue;
         }
-      } catch {
-        setGorselHatasi("Görsel yüklenemedi: sunucuya ulaşılamadı. Biraz sonra yeniden dene.");
-      } finally {
-        setYukleniyor((n) => n - 1);
+        // "Vazgeç" görseli eklemekten vazgeçmek demek; boş açıklama da kabul.
+        const alt = await sor({
+          title: "Görsel açıklaması",
+          description: dosya.name ? `“${dosya.name}” için.` : undefined,
+          label: "Görselde ne var? (erişilebilirlik için kısa bir cümle)",
+          hint: "Görmeyen okur ve arama motoru bu metni okur. Boş bırakabilirsin.",
+          placeholder: "Örn. Tahtada çözülmüş bir türev sorusu",
+          confirmLabel: "Görseli ekle",
+          allowEmpty: true,
+          maxLength: 200,
+        });
+        if (alt === null) continue;
+        setYukleniyor((n) => n + 1);
+        try {
+          const fd = new FormData();
+          fd.append("image", dosya, dosya.name || "gorsel");
+          const r = await uploadBlogImageAction(fd);
+          if (!r.ok || !r.url) {
+            setGorselHatasi(r.error ?? "Görsel yüklenemedi.");
+            continue;
+          }
+          const ed = editorRef.current;
+          if (!ed || ed.isDestroyed) continue;
+          const ozellikler = { src: `${PUBLIC_BACKEND_URL}${r.url}`, alt, width: r.width, height: r.height };
+          if (konum !== undefined && konum <= ed.state.doc.content.size) {
+            ed.chain().focus().insertContentAt(konum, { type: "image", attrs: ozellikler }).run();
+          } else {
+            ed.chain().focus().setImage(ozellikler).run();
+          }
+        } catch {
+          setGorselHatasi("Görsel yüklenemedi: sunucuya ulaşılamadı. Biraz sonra yeniden dene.");
+        } finally {
+          setYukleniyor((n) => n - 1);
+        }
       }
-    }
-  }, []);
+    },
+    [sor]
+  );
 
   const editor = useEditor({
     // SSR'da çizim yok: sunucu HTML'i ile istemci arasındaki uyumsuzluğu önler.
@@ -310,8 +334,8 @@ export function Editor({
     editorProps: {
       attributes: {
         class:
-          "tiptap prose prose-sm max-w-none min-h-[380px] px-4 py-3 text-ink focus:outline-none sm:prose-base " +
-          "prose-headings:font-display prose-headings:text-ink prose-a:text-brand prose-img:rounded-xl",
+          "tiptap prose prose-sm max-w-none min-h-[380px] px-4 py-3 text-gray-800 focus:outline-none sm:prose-base " +
+          "prose-headings:font-display prose-headings:text-gray-800 prose-a:text-brand-500 prose-img:rounded-xl",
         role: "textbox",
         "aria-multiline": "true",
         ...(labelledBy ? { "aria-labelledby": labelledBy } : {}),
@@ -347,24 +371,25 @@ export function Editor({
 
   return (
     <div
-      className={cn(
-        "overflow-hidden rounded-xl border bg-surface shadow-card transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12",
-        invalid ? "border-bad" : "border-line-strong"
+      className={cx(
+        "overflow-hidden rounded-lg border bg-white shadow-theme-xs transition focus-within:border-brand-500 focus-within:ring-3 focus-within:ring-brand-500/20",
+        invalid ? "border-error-500" : "border-gray-300"
       )}
     >
+      {soruPenceresi}
       {!editable ? null : editor ? (
-        <Toolbar editor={editor} yukleniyor={yukleniyor} onGorselSec={(d) => void yukleVeEkle(d)} />
+        <Toolbar editor={editor} yukleniyor={yukleniyor} onGorselSec={(d) => void yukleVeEkle(d)} sor={sor} />
       ) : (
-        <div className="h-11 border-b border-line bg-surface-sunk" />
+        <div className="h-11 border-b border-gray-200 bg-gray-50" />
       )}
       {gorselHatasi ? (
-        <p role="alert" className="flex items-start justify-between gap-3 border-b border-bad/20 bg-bad-wash px-3 py-2 text-caption text-bad">
+        <p role="alert" className="flex items-start justify-between gap-3 border-b border-error-200 bg-error-50 px-3 py-2 text-theme-sm text-error-700">
           {gorselHatasi}
           <button
             type="button"
             onClick={() => setGorselHatasi(null)}
             aria-label="Uyarıyı kapat"
-            className="-me-1 flex size-6 shrink-0 items-center justify-center rounded-md transition hover:bg-bad/10"
+            className="-me-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition hover:bg-error-100"
           >
             <X className="size-3.5" aria-hidden />
           </button>

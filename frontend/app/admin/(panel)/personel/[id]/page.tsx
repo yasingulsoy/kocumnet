@@ -5,7 +5,10 @@ import { ArrowRight, KeyRound, LogOut, Send, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/admin/ActionButtons";
 import { StaffEditForm } from "@/components/admin/StaffForms";
 import { StaffStatusPill } from "@/components/admin/StaffStatusPill";
-import { Card, Forbidden, PageHeader, Pill, remaining, trDate } from "@/components/admin/ui";
+import { Forbidden, remaining, trDate } from "@/components/admin/ui";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { deleteStaffAction, resendInviteAction, revokeSessionsAction } from "@/lib/admin/actions";
 import { requireStaff, staffDurumu } from "@/lib/admin/auth";
 import { BackendError } from "@/lib/admin/backend";
@@ -44,70 +47,87 @@ export default async function PersonelDetayPage({ params }: PageProps<"/admin/pe
 
   return (
     <>
-      <PageHeader
-        title={staffName(u)}
+      <PageBreadcrumb
+        pageTitle={staffName(u)}
         crumbs={[{ href: "/admin/personel", label: "Personel" }]}
         description={
-          <span className="flex flex-wrap items-center gap-2 text-caption text-ink-faint">
-            <Pill tone={u.role === "admin" ? "brand" : "neutral"}>{ROLE_LABEL[u.role]}</Pill>
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge size="sm" color={u.role === "admin" ? "primary" : "light"}>
+              {ROLE_LABEL[u.role]}
+            </Badge>
             <StaffStatusPill user={u} />
-            <span>eklendi {trDate(u.created_at)} · son giriş {u.last_login ? trDate(u.last_login, { time: true }) : "yok"}</span>
+            <span>
+              eklendi {trDate(u.created_at)} · son giriş {u.last_login ? trDate(u.last_login, { time: true }) : "yok"}
+            </span>
           </span>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <Card className="p-5 sm:p-6">
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
+        <ComponentCard title="Hesap bilgileri">
           <StaffEditForm user={u} me={staff} />
-        </Card>
+        </ComponentCard>
 
         {yonetici ? (
-          <div className="space-y-5">
-            <Card className="p-5">
-              <h2 className="font-display text-body font-semibold text-ink">Erişim</h2>
-              <p className={durum === "invite_expired" ? "mt-1 text-caption text-bad" : "mt-1 text-caption text-ink-soft"}>{erisimMetni}</p>
-              <div className="mt-4">
-                <ActionButton action={resendInviteAction.bind(null, u.id)} variant="secondary" size="sm">
-                  {u.has_password ? <KeyRound /> : <Send />}
+          <div className="space-y-6">
+            <ComponentCard title="Erişim">
+              <p className={durum === "invite_expired" ? "text-theme-sm text-error-600" : "text-theme-sm text-gray-500"}>{erisimMetni}</p>
+              <div>
+                <ActionButton action={resendInviteAction.bind(null, u.id)} icon={u.has_password ? <KeyRound aria-hidden /> : <Send aria-hidden />}>
                   {u.has_password ? "Sıfırlama bağlantısı gönder" : "Daveti yeniden gönder"}
                 </ActionButton>
-                {!mailAcik ? <p className="mt-2 text-micro text-warn">E-posta gönderimi kapalı; bu düğme çalışmaz.</p> : null}
+                {!mailAcik ? <p className="mt-2 text-theme-xs text-warning-700">E-posta gönderimi kapalı; bu düğme çalışmaz.</p> : null}
               </div>
               {!kendisi && u.has_password ? (
-                <div className="mt-4 border-t border-line pt-4">
-                  <p className="text-caption text-ink-soft">Kayıp cihaz ya da işten ayrılma: açık oturumların hepsini kapat (iki panelde de).</p>
+                <div className="border-t border-gray-100 pt-5">
+                  <p className="text-theme-sm text-gray-500">Kayıp cihaz ya da işten ayrılma: açık oturumların hepsini kapat (iki panelde de).</p>
                   <div className="mt-3">
                     <ActionButton
                       action={revokeSessionsAction.bind(null, u.id)}
-                      variant="secondary"
-                      size="sm"
-                      confirm={`${staffName(u)} bütün cihazlardan çıkarılsın mı?`}
+                      icon={<LogOut aria-hidden />}
+                      confirm={{
+                        title: `${staffName(u)} bütün cihazlardan çıkarılsın mı?`,
+                        description: "Açık oturumların hepsi kapanır (iki panelde de); kişi yeniden giriş yapabilir.",
+                        confirmLabel: "Oturumlarını kapat",
+                        tone: "warning",
+                      }}
                     >
-                      <LogOut /> Oturumlarını kapat
+                      Oturumlarını kapat
                     </ActionButton>
                   </div>
                 </div>
               ) : null}
-            </Card>
+            </ComponentCard>
 
-            <Card className="p-5">
-              <h2 className="font-display text-body font-semibold text-ink">Etkinlik</h2>
-              <p className="mt-1 text-caption text-ink-soft">Bu kişinin girişleri ve yaptığı işlemler.</p>
-              <Link href={`/admin/etkinlik?kisi=${u.id}`} className="mt-3 inline-flex items-center gap-1 text-caption font-medium text-brand hover:underline">
-                Etkinliği gör <ArrowRight className="size-3.5" aria-hidden />
+            <ComponentCard title="Etkinlik" desc="Bu kişinin girişleri ve yaptığı işlemler.">
+              <Link
+                href={`/admin/etkinlik?kisi=${u.id}`}
+                className="inline-flex items-center gap-1 text-theme-sm font-medium text-brand-500 hover:text-brand-600"
+              >
+                Etkinliği gör <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden />
               </Link>
-            </Card>
+            </ComponentCard>
 
             {!kendisi ? (
-              <Card className="border-bad/20 p-5">
-                <h2 className="font-display text-body font-semibold text-bad">Hesabı sil</h2>
-                <p className="mt-1 text-caption text-ink-soft">Geri alınamaz. Yazıları olan bir yazarı silmek yerine pasife almak genellikle daha doğru.</p>
-                <div className="mt-4">
-                  <ActionButton action={deleteStaffAction.bind(null, u.id)} variant="secondary" size="sm" className="text-bad ring-bad/30 hover:bg-bad-wash" confirm={`${staffName(u)} hesabı kalıcı olarak silinsin mi?`}>
-                    <Trash2 /> Hesabı sil
-                  </ActionButton>
-                </div>
-              </Card>
+              <ComponentCard
+                tone="danger"
+                title="Hesabı sil"
+                desc="Geri alınamaz. Yazıları olan bir yazarı silmek yerine pasife almak genellikle daha doğru."
+              >
+                <ActionButton
+                  action={deleteStaffAction.bind(null, u.id)}
+                  variant="danger-outline"
+                  icon={<Trash2 aria-hidden />}
+                  confirm={{
+                    title: `${staffName(u)} hesabı kalıcı olarak silinsin mi?`,
+                    description: "Bu işlem geri alınamaz. Pasife almak hesabı ve geçmişini korur.",
+                    confirmLabel: "Hesabı sil",
+                    tone: "danger",
+                  }}
+                >
+                  Hesabı sil
+                </ActionButton>
+              </ComponentCard>
             ) : null}
           </div>
         ) : null}

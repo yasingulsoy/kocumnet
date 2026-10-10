@@ -1,18 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, X } from "lucide-react";
-import { Card, EmptyState, Forbidden, PageHeader, Pagination, Pill, cn, qs } from "@/components/admin/ui";
+import { ArrowUpRight, History, X } from "lucide-react";
+import { Forbidden, qs } from "@/components/admin/ui";
+import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { Pagination } from "@/components/tailadmin/ui/Pagination";
+import { SegmentedTabs } from "@/components/tailadmin/ui/SegmentedTabs";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
 import { requireStaff } from "@/lib/admin/auth";
 import { getStaffUser, listAudit } from "@/lib/admin/data";
 import { AUDIT_AREAS, personName, staffName, type AuditArea, type AuditEntry } from "@/lib/admin/types";
 
 export const metadata: Metadata = { title: "Etkinlik" };
 
-const ALAN_TONU: Record<AuditArea, "brand" | "ok" | "warn" | "neutral"> = {
-  blog: "brand",
-  message: "ok",
-  user: "warn",
-  auth: "neutral",
+const ALAN_RENGI: Record<AuditArea, BadgeColor> = {
+  blog: "primary",
+  message: "success",
+  user: "warning",
+  auth: "light",
 };
 
 /** Kaydın ait olduğu sayfa (silinmiş kayıtlar için bağlantı yok). */
@@ -29,8 +36,7 @@ function alan(e: AuditEntry): AuditArea {
   return onek in AUDIT_AREAS ? (onek as AuditArea) : "auth";
 }
 
-const gunAnahtari = (v: string) =>
-  new Date(v).toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+const gunAnahtari = (v: string) => new Date(v).toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
 
 function gunBasligi(anahtar: string) {
   const bugun = gunAnahtari(new Date().toISOString());
@@ -46,13 +52,13 @@ function gunBasligi(anahtar: string) {
   });
 }
 
-const saat = (v: string) =>
-  new Date(v).toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
+const saat = (v: string) => new Date(v).toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
 
 /**
  * Etkinlik (denetim kaydı) — yalnızca yönetici. "Bu yazıyı kim yayından
  * kaldırdı?", "bu hesabı kim açtı?", "mesaja kim döndü?" soruları için.
  * Kayıtlar 365 gün tutulur; mesaj gönderenlerin adı/e-postası yazılmaz.
+ * Tablo günlere bölünür: her gün kendi başlık satırıyla.
  */
 // Yeni rota: PageProps<"/admin/etkinlik"> türü ilk derlemede üretiliyor; açık tür, derlemeden bağımsız.
 export default async function EtkinlikPage({
@@ -86,87 +92,95 @@ export default async function EtkinlikPage({
 
   return (
     <>
-      <PageHeader
-        title="Etkinlik"
+      <PageBreadcrumb
+        pageTitle="Etkinlik"
         description="Personelin yaptığı işlemler: yayınlama, silme, rol ve hesap değişiklikleri, girişler. 365 gün saklanır."
       />
 
       <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
-          <nav className="scroll-x -mx-1 flex max-w-full gap-1 px-1" aria-label="Alan">
-            {[undefined, ...(Object.keys(AUDIT_AREAS) as AuditArea[])].map((a) => {
-              const on = a === secili;
-              return (
-                <Link
-                  key={a ?? "hepsi"}
-                  href={qs("/admin/etkinlik", { alan: a, kisi })}
-                  aria-current={on ? "page" : undefined}
-                  className={cn(
-                    "shrink-0 rounded-lg px-3 py-1.5 text-caption font-medium transition",
-                    on ? "bg-brand-wash text-brand" : "text-ink-soft hover:bg-surface-hover hover:text-ink"
-                  )}
-                >
-                  {a ? AUDIT_AREAS[a] : "Tümü"}
-                </Link>
-              );
-            })}
-          </nav>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
+          <SegmentedTabs
+            label="Alan"
+            items={[undefined, ...(Object.keys(AUDIT_AREAS) as AuditArea[])].map((a) => ({
+              key: a ?? "hepsi",
+              label: a ? AUDIT_AREAS[a] : "Tümü",
+              href: qs("/admin/etkinlik", { alan: a, kisi }),
+              active: a === secili,
+            }))}
+          />
           {kisi ? (
             <Link
               href={qs("/admin/etkinlik", { alan: secili })}
-              className="ms-auto inline-flex items-center gap-1 rounded-full bg-surface-sunk px-2.5 py-1 text-caption font-medium text-ink ring-1 ring-inset ring-line hover:bg-surface-hover"
+              className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-theme-sm font-medium text-gray-700 transition hover:bg-gray-200 sm:ms-auto"
             >
-              {kisiBilgisi ? staffName(kisiBilgisi) : `Personel #${kisi}`} <X className="size-3" aria-label="Kişi süzgecini kaldır" />
+              {kisiBilgisi ? staffName(kisiBilgisi) : `Personel #${kisi}`} <X className="size-3.5" aria-label="Kişi süzgecini kaldır" />
             </Link>
           ) : null}
         </div>
 
         {gunler.length === 0 ? (
-          <EmptyState title="Kayıt yok" description="Bu süzgeçte henüz işlem kaydı yok." />
+          <div className="border-t border-gray-100">
+            <EmptyState icon={<History />} title="Kayıt yok" description="Bu süzgeçte henüz işlem kaydı yok." />
+          </div>
         ) : (
-          gunler.map((g) => (
-            <section key={g.anahtar} aria-label={gunBasligi(g.anahtar)}>
-              <h2 className="sticky top-14 z-10 border-b border-line bg-surface-sunk px-5 py-2 text-micro font-semibold uppercase tracking-wider text-ink-faint lg:top-0">
-                {gunBasligi(g.anahtar)}
-              </h2>
-              <ul className="divide-y divide-line">
+          <Table className="border-t border-gray-100">
+            <TableHeader>
+              <TableRow>
+                <TableCell isHeader>Saat</TableCell>
+                <TableCell isHeader>İşlem</TableCell>
+                <TableCell isHeader>Alan</TableCell>
+              </TableRow>
+            </TableHeader>
+            {gunler.map((g) => (
+              <TableBody key={g.anahtar}>
+                <TableRow className="bg-gray-50">
+                  <TableCell isHeader scope="colgroup" colSpan={3} className="tracking-wide uppercase">
+                    {gunBasligi(g.anahtar)}
+                  </TableCell>
+                </TableRow>
                 {g.kayitlar.map((e) => {
                   const adres = hedefAdresi(e);
                   const a = alan(e);
                   const kim = personName(e.actor) ?? e.actor_email ?? "Oturumsuz istek";
                   return (
-                    <li key={e.id} className="flex items-start gap-3 px-5 py-3">
-                      <time dateTime={e.created_at} className="tabular w-11 shrink-0 pt-0.5 text-micro text-ink-faint">
-                        {saat(e.created_at)}
-                      </time>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-caption text-ink">
+                    <TableRow key={e.id}>
+                      <TableCell className="w-16 align-top" nowrap>
+                        <time dateTime={e.created_at} className="tabular">
+                          {saat(e.created_at)}
+                        </time>
+                      </TableCell>
+                      <TableCell className="min-w-64">
+                        <p className="text-gray-800">
                           {e.actor_id ? (
-                            <Link href={qs("/admin/etkinlik", { alan: secili, kisi: e.actor_id })} className="font-medium hover:text-brand">
+                            <Link href={qs("/admin/etkinlik", { alan: secili, kisi: e.actor_id })} className="font-medium hover:text-brand-500">
                               {kim}
                             </Link>
                           ) : (
                             <span className="font-medium">{kim}</span>
                           )}{" "}
-                          <span className="text-ink-soft">{e.summary}</span>
+                          <span className="text-gray-500">{e.summary}</span>
                         </p>
                         {adres ? (
-                          <Link href={adres} className="mt-0.5 inline-flex items-center gap-0.5 text-micro font-medium text-brand hover:underline">
+                          <Link href={adres} className="mt-0.5 inline-flex items-center gap-0.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600">
                             Aç <ArrowUpRight className="size-3" aria-hidden />
                           </Link>
                         ) : null}
-                      </div>
-                      <Pill tone={ALAN_TONU[a]} className="hidden sm:inline-flex">{AUDIT_AREAS[a]}</Pill>
-                    </li>
+                      </TableCell>
+                      <TableCell align="end" className="align-top">
+                        <Badge size="sm" color={ALAN_RENGI[a]}>
+                          {AUDIT_AREAS[a]}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </ul>
-            </section>
-          ))
+              </TableBody>
+            ))}
+          </Table>
         )}
       </Card>
 
-      <Pagination page={sonuc.pagination.page} pages={sonuc.pagination.totalPages} href={href} />
+      <Pagination currentPage={sonuc.pagination.page} totalPages={sonuc.pagination.totalPages} href={href} />
     </>
   );
 }

@@ -109,6 +109,23 @@ export function matchRoute(
   return null;
 }
 
+/**
+ * İçerideki Türkçe yolu görünen yola çevirir: "/tr/about" -> "/kurumsal",
+ * "/tr" -> "/". Türkçe sayfalar içeride /tr/<kanonik> olarak çizilir
+ * (proxy.ts yeniden yazar); statik üretimde usePathname() bu iç yolu,
+ * tarayıcıda görünen yolu verir. İkisini aynı yola indirmek etkin menü ve
+ * dil bağlantılarında hidrasyon uyuşmazlığını önler (React uyuşmayan
+ * öznitelikleri düzeltmez: sunucunun yanlış href'i kalırdı).
+ */
+export function gorunenYol(pathname: string): string {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== DEFAULT_LOCALE) return pathname;
+  const [, kanonik, ...kuyruk] = parts;
+  if (!kanonik) return "/";
+  const key = ROUTE_KEYS.find((k) => k === kanonik);
+  return key ? localizedPath(key, DEFAULT_LOCALE, kuyruk.join("/") || undefined) : pathname;
+}
+
 /** Dil değiştirici: aynı sayfanın hedef dildeki karşılığı. Bulunamazsa o dilin ana sayfası. */
 export function switchLocalePath(pathname: string, target: Locale): string {
   const match = matchRoute(pathname);

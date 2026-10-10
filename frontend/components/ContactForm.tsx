@@ -2,15 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { CircleCheck, Loader2, Mail, Send } from "lucide-react";
+import { Mail, Send } from "lucide-react";
 import { PUBLIC_BACKEND_URL } from "@/lib/api";
 import { SITE_BRAND } from "@/lib/site-brand";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
-import { Button, Field, INPUT_CLASS, cn } from "@/components/ui";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button, buttonClass } from "@/components/tailadmin/ui/Button";
 
 /**
- * İletişim formu — sitedeki TEK form bileşeni.
+ * İletişim formu — sitedeki TEK form bileşeni. Alanlar, düğme ve uyarılar
+ * TailAdmin kitinden: Field etiketi, ipucunu ve hatayı alana bağlar
+ * (aria-describedby, hata varken aria-invalid); Alert hata ve teşekkür kutusu.
  *
  * ⚠️ Bundan önce sitede iki form vardı (hero ve iletişim sayfası) ve
  * İKİSİ DE ÖLÜYDÜ: ne `action` ne `onSubmit` vardı, "Gönder"e basınca sayfa
@@ -35,6 +41,13 @@ const ALANLAR: Alan[] = ["name", "email", "message"];
 /** Backend'deki (routes/contact.js) kurallar ve sınırlar. */
 const EPOSTA = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const SINIR = { name: 120, email: 255, subject: 200, message: 5000 } as const;
+
+/*
+ * Telefonda 16px: iOS Safari 16px'ten küçük yazılı alana odaklanınca sayfayı
+ * yakınlaştırıyor. Kitin alanı text-sm; `max-sm:` öneki sonra geldiği için
+ * çatışmadan kazanır.
+ */
+const TELEFON_YAZISI = "max-sm:text-base";
 
 function dogrula(alan: Alan, deger: string, t: Dictionary["contact"]): string {
   if (alan === "name") {
@@ -72,6 +85,8 @@ function postaBaglantisi(veri: Record<string, string>): string {
   }
   return adres(`${mesaj.trimEnd()}…`);
 }
+
+const EPOSTA_BAGLANTISI = "font-medium text-brand-500 underline-offset-2 hover:underline";
 
 export function ContactForm({
   dict,
@@ -198,36 +213,30 @@ export function ContactForm({
 
   if (durum === "sent") {
     return (
-      <div
-        ref={basariRef}
-        tabIndex={-1}
-        role="status"
-        className="rounded-2xl border border-ok/25 bg-ok-wash p-5 focus:outline-none"
-      >
-        <div className="flex items-start gap-3">
-          <CircleCheck className="mt-0.5 size-5 shrink-0 text-ok" aria-hidden />
-          <p className="text-body text-ink">{t.quickThanks}</p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="mt-3 ms-6"
-          onClick={() => {
-            setHatalar({});
-            setGenelHata(null);
-            setDurum("idle");
-          }}
+      <div ref={basariRef} tabIndex={-1} className="rounded-xl focus:outline-hidden!">
+        <Alert
+          variant="success"
+          action={
+            <Button
+              variant="soft"
+              size="xs"
+              onClick={() => {
+                setHatalar({});
+                setGenelHata(null);
+                setDurum("idle");
+              }}
+            >
+              {t.formSendAnother}
+            </Button>
+          }
         >
-          {t.formSendAnother}
-        </Button>
+          {t.quickThanks}
+        </Alert>
       </div>
     );
   }
 
   const gonderiliyor = durum === "sending";
-  const hataSinifi = (alan: Alan) =>
-    cn(INPUT_CLASS, hatalar[alan] && "border-bad focus:border-bad focus:ring-bad/12");
 
   return (
     /*
@@ -235,7 +244,7 @@ export function ContactForm({
       tarayıcı formu GET ile yollar ve ad/e-posta/mesaj adres çubuğuna, geçmişe
       ve sunucu günlüklerine düşerdi. POST'ta veri kaybolur ama sızmaz.
     */
-    <form ref={formRef} onSubmit={gonder} method="post" className="space-y-4" noValidate>
+    <form ref={formRef} onSubmit={gonder} method="post" className="space-y-5" noValidate>
       {/*
         Bal küpü. Gerçek kullanıcı görmez, ekran okuyucu okumaz, sekme ile
         gelinmez — dolu gelirse backend mesajı sessizce yutar.
@@ -251,8 +260,8 @@ export function ContactForm({
         </label>
       </div>
 
-      <Field label={t.formName} error={hatalar.name}>
-        <input
+      <Field label={t.formName} error={hatalar.name} required>
+        <Input
           name="name"
           required
           autoComplete="name"
@@ -260,12 +269,12 @@ export function ContactForm({
           placeholder={t.formNamePlaceholder}
           onBlur={cikinca}
           onChange={degisince}
-          className={hataSinifi("name")}
+          className={TELEFON_YAZISI}
         />
       </Field>
 
-      <Field label={t.formEmail} error={hatalar.email}>
-        <input
+      <Field label={t.formEmail} error={hatalar.email} required>
+        <Input
           name="email"
           type="email"
           required
@@ -274,30 +283,24 @@ export function ContactForm({
           placeholder={t.formEmailPlaceholder}
           onBlur={cikinca}
           onChange={degisince}
-          className={hataSinifi("email")}
+          className={TELEFON_YAZISI}
         />
       </Field>
 
       {compact ? null : (
-        <Field
-          label={
-            <>
-              {t.formSubject} <span className="font-normal text-ink-faint">({t.formOptional})</span>
-            </>
-          }
-        >
-          <input
+        <Field label={t.formSubject} optional optionalText={t.formOptional}>
+          <Input
             name="subject"
             autoComplete="off"
             maxLength={SINIR.subject}
             placeholder={t.formSubjectPlaceholder}
-            className={INPUT_CLASS}
+            className={TELEFON_YAZISI}
           />
         </Field>
       )}
 
-      <Field label={t.formMessage} error={hatalar.message}>
-        <textarea
+      <Field label={t.formMessage} error={hatalar.message} required>
+        <TextArea
           name="message"
           required
           rows={compact ? 4 : 6}
@@ -305,42 +308,48 @@ export function ContactForm({
           placeholder={compact ? t.quickMessagePlaceholder : t.formMessagePlaceholder}
           onBlur={cikinca}
           onChange={degisince}
-          className={cn(hataSinifi("message"), "resize-y")}
+          className={`resize-y ${TELEFON_YAZISI}`}
         />
       </Field>
 
       {genelHata ? (
-        <div role="alert" className="rounded-xl bg-bad-wash px-4 py-3 text-caption text-bad">
-          <p>{genelHata}</p>
-          {yedekPosta ? (
-            <>
-              <a
-                href={yedekPosta}
-                className="mt-2.5 inline-flex min-h-10 items-center gap-2 rounded-lg bg-surface px-3.5 py-2 font-semibold text-brand ring-1 ring-line transition hover:bg-brand-wash"
-              >
-                <Mail className="size-4 shrink-0" aria-hidden />
+        <Alert
+          variant="error"
+          title={genelHata}
+          action={
+            yedekPosta ? (
+              <a href={yedekPosta} className={buttonClass({ variant: "outline", size: "xs" })}>
+                <Mail aria-hidden />
                 {t.formMailCta}
               </a>
-              <p className="mt-2 text-ink-soft">
-                {t.formMailHint}{" "}
-                <a href={`mailto:${SITE_BRAND.email}`} className="font-medium text-brand underline-offset-2 hover:underline">
-                  {SITE_BRAND.email}
-                </a>
-              </p>
-            </>
-          ) : (
-            <p className="mt-1 text-ink-soft">
-              {t.formFallback}{" "}
-              <a href={`mailto:${SITE_BRAND.email}`} className="font-medium text-brand underline-offset-2 hover:underline">
+            ) : undefined
+          }
+        >
+          {yedekPosta ? (
+            <>
+              {t.formMailHint}{" "}
+              <a href={`mailto:${SITE_BRAND.email}`} className={EPOSTA_BAGLANTISI}>
                 {SITE_BRAND.email}
               </a>
-            </p>
+            </>
+          ) : (
+            <>
+              {t.formFallback}{" "}
+              <a href={`mailto:${SITE_BRAND.email}`} className={EPOSTA_BAGLANTISI}>
+                {SITE_BRAND.email}
+              </a>
+            </>
           )}
-        </div>
+        </Alert>
       ) : null}
 
-      <Button type="submit" size="lg" block disabled={gonderiliyor}>
-        {gonderiliyor ? <Loader2 className="animate-spin" aria-hidden /> : <Send className="rtl:-scale-x-100" aria-hidden />}
+      <Button
+        type="submit"
+        size="md"
+        block
+        loading={gonderiliyor}
+        startIcon={<Send className="rtl:-scale-x-100" aria-hidden />}
+      >
         {gonderiliyor ? t.formSending : t.formSend}
       </Button>
     </form>

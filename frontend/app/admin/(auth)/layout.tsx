@@ -1,47 +1,45 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ChevronLeft, ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/LogoMark";
+import { AuthLayout } from "@/components/tailadmin/layout/AuthLayout";
 
 /**
- * Kimlik ekranları (giriş, parola). Masaüstünde bölünmüş düzen — check-up
- * uygulaması ve check-up paneliyle aynı kalıp.
+ * Kimlik ekranları (giriş, parola) — TailAdmin'in giriş sayfası düzeni:
+ * solda form, sağda lacivert marka paneli; telefonda yalnızca form.
  */
-export default function AuthLayout({ children }: { children: ReactNode }) {
+export default function AdminAuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-screen bg-surface lg:grid-cols-[1fr_1.05fr]">
-      <aside className="bg-brand-gradient relative hidden overflow-hidden p-10 text-white lg:flex lg:flex-col xl:p-14">
-        <div aria-hidden className="bg-grid-fade absolute inset-0" />
-        <Link href="/" className="relative" aria-label="kocum.net">
-          <Wordmark tone="light" size="lg" />
-        </Link>
-        <div className="relative mt-auto max-w-md">
-          <h2 className="font-display text-[34px] font-bold leading-tight tracking-tight text-balance">
+    <AuthLayout
+      top={
+        <div className="flex items-center justify-between gap-4">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-500 transition hover:text-gray-700">
+            <ChevronLeft className="size-5 rtl:rotate-180" aria-hidden />
+            kocum.net&apos;e dön
+          </Link>
+          <Link href="/" aria-label="kocum.net" className="lg:hidden">
+            <Wordmark size="sm" />
+          </Link>
+        </div>
+      }
+      aside={
+        <div className="flex max-w-sm flex-col items-center text-center">
+          <Link href="/" aria-label="kocum.net">
+            <Wordmark tone="light" size="lg" />
+          </Link>
+          <p className="mt-8 font-display text-2xl leading-snug font-semibold text-balance text-white">
             Blog, gelen mesajlar ve ekip tek yerde.
-          </h2>
-          <p className="mt-4 text-body text-white/75">
-            Bu panel kocum.net&apos;in içeriğini yönetir. Soru havuzu ve öğrenciler ayrı panelde:
-            admin.kocum.net.
+          </p>
+          <p className="mt-3 text-gray-400">
+            Bu panel kocum.net&apos;in içeriğini yönetir. Soru havuzu ve öğrenciler ayrı panelde: admin.kocum.net.
+          </p>
+          <p className="mt-10 flex items-center gap-2 text-sm text-gray-400">
+            <ShieldCheck className="size-4" aria-hidden /> Oturumlar 6 saat sonra kendiliğinden kapanır.
           </p>
         </div>
-        <p className="relative mt-12 flex items-center gap-2 text-caption text-white/60">
-          <ShieldCheck className="size-4" /> Oturumlar 6 saat sonra kendiliğinden kapanır.
-        </p>
-      </aside>
-
-      <main className="flex flex-col px-5 py-8 sm:px-10">
-        <Link href="/" className="lg:hidden" aria-label="kocum.net">
-          <Wordmark />
-        </Link>
-        <div className="animate-rise mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-10">
-          {children}
-        </div>
-        <p className="text-center text-micro text-ink-faint">
-          <Link href="/" className="hover:text-ink">
-            kocum.net
-          </Link>
-        </p>
-      </main>
-    </div>
+      }
+    >
+      {children}
+    </AuthLayout>
   );
 }

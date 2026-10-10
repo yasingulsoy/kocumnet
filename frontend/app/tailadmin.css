@@ -1,0 +1,271 @@
+/*
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  Uyarlama: TailAdmin Free (MIT) — tema (src/app/globals.css)          ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
+ * Kaynak design/tailadmin/theme.css. Kopyaları ELLE DÜZENLEME:
+ *
+ *   frontend/app/tailadmin.css     (node design/sync.mjs)
+ *
+ * tokens.css'ten SONRA içe aktarılır:
+ *
+ *   @import "tailwindcss";
+ *   @import "./tokens.css";
+ *   @import "./tailadmin.css";
+ *
+ * ───────────────────────────────────────────────────────────────────────
+ * TailAdmin'den farkları
+ *
+ * Sıfırlama yok  TailAdmin'in `--font-*: initial` ve `--breakpoint-*: initial`
+ *                satırları ALINMADI: tokens.css'teki font-sans / font-display /
+ *                font-mono ve Tailwind'in sm…2xl kırılmaları olduğu gibi kalır.
+ * Yazı tipi      Outfit (font-outfit) yok. Gövde Inter (font-sans, body'de
+ *                zaten), başlık Poppins (font-display). Kit bileşenleri
+ *                başlıklarda font-display kullanır.
+ * Marka          brand-* ölçeği tokens.css'teki maviye bağlı: 50/100/500/600/900
+ *                doğrudan --brand-* değişkenleri; ara adımlar OKLCH'de
+ *                aradeğerlendi, 950 logodaki lacivert (#14213d).
+ * Koyu tema      YOK (KaTeX ve beyaz zeminli soru görselleri). dark: varyantı
+ *                yalnızca .dark sınıflı bir atanın altında çalışır ve o sınıf
+ *                hiçbir yerde eklenmez: kopyalanan TailAdmin işaretlemesindeki
+ *                dark: sınıfları işletim sistemi koyu temadayken bile etkisiz.
+ * Taban kuralı   body, varsayılan kenarlık rengi ve düğme imleci kuralları
+ *                ALINMADI: tanıtım sitesinin görünümü değişmesin. Kit
+ *                bileşenleri kenarlık rengini ve cursor-pointer'ı kendi yazar.
+ * Erişilebilirlik Rozet/uyarı metinleri bir koyu adım (…-700) kullanır:
+ *                TailAdmin'in …-600 tonları açık zeminde 4.5:1'in altında.
+ * Tailwind 4.1   Check-up paneli 4.1'de: inset-s-/inset-e-/mbs- gibi 4.2
+ *                sınıfları kullanılmaz; start-/end-/mt- kullanılır.
+ * Kaldırılanlar  ApexCharts, flatpickr, swiper, jvectormap, simplebar,
+ *                FullCalendar ve Prism kuralları burada yok; bir eklenti
+ *                (extras/) kendi CSS'ini kendisi getirir.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* ── Kırılma noktaları ─────────────────────────────────────── */
+  /* sm…2xl Tailwind'in varsayılanı (rem). TailAdmin'in ek üçü AYNI BİRİMLE:
+     birimler karışırsa Tailwind medya sorgularını yanlış sıralar. */
+  --breakpoint-2xsm: 23.4375rem; /* 375px */
+  --breakpoint-xsm: 26.5625rem; /* 425px */
+  --breakpoint-3xl: 125rem; /* 2000px */
+
+  /* ── Yazı ölçeği ───────────────────────────────────────────── */
+  /* TailAdmin px yazıyor; rem'e çevrildi (tarayıcı yazı boyutuna uyar). */
+  --text-title-2xl: 4.5rem;
+  --text-title-2xl--line-height: 5.625rem;
+  --text-title-xl: 3.75rem;
+  --text-title-xl--line-height: 4.5rem;
+  --text-title-lg: 3rem;
+  --text-title-lg--line-height: 3.75rem;
+  --text-title-md: 2.25rem;
+  --text-title-md--line-height: 2.75rem;
+  --text-title-sm: 1.875rem;
+  --text-title-sm--line-height: 2.375rem;
+  --text-theme-xl: 1.25rem;
+  --text-theme-xl--line-height: 1.875rem;
+  --text-theme-sm: 0.875rem;
+  --text-theme-sm--line-height: 1.25rem;
+  --text-theme-xs: 0.75rem;
+  --text-theme-xs--line-height: 1.125rem;
+
+  /* ── Gri ───────────────────────────────────────────────────── */
+  /* TailAdmin'in soğuk grisi; tokens.css'in mavi tonlu nötrlerine yakın
+     (gray-200 ≈ --line, gray-500 ≈ --ink-faint, gray-900 ≈ --ink).
+     Metin için en açık gray-500 (beyazda 4.97:1); gray-400 yalnızca süs. */
+  --color-gray-25: #fcfcfd;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f2f4f7;
+  --color-gray-200: #e4e7ec;
+  --color-gray-300: #d0d5dd;
+  --color-gray-400: #98a2b3;
+  --color-gray-500: #667085;
+  --color-gray-600: #475467;
+  --color-gray-700: #344054;
+  --color-gray-800: #1d2939;
+  --color-gray-900: #101828;
+  --color-gray-950: #0c111d;
+
+  /* ── Anlam renkleri ────────────────────────────────────────── */
+  --color-blue-light-25: #f5fbff;
+  --color-blue-light-50: #f0f9ff;
+  --color-blue-light-100: #e0f2fe;
+  --color-blue-light-200: #b9e6fe;
+  --color-blue-light-300: #7cd4fd;
+  --color-blue-light-400: #36bffa;
+  --color-blue-light-500: #0ba5ec;
+  --color-blue-light-600: #0086c9;
+  --color-blue-light-700: #026aa2;
+  --color-blue-light-800: #065986;
+  --color-blue-light-900: #0b4a6f;
+  --color-blue-light-950: #062c41;
+
+  --color-orange-25: #fffaf5;
+  --color-orange-50: #fff6ed;
+  --color-orange-100: #ffead5;
+  --color-orange-200: #fddcab;
+  --color-orange-300: #feb273;
+  --color-orange-400: #fd853a;
+  --color-orange-500: #fb6514;
+  --color-orange-600: #ec4a0a;
+  --color-orange-700: #c4320a;
+  --color-orange-800: #9c2a10;
+  --color-orange-900: #7e2410;
+  --color-orange-950: #511c10;
+
+  --color-success-25: #f6fef9;
+  --color-success-50: #ecfdf3;
+  --color-success-100: #d1fadf;
+  --color-success-200: #a6f4c5;
+  --color-success-300: #6ce9a6;
+  --color-success-400: #32d583;
+  --color-success-500: #12b76a;
+  --color-success-600: #039855;
+  --color-success-700: #027a48;
+  --color-success-800: #05603a;
+  --color-success-900: #054f31;
+  --color-success-950: #053321;
+
+  --color-error-25: #fffbfa;
+  --color-error-50: #fef3f2;
+  --color-error-100: #fee4e2;
+  --color-error-200: #fecdca;
+  --color-error-300: #fda29b;
+  --color-error-400: #f97066;
+  --color-error-500: #f04438;
+  --color-error-600: #d92d20;
+  --color-error-700: #b42318;
+  --color-error-800: #912018;
+  --color-error-900: #7a271a;
+  --color-error-950: #55160c;
+
+  --color-warning-25: #fffcf5;
+  --color-warning-50: #fffaeb;
+  --color-warning-100: #fef0c7;
+  --color-warning-200: #fedf89;
+  --color-warning-300: #fec84b;
+  --color-warning-400: #fdb022;
+  --color-warning-500: #f79009;
+  --color-warning-600: #dc6803;
+  --color-warning-700: #b54708;
+  --color-warning-800: #93370d;
+  --color-warning-900: #7a2e0e;
+  --color-warning-950: #4e1d09;
+
+  --color-theme-pink-500: #ee46bc;
+  --color-theme-purple-500: #7a5af8;
+
+  /* ── Gölgeler ──────────────────────────────────────────────── */
+  --shadow-theme-xs: 0 1px 2px 0 rgb(16 24 40 / 0.05);
+  --shadow-theme-sm: 0 1px 3px 0 rgb(16 24 40 / 0.1), 0 1px 2px 0 rgb(16 24 40 / 0.06);
+  --shadow-theme-md: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-theme-lg: 0 12px 16px -4px rgb(16 24 40 / 0.08), 0 4px 6px -2px rgb(16 24 40 / 0.03);
+  --shadow-theme-xl: 0 20px 24px -4px rgb(16 24 40 / 0.08), 0 8px 8px -4px rgb(16 24 40 / 0.03);
+  /* TailAdmin'in odak halkası, marka mavisiyle (#1a5fb4). */
+  --shadow-focus-ring: 0 0 0 4px rgb(26 95 180 / 0.12);
+  --shadow-tooltip: 0 4px 6px -2px rgb(16 24 40 / 0.05), -8px 0 20px 8px rgb(16 24 40 / 0.05);
+
+  /* ── Katmanlar ─────────────────────────────────────────────── */
+  /* Tailwind 4'te z-<sayı> zaten çalışır; TailAdmin işaretlemesiyle uyum için. */
+  --z-index-1: 1;
+  --z-index-9: 9;
+  --z-index-99: 99;
+  --z-index-999: 999;
+  --z-index-9999: 9999;
+  --z-index-99999: 99999;
+  --z-index-999999: 999999;
+}
+
+/*
+ * Marka ölçeği. `inline`: yardımcı sınıf değeri gömer (bg-brand-500 →
+ * var(--brand)); çapa adımları tokens.css'i izler, tokens.css kazanır.
+ * Ara adımlar OKLCH'de: açık taraf 100→500 arası yükselen doygunluk,
+ * koyu taraf 600→900 doğrusal.
+ */
+@theme inline {
+  --color-brand-25: #f4f8fd;
+  --color-brand-50: var(--brand-wash); /* #eaf1fb */
+  --color-brand-100: var(--brand-wash-strong); /* #d6e4f7 */
+  --color-brand-200: #b6d2f8;
+  --color-brand-300: #8db7f1;
+  --color-brand-400: #5a91da;
+  --color-brand-500: var(--brand); /* #1a5fb4 — beyazda 6.29:1 */
+  --color-brand-600: var(--brand-hover); /* #164f97 */
+  --color-brand-700: #184484;
+  --color-brand-800: #193a71;
+  --color-brand-900: var(--brand-deep); /* #17305e */
+  --color-brand-950: #14213d; /* logodaki lacivert */
+}
+
+/* ── Menü (AppSidebar) ──────────────────────────────────────── */
+
+@utility menu-item {
+  @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium;
+}
+
+@utility menu-item-active {
+  @apply bg-brand-50 text-brand-500;
+}
+
+@utility menu-item-inactive {
+  @apply text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+}
+
+@utility menu-item-icon-active {
+  @apply text-brand-500;
+}
+
+@utility menu-item-icon-inactive {
+  @apply text-gray-500 group-hover:text-gray-700;
+}
+
+@utility menu-dropdown-item {
+  @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-theme-sm font-medium;
+}
+
+@utility menu-dropdown-item-active {
+  @apply bg-brand-50 text-brand-500;
+}
+
+@utility menu-dropdown-item-inactive {
+  @apply text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+}
+
+/* Menüdeki sayı rozeti (okunmamış mesaj gibi). */
+@utility menu-dropdown-badge {
+  @apply block rounded-full px-2 py-0.5 text-theme-xs font-semibold;
+}
+
+@utility menu-dropdown-badge-active {
+  @apply bg-brand-500 text-white;
+}
+
+@utility menu-dropdown-badge-inactive {
+  @apply bg-brand-50 text-brand-500 group-hover:bg-brand-100;
+}
+
+/* ── Kaydırma çubuğu ────────────────────────────────────────── */
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility custom-scrollbar {
+  &::-webkit-scrollbar {
+    @apply size-1.5;
+  }
+
+  &::-webkit-scrollbar-track {
+    @apply rounded-full;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-200;
+  }
+}

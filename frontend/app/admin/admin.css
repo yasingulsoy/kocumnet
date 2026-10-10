@@ -1,0 +1,79 @@
+/*
+ * Site yönetimi (/admin) stil dosyası. YALNIZCA app/admin/layout.tsx içe aktarır.
+ *
+ * Tailwind her giriş dosyası için ayrı bir CSS üretir. Yönetim ile tanıtım
+ * sitesi tek dosyayı paylaşırken yönetimin ve kitin sınıfları sitenin her
+ * sayfasına iniyordu (+26 KB). Artık iki giriş var: app/globals.css (site)
+ * ve bu dosya.
+ *
+ * Kaynak taraması: site sayfaları (app/[lang]) hariç her şey. Yönetimin
+ * kullandığı ortak parçalar (LogoMark, PageHero, makale parçaları, lib/)
+ * burada da üretilir; yazı önizlemesi sitedeki görünümle aynı kalır.
+ */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Ortak belirteçler — kaynak design/tokens.css, ELLE DÜZENLEME. */
+@import "../tokens.css";
+
+/* TailAdmin kiti — kaynak design/tailadmin/theme.css, ELLE DÜZENLEME. */
+@import "../tailadmin.css";
+
+@source not "../[lang]";
+
+/* ── Site ile ortak taban ───────────────────────────────────── */
+/* Ayrılmadan önce globals.css'ten geliyordu; yönetimin görünümü ve çapa
+   davranışı değişmesin diye aynen burada. */
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 8.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Katmansız: gövdedeki yardımcı sınıfları (bg-gray-50…) bilerek ezer. */
+body {
+  background: var(--bg);
+  color: var(--ink-soft);
+}
+
+/* Arapça yazı önizlemesi */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .prose {
+  direction: rtl;
+}
+
+[dir="rtl"] .skip-link:focus {
+  left: auto;
+  right: 1rem;
+}
+
+/* Yazı görselleri: editör ve önizleme (site makalesiyle aynı kural). */
+.prose img {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Editör (Tiptap) ────────────────────────────────────────── */
+
+/* Boş belge ipucu ve seçili görsel çerçevesi. */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-faint);
+}
+
+.tiptap img.ProseMirror-selectednode {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}

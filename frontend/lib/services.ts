@@ -1,3 +1,4 @@
+import { Apple, CalendarCheck, Compass, GraduationCap, HeartHandshake, Library, type LucideIcon } from "lucide-react";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 
 /**
@@ -17,15 +18,17 @@ export interface ServiceRef {
   titleKey: keyof Dictionary["services"];
   /** Ana sayfadaki kısa tanıtım satırı. */
   leadKey: keyof Dictionary["services"];
+  /** Kartlardaki ikon (sunucuda çizilir, JavaScript'e girmez). */
+  icon: LucideIcon;
 }
 
 export const SERVICES: ServiceRef[] = [
-  { id: "tercih-danismanligi", titleKey: "tercihTitle", leadKey: "tercihP1" },
-  { id: "sinav-hazirlik-materyalleri", titleKey: "materyalTitle", leadKey: "materyalLead" },
-  { id: "sinav-calisma-koclugu", titleKey: "koclukTitle", leadKey: "koclukP1" },
-  { id: "ogrenci-koclugu", titleKey: "ogrenciTitle", leadKey: "ogrenciP1" },
-  { id: "psikolojik-destek", titleKey: "psikolojikTitle", leadKey: "psikolojikP1" },
-  { id: "beslenme-danismanligi", titleKey: "beslenmeTitle", leadKey: "beslenmeP1" },
+  { id: "tercih-danismanligi", titleKey: "tercihTitle", leadKey: "tercihP1", icon: Compass },
+  { id: "sinav-hazirlik-materyalleri", titleKey: "materyalTitle", leadKey: "materyalLead", icon: Library },
+  { id: "sinav-calisma-koclugu", titleKey: "koclukTitle", leadKey: "koclukP1", icon: CalendarCheck },
+  { id: "ogrenci-koclugu", titleKey: "ogrenciTitle", leadKey: "ogrenciP1", icon: GraduationCap },
+  { id: "psikolojik-destek", titleKey: "psikolojikTitle", leadKey: "psikolojikP1", icon: HeartHandshake },
+  { id: "beslenme-danismanligi", titleKey: "beslenmeTitle", leadKey: "beslenmeP1", icon: Apple },
 ];
 
 /** Uzun paragrafın ilk cümlesi — kart üstünde tam paragraf çok uzun kalıyor. */

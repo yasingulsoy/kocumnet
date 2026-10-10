@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { guvenliSonraki, staffDurumu } from "@/lib/admin/auth";
-import { Notice } from "@/components/admin/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { AuthHeading } from "../AuthHeading";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Giriş" };
@@ -16,19 +17,18 @@ export default async function GirisPage({ searchParams }: PageProps<"/admin/giri
 
   return (
     <>
-      <h1 className="font-display text-h2 font-bold tracking-tight text-ink">Personel girişi</h1>
-      <p className="mt-1.5 text-body text-ink-soft">Blog, mesajlar ve ekip yönetimi için hesabınla gir.</p>
+      <AuthHeading title="Personel girişi" description="Blog, mesajlar ve ekip yönetimi için hesabınla gir." />
 
-      <div className="mt-6 space-y-4">
+      <div className="space-y-5">
         {d.kind === "unreachable" || sp.hata === "backend" ? (
-          <Notice tone="warn" title="Sunucuya ulaşılamıyor">
+          <Alert variant="warning" title="Sunucuya ulaşılamıyor">
             Kimlik sunucusu yanıt vermiyor. Birkaç dakika sonra tekrar dene; sorun sürerse teknik ekibe haber ver.
-          </Notice>
+          </Alert>
         ) : null}
-        {sp.parola === "1" ? <Notice tone="ok">Parolan kaydedildi. Şimdi giriş yapabilirsin.</Notice> : null}
-        {sp.cikis === "1" ? <Notice tone="info">Çıkış yapıldı.</Notice> : null}
+        {sp.parola === "1" ? <Alert variant="success">Parolan kaydedildi. Şimdi giriş yapabilirsin.</Alert> : null}
+        {sp.cikis === "1" ? <Alert variant="info">Çıkış yapıldı.</Alert> : null}
         {next && next !== "/admin" && sp.parola !== "1" ? (
-          <Notice tone="info">Bu sayfa için giriş yapman gerekiyor; sonra kaldığın yere döneceksin.</Notice>
+          <Alert variant="info">Bu sayfa için giriş yapman gerekiyor; sonra kaldığın yere döneceksin.</Alert>
         ) : null}
         <LoginForm next={next} />
       </div>

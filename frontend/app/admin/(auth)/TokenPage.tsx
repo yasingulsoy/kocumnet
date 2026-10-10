@@ -1,6 +1,7 @@
-import Link from "next/link";
 import { BackendError, BackendUnreachable, backend } from "@/lib/admin/backend";
-import { Notice, buttonClass } from "@/components/admin/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { AuthHeading } from "./AuthHeading";
 import { ResetForm } from "./ResetForm";
 
 interface TokenBilgisi {
@@ -26,28 +27,26 @@ export async function TokenPage({ token, beklenen }: { token: string; beklenen: 
 
   if (ulasilamadi) {
     return (
-      <Notice tone="warn" title="Sunucuya ulaşılamıyor">
+      <Alert variant="warning" title="Sunucuya ulaşılamıyor">
         Birkaç dakika sonra bu sayfayı yenile; bağlantın geçerliliğini korur.
-      </Notice>
+      </Alert>
     );
   }
 
   if (!bilgi) {
     return (
       <>
-        <h1 className="font-display text-h2 font-bold tracking-tight text-ink">Bağlantı geçersiz</h1>
-        <p className="mt-1.5 text-body text-ink-soft">
-          Bu bağlantının süresi dolmuş ya da daha önce kullanılmış. {beklenen === "invite" ? "Yöneticinden yeni bir davet iste." : "Yeni bir bağlantı isteyebilirsin."}
-        </p>
-        <div className="mt-6 flex gap-3">
-          {beklenen === "reset" ? (
-            <Link href="/admin/sifremi-unuttum" className={buttonClass({ size: "md" })}>
-              Yeni bağlantı iste
-            </Link>
-          ) : null}
-          <Link href="/admin/giris" className={buttonClass({ variant: "secondary", size: "md" })}>
+        <AuthHeading
+          title="Bağlantı geçersiz"
+          description={`Bu bağlantının süresi dolmuş ya da daha önce kullanılmış. ${
+            beklenen === "invite" ? "Yöneticinden yeni bir davet iste." : "Yeni bir bağlantı isteyebilirsin."
+          }`}
+        />
+        <div className="flex flex-wrap gap-3">
+          {beklenen === "reset" ? <ButtonLink href="/admin/sifremi-unuttum">Yeni bağlantı iste</ButtonLink> : null}
+          <ButtonLink href="/admin/giris" variant="outline">
             Girişe dön
-          </Link>
+          </ButtonLink>
         </div>
       </>
     );
@@ -56,17 +55,15 @@ export async function TokenPage({ token, beklenen }: { token: string; beklenen: 
   const ilkParola = bilgi.purpose === "invite";
   return (
     <>
-      <h1 className="font-display text-h2 font-bold tracking-tight text-ink">
-        {ilkParola ? `Hoş geldin${bilgi.name ? `, ${bilgi.name.split(" ")[0]}` : ""}` : "Yeni parola"}
-      </h1>
-      <p className="mt-1.5 text-body text-ink-soft">
-        {ilkParola
-          ? "Hesabın hazır. Giriş yapabilmek için bir parola belirle."
-          : "Hesabın için yeni bir parola belirle. Diğer cihazlardaki oturumların kapatılır."}
-      </p>
-      <div className="mt-6">
-        <ResetForm token={token} email={bilgi.email} ilkParola={ilkParola} />
-      </div>
+      <AuthHeading
+        title={ilkParola ? `Hoş geldin${bilgi.name ? `, ${bilgi.name.split(" ")[0]}` : ""}` : "Yeni parola"}
+        description={
+          ilkParola
+            ? "Hesabın hazır. Giriş yapabilmek için bir parola belirle."
+            : "Hesabın için yeni bir parola belirle. Diğer cihazlardaki oturumların kapatılır."
+        }
+      />
+      <ResetForm token={token} email={bilgi.email} ilkParola={ilkParola} />
     </>
   );
 }

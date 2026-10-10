@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AuthHeading } from "../AuthHeading";
 import { ForgotForm } from "./ForgotForm";
 
 export const metadata: Metadata = { title: "Parolamı unuttum" };
@@ -7,15 +8,14 @@ export const metadata: Metadata = { title: "Parolamı unuttum" };
 export default function SifremiUnuttumPage() {
   return (
     <>
-      <h1 className="font-display text-h2 font-bold tracking-tight text-ink">Parolanı sıfırla</h1>
-      <p className="mt-1.5 text-body text-ink-soft">
-        Hesabının e-postasını yaz; kayıtlıysa bir saat geçerli bir bağlantı göndeririz.
-      </p>
-      <div className="mt-6">
-        <ForgotForm />
-      </div>
-      <p className="mt-6 text-center text-caption">
-        <Link href="/admin/giris" className="font-medium text-brand hover:underline">
+      <AuthHeading
+        title="Parolanı sıfırla"
+        description="Hesabının e-postasını yaz; kayıtlıysa bir saat geçerli bir bağlantı göndeririz."
+      />
+      <ForgotForm />
+      <p className="mt-5 text-center text-sm text-gray-700 sm:text-start">
+        Parolanı hatırladın mı?{" "}
+        <Link href="/admin/giris" className="text-brand-500 hover:text-brand-600">
           Girişe dön
         </Link>
       </p>

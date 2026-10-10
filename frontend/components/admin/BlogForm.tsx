@@ -1,17 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
-import { Eye, EyeOff, ExternalLink, History, ImageOff, Loader2, RefreshCw, Save, Send } from "lucide-react";
+import { Eye, EyeOff, ExternalLink, History, ImageOff, RefreshCw, Save, Send } from "lucide-react";
 import { getImageUrl, PUBLIC_BACKEND_URL } from "@/lib/api";
 import { saveBlogAction } from "@/lib/admin/actions";
 import type { AdminBlog } from "@/lib/admin/types";
+import { cx } from "@/components/tailadmin/cx";
+import { Dropzone } from "@/components/tailadmin/extras/dropzone/Dropzone";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
+import { useConfirm } from "@/components/tailadmin/ui/Dialogs";
 import { Editor } from "./Editor";
+import { relative } from "./ui";
 import { useDraftBackup } from "./useDraftBackup";
 import { useFormAction } from "./useFormAction";
 import { useUnsavedGuard } from "./useUnsavedGuard";
-import { Button, CHECKBOX_CLASS, Card, Field, INPUT_CLASS, Notice, Pill, SELECT_CLASS, TEXTAREA_CLASS, cn, relative } from "./ui";
 
 const DIL: Record<string, string> = { tr: "Türkçe", en: "English", ar: "العربية" };
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
@@ -22,6 +34,7 @@ const MB = 1024 * 1024;
 /** Sunucu action gövde sınırı 12 MB (next.config.ts); pay bırakıyoruz. */
 const GOVDE_SINIRI = 11.5 * MB;
 const KAPAK_SINIRI = 10 * MB;
+const KAPAK_TURLERI = { "image/jpeg": [".jpg", ".jpeg"], "image/png": [".png"], "image/webp": [".webp"] };
 
 /**
  * Göndermeden önce boyut denetimi. Sınırı aşan gövde sunucuya hiç ulaşmıyor,
@@ -86,14 +99,24 @@ function Sayac({
   bos?: string;
   uzunNotu?: string;
 }) {
-  if (uzunluk === 0) return <span className="text-micro text-ink-faint">{bos ?? "boş"}</span>;
+  if (uzunluk === 0) return <span className="text-gray-500">{bos ?? "boş"}</span>;
   const [alt, ust] = ideal;
-  const ton = uzunluk > ust ? "text-warn" : uzunluk >= alt ? "text-ok" : "text-ink-faint";
+  const ton = uzunluk > ust ? "text-warning-700" : uzunluk >= alt ? "text-success-700" : "text-gray-500";
   const not = uzunluk > ust ? uzunNotu : uzunluk < alt ? " · biraz kısa" : " · iyi";
   return (
-    <span className={cn("tabular text-micro", ton)}>
+    <span className={cx("tabular", ton)}>
       {uzunluk} / {ust}
       {not}
+    </span>
+  );
+}
+
+/** İpucu satırı: solda açıklama, sağda sayaç. */
+function SayacliIpucu({ metin, children }: { metin: string; children: React.ReactNode }) {
+  return (
+    <span className="flex flex-wrap justify-between gap-2">
+      <span>{metin}</span>
+      {children}
     </span>
   );
 }
@@ -105,10 +128,17 @@ function Sayac({
 function AramaOnizlemesi({ baslik, aciklama, yol }: { baslik: string; aciklama: string; yol: string }) {
   const tamBaslik = `${baslik || "Yazının başlığı"} | Koçum.Net`;
   return (
-    <div className="rounded-xl border border-line bg-surface p-4" aria-label="Arama sonucu önizlemesi">
-      <p className="truncate text-micro text-ink-soft">kocum.net{yol.split("/").filter(Boolean).map((p) => ` › ${p}`).join("")}</p>
-      <p className="mt-1 line-clamp-1 text-h4 text-brand">{tamBaslik}</p>
-      <p className={cn("mt-1 line-clamp-2 text-caption leading-relaxed", aciklama ? "text-ink-soft" : "italic text-ink-faint")}>
+    <div className="rounded-xl border border-gray-200 bg-white p-4" aria-label="Arama sonucu önizlemesi">
+      <p className="truncate text-theme-xs text-gray-600">
+        kocum.net
+        {yol
+          .split("/")
+          .filter(Boolean)
+          .map((p) => ` › ${p}`)
+          .join("")}
+      </p>
+      <p className="mt-1 line-clamp-1 text-lg text-brand-500">{tamBaslik}</p>
+      <p className={cx("mt-1 line-clamp-2 text-theme-sm leading-relaxed", aciklama ? "text-gray-600" : "text-gray-500 italic")}>
         {aciklama || "Açıklama yok: Google sayfadan kendisi bir parça seçer. Özet ya da meta açıklama yaz."}
       </p>
     </div>
@@ -137,10 +167,10 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
   const editorRef = useRef<TiptapEditor | null>(null);
   const [kapakSil, setKapakSil] = useState(false);
   const [onizleme, setOnizleme] = useState<string | null>(null);
-  const [kapakHatasi, setKapakHatasi] = useState<string | null>(null);
   const [degisti, setDegisti] = useState(false);
   const [surum, setSurum] = useState(0);
   const [yedekKapandi, setYedekKapandi] = useState(false);
+  const [onayPenceresi, onayla] = useConfirm();
 
   /*
    * Meta alanı başlığın/özetin birebir kopyasıysa boş göster: eskiden
@@ -174,7 +204,7 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
       (yedek.taban ? yedek.taban !== blog.updated_at : new Date(blog.updated_at).getTime() > yedek.zaman)
   );
 
-  useUnsavedGuard(degisti && !pending && !readOnly && !cikisSerbest);
+  const cikisUyarisi = useUnsavedGuard(degisti && !pending && !readOnly && !cikisSerbest);
 
   useEffect(() => {
     if (cikisSerbest) window.location.reload();
@@ -217,6 +247,12 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
     return () => window.removeEventListener("keydown", tus);
   }, [readOnly, formRef]);
 
+  // Seçilen kapağın önizleme adresi: yenisi gelince ya da form kapanınca bırakılır.
+  useEffect(() => {
+    if (!onizleme) return;
+    return () => URL.revokeObjectURL(onizleme);
+  }, [onizleme]);
+
   /**
    * Çakışmada güvenli yol: yazdıklarını hemen yedekle, sayfayı yenile. Yeni
    * sürüm açılır; "Bu tarayıcıda kaydedilmemiş bir sürüm var" kutusundan
@@ -252,6 +288,31 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
     degisiklik();
   }
 
+  /** "Taslağa al": önce sor; evet derse aynı düğmeyle gönder (name/value niyeti gitsin). */
+  function taslagaAl(e: MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    const dugme = e.currentTarget;
+    void onayla({
+      title: "Yazı yayından kaldırılsın mı?",
+      description: "Sitedeki adresi 404 verir. İstediğinde yeniden yayınlayabilirsin.",
+      confirmLabel: "Taslağa al",
+      tone: "warning",
+    }).then((evet) => {
+      if (evet) formRef.current?.requestSubmit(dugme);
+    });
+  }
+
+  function uzerineYaz() {
+    void onayla({
+      title: "Araya giren değişikliklerin üzerine yazılsın mı?",
+      description: "Araya giren değişiklikler silinecek, yazının senin hâlin kaydedilecek. Eski hâller Sürümler'de kalır.",
+      confirmLabel: "Yine de kaydet",
+      tone: "danger",
+    }).then((evet) => {
+      if (evet) yenidenGonder({ zorla: "1" });
+    });
+  }
+
   const mevcutKapak = blog?.image && !kapakSil ? getImageUrl(blog.image) : null;
   const kapak = onizleme ?? mevcutKapak;
   // Yeni kapak seçildi ve açıklaması boş: alanı öne çıkar (zorunlu değil).
@@ -261,93 +322,93 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
   const yol = `${BLOG_YOLU[deger.locale] ?? "/blog"}/${deger.slug || adresOnizle(deger.title) || "yazi-adresi"}`;
   const etkinBaslik = deger.meta_title.trim() || deger.title.trim();
   const etkinAciklama = deger.meta_description.trim() || deger.excerpt.trim();
+  const kilitli = pending || yuklenenGorsel > 0;
 
   return (
-    <form {...formProps} onChange={readOnly ? undefined : degisiklik} className="grid gap-6 lg:grid-cols-[1fr_320px]">
+    <form {...formProps} onChange={readOnly ? undefined : degisiklik} className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
+      {cikisUyarisi}
+      {onayPenceresi}
       {blog ? <input type="hidden" name="id" value={blog.id} /> : null}
       {/* Aynı anda düzenleme koruması: editörün açtığı sürüm (backend 409 için). */}
       {blog?.updated_at ? <input type="hidden" name="acilan_surum" value={blog.updated_at} /> : null}
 
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-6">
         {yedek ? (
-          <Notice tone="info" title="Bu tarayıcıda kaydedilmemiş bir sürüm var">
-            <p>
-              {new Date(yedek.zaman).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", dateStyle: "medium", timeStyle: "short" })}{" "}
-              tarihli yazdıkların kaydedilmeden kalmış.
-              {sunucuDahaYeni
-                ? " Yazı bu yedekten sonra başkası tarafından (ya da başka sekmede) kaydedilmiş; geri yüklersen o değişikliklerin üzerine yazarsın. Önce Sürümler'den son hâline bakabilirsin."
-                : ""}
-              {yedek.gorselsiz ? " Gömülü görseller yedeğe sığmadı, onları yeniden eklemen gerekecek." : ""}
-            </p>
-            <span className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={yedegiGeriYukle}>
-                <History /> Geri yükle
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  sil();
-                  setYedekKapandi(true);
-                }}
-              >
-                Yok say
-              </Button>
-            </span>
-          </Notice>
+          <Alert
+            variant="info"
+            title="Bu tarayıcıda kaydedilmemiş bir sürüm var"
+            action={
+              <>
+                <Button size="xs" onClick={yedegiGeriYukle} startIcon={<History />}>
+                  Geri yükle
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    sil();
+                    setYedekKapandi(true);
+                  }}
+                >
+                  Yok say
+                </Button>
+              </>
+            }
+          >
+            {new Date(yedek.zaman).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", dateStyle: "medium", timeStyle: "short" })} tarihli
+            yazdıkların kaydedilmeden kalmış.
+            {sunucuDahaYeni
+              ? " Yazı bu yedekten sonra başkası tarafından (ya da başka sekmede) kaydedilmiş; geri yüklersen o değişikliklerin üzerine yazarsın. Önce Sürümler'den son hâline bakabilirsin."
+              : ""}
+            {yedek.gorselsiz ? " Gömülü görseller yedeğe sığmadı, onları yeniden eklemen gerekecek." : ""}
+          </Alert>
         ) : null}
         {state.conflict ? (
-          <Notice tone="warn" title="Bu yazı sen açtıktan sonra değiştirildi">
+          <Alert
+            variant="warning"
+            title="Bu yazı sen açtıktan sonra değiştirildi"
+            action={
+              <>
+                <Button size="xs" onClick={yedekleVeYenile} startIcon={<RefreshCw />}>
+                  Yenile, yazdıklarım yedekte kalsın
+                </Button>
+                <Button size="xs" variant="danger-outline" disabled={kilitli} onClick={uzerineYaz}>
+                  Yine de kaydet (üzerine yaz)
+                </Button>
+              </>
+            }
+          >
             <p>
               {state.conflict.byMe ? "Sen (başka bir sekmede ya da cihazda)" : (state.conflict.by ?? "Başka biri")}{" "}
-              {relative(state.conflict.at)} kaydetti{state.conflict.what ? `: ${state.conflict.what}` : ""}. Onun
-              değişikliklerinin üzerine yazmamak için kayıt yapılmadı.
+              {relative(state.conflict.at)} kaydetti{state.conflict.what ? `: ${state.conflict.what}` : ""}. Onun değişikliklerinin
+              üzerine yazmamak için kayıt yapılmadı.
             </p>
-            <span className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={yedekleVeYenile}>
-                <RefreshCw /> Yenile, yazdıklarım yedekte kalsın
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-bad hover:bg-bad-wash"
-                disabled={pending || yuklenenGorsel > 0}
-                onClick={() => {
-                  if (window.confirm("Araya giren değişiklikler silinecek, yazının senin hâlin kaydedilecek. Emin misin?")) {
-                    yenidenGonder({ zorla: "1" });
-                  }
-                }}
-              >
-                Yine de kaydet (üzerine yaz)
-              </Button>
-            </span>
-            <p className="mt-2 text-micro">
-              Yeniledikten sonra çıkan kutudan &quot;Geri yükle&quot; ile yazdıklarını getirip iki hâli birleştirebilirsin; eski
-              hâller Sürümler&apos;de duruyor.
+            <p className="mt-2 text-theme-xs">
+              Yeniledikten sonra çıkan kutudan &quot;Geri yükle&quot; ile yazdıklarını getirip iki hâli birleştirebilirsin; eski hâller
+              Sürümler&apos;de duruyor.
             </p>
-          </Notice>
+          </Alert>
         ) : state.error ? (
-          <Notice>{state.error}</Notice>
+          <Alert variant="error">{state.error}</Alert>
         ) : null}
 
-        <Field label="Başlık" error={state.fields?.title}>
-          <input
+        <Field label="Başlık" error={state.fields?.title} required>
+          <Input
             name="title"
             defaultValue={ilk.title}
             required
             maxLength={500}
             readOnly={readOnly}
-            className={cn(INPUT_CLASS, "font-display text-lead font-semibold")}
+            large
+            className="font-display font-semibold"
             placeholder="Yazının başlığı"
           />
         </Field>
 
         <div>
-          <span id="icerik-etiketi" className="mb-1.5 flex items-center justify-between text-caption font-medium text-ink">
+          <span id="icerik-etiketi" className="mb-1.5 flex items-center justify-between gap-3 text-sm font-medium text-gray-700">
             İçerik
-            {state.fields?.content ? <span className="text-bad">{state.fields.content}</span> : null}
+            {state.fields?.content ? <span className="text-theme-xs text-error-600">{state.fields.content}</span> : null}
           </span>
           <Editor
             name="content"
@@ -366,150 +427,127 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
         <Field
           label="Özet"
           hint={
-            <span className="flex flex-wrap justify-between gap-2">
-              <span>Liste kartlarında ve paylaşım önizlemelerinde görünür. 1-2 cümle.</span>
+            <SayacliIpucu metin="Liste kartlarında ve paylaşım önizlemelerinde görünür. 1-2 cümle.">
               <Sayac uzunluk={deger.excerpt.trim().length} ideal={[70, 160]} />
-            </span>
+            </SayacliIpucu>
           }
         >
-          <textarea name="excerpt" defaultValue={ilk.excerpt} rows={3} maxLength={1000} readOnly={readOnly} className={TEXTAREA_CLASS} />
+          <TextArea name="excerpt" defaultValue={ilk.excerpt} rows={3} maxLength={1000} readOnly={readOnly} />
         </Field>
 
-        <Card className="p-5">
-          <h2 className="font-display text-body font-semibold text-ink">Arama motoru</h2>
-          <p className="mt-0.5 text-caption text-ink-soft">Boş bırakılırsa başlık ve özet kullanılır; başlığı değiştirirsen burası da izler.</p>
-          <div className="mt-4 space-y-4">
-            <Field
-              label="Meta başlık"
-              hint={
-                <span className="flex flex-wrap justify-between gap-2">
-                  <span>Google&apos;da görünen başlık. 30-60 karakter idealdir.</span>
-                  <Sayac uzunluk={etkinBaslik.length} ideal={[30, 60]} bos="başlık bekleniyor" />
-                </span>
-              }
-            >
-              <input
-                name="meta_title"
-                defaultValue={ilk.meta_title}
-                maxLength={255}
-                readOnly={readOnly}
-                placeholder={deger.title || "Boşsa yazının başlığı"}
-                className={INPUT_CLASS}
-              />
-            </Field>
-            <Field
-              label="Meta açıklama"
-              hint={
-                <span className="flex flex-wrap justify-between gap-2">
-                  <span>Sonuçta başlığın altındaki iki satır. 120-160 karakter idealdir.</span>
-                  <Sayac uzunluk={etkinAciklama.length} ideal={[120, 160]} bos="açıklama yok" />
-                </span>
-              }
-            >
-              <textarea
-                name="meta_description"
-                defaultValue={ilk.meta_description}
-                rows={2}
-                maxLength={320}
-                readOnly={readOnly}
-                placeholder={deger.excerpt || "Boşsa özet kullanılır"}
-                className={TEXTAREA_CLASS}
-              />
-            </Field>
-            <div>
-              <p className="mb-1.5 text-caption font-medium text-ink">Arama sonucunda böyle görünür</p>
-              <AramaOnizlemesi baslik={etkinBaslik} aciklama={etkinAciklama} yol={yol} />
-            </div>
+        <ComponentCard title="Arama motoru" desc="Boş bırakılırsa başlık ve özet kullanılır; başlığı değiştirirsen burası da izler.">
+          <Field
+            label="Meta başlık"
+            optional
+            hint={
+              <SayacliIpucu metin="Google'da görünen başlık. 30-60 karakter idealdir.">
+                <Sayac uzunluk={etkinBaslik.length} ideal={[30, 60]} bos="başlık bekleniyor" />
+              </SayacliIpucu>
+            }
+          >
+            <Input name="meta_title" defaultValue={ilk.meta_title} maxLength={255} readOnly={readOnly} placeholder={deger.title || "Boşsa yazının başlığı"} />
+          </Field>
+          <Field
+            label="Meta açıklama"
+            optional
+            hint={
+              <SayacliIpucu metin="Sonuçta başlığın altındaki iki satır. 120-160 karakter idealdir.">
+                <Sayac uzunluk={etkinAciklama.length} ideal={[120, 160]} bos="açıklama yok" />
+              </SayacliIpucu>
+            }
+          >
+            <TextArea
+              name="meta_description"
+              defaultValue={ilk.meta_description}
+              rows={2}
+              maxLength={320}
+              readOnly={readOnly}
+              placeholder={deger.excerpt || "Boşsa özet kullanılır"}
+            />
+          </Field>
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-gray-700">Arama sonucunda böyle görünür</p>
+            <AramaOnizlemesi baslik={etkinBaslik} aciklama={etkinAciklama} yol={yol} />
           </div>
-        </Card>
+        </ComponentCard>
       </div>
 
-      <aside className="space-y-5">
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-display text-body font-semibold text-ink">Yayın</h2>
-            <Pill tone={yayinda ? "ok" : "warn"}>{yayinda ? "Yayında" : blog ? "Taslak" : "Yeni"}</Pill>
-          </div>
-          <p className="mt-1 text-caption text-ink-soft">
-            {yayinda
-              ? "Sitede görünüyor. Güncelle, değişiklikleri hemen yayına alır."
-              : "Taslak sitede görünmez; yalnızca personel görür."}
-          </p>
-
+      <aside className="space-y-6">
+        <ComponentCard
+          title="Yayın"
+          badge={
+            <Badge size="sm" color={yayinda ? "success" : "warning"}>
+              {yayinda ? "Yayında" : blog ? "Taslak" : "Yeni"}
+            </Badge>
+          }
+          desc={yayinda ? "Sitede görünüyor. Güncelle, değişiklikleri hemen yayına alır." : "Taslak sitede görünmez; yalnızca personel görür."}
+        >
           {!readOnly ? (
-            <div className="mt-4 grid gap-2">
+            <div className="grid gap-2">
               {yayinda ? (
                 <>
-                  <Button type="submit" block disabled={pending || yuklenenGorsel > 0}>
-                    {pending ? <Loader2 className="animate-spin" /> : <Save />} Güncelle
+                  <Button type="submit" block loading={pending} disabled={kilitli} startIcon={<Save />}>
+                    Güncelle
                   </Button>
-                  <Button
-                    type="submit"
-                    name="yayin"
-                    value="0"
-                    variant="ghost"
-                    block
-                    disabled={pending || yuklenenGorsel > 0}
-                    onClick={(e) => {
-                      if (!window.confirm("Yazı yayından kaldırılsın mı? Sitedeki adresi 404 verir.")) e.preventDefault();
-                    }}
-                  >
-                    <EyeOff /> Taslağa al
+                  <Button type="submit" name="yayin" value="0" variant="ghost" block disabled={kilitli} startIcon={<EyeOff />} onClick={taslagaAl}>
+                    Taslağa al
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button type="submit" name="yayin" value="1" block disabled={pending || yuklenenGorsel > 0}>
-                    {pending ? <Loader2 className="animate-spin" /> : <Send />} Yayınla
+                  <Button type="submit" name="yayin" value="1" block loading={pending} disabled={kilitli} startIcon={<Send />}>
+                    Yayınla
                   </Button>
-                  <Button type="submit" variant="secondary" block disabled={pending || yuklenenGorsel > 0}>
-                    <Save /> {blog ? "Taslağı kaydet" : "Taslak olarak kaydet"}
+                  <Button type="submit" variant="outline" block disabled={kilitli} startIcon={<Save />}>
+                    {blog ? "Taslağı kaydet" : "Taslak olarak kaydet"}
                   </Button>
                 </>
               )}
-              <p role="status" className="mt-1 flex items-center justify-center gap-1.5 text-micro text-ink-faint">
+              <p role="status" className="mt-1 flex items-center justify-center gap-1.5 text-theme-xs text-gray-500">
                 {pending ? (
                   "Kaydediliyor…"
                 ) : degisti ? (
                   <>
-                    <span aria-hidden className="size-1.5 rounded-full bg-warn-fill" /> Kaydedilmemiş değişiklikler
+                    <span aria-hidden className="size-1.5 rounded-full bg-warning-500" /> Kaydedilmemiş değişiklikler
                   </>
+                ) : yuklenenGorsel > 0 ? (
+                  "Görsel yükleniyor…"
                 ) : (
-                  yuklenenGorsel > 0 ? "Görsel yükleniyor…" : "Kısayol: Ctrl+S / ⌘S kaydeder"
+                  "Kısayol: Ctrl+S / ⌘S kaydeder"
                 )}
               </p>
             </div>
           ) : null}
 
           {blog ? (
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-              <Link
-                href={`/admin/blog/${blog.id}/onizleme`}
-                target="_blank"
-                className="flex items-center gap-1.5 text-caption font-medium text-brand hover:underline"
-              >
-                <Eye className="size-3.5" aria-hidden /> Önizle
-              </Link>
-              {yayinUrl ? (
-                <Link href={yayinUrl} target="_blank" className="flex items-center gap-1.5 text-caption font-medium text-brand hover:underline">
-                  Sitede gör <ExternalLink className="size-3.5" aria-hidden />
+            <div>
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                <Link
+                  href={`/admin/blog/${blog.id}/onizleme`}
+                  target="_blank"
+                  className="flex items-center gap-1.5 text-theme-sm font-medium text-brand-500 hover:text-brand-600"
+                >
+                  <Eye className="size-3.5" aria-hidden /> Önizle
                 </Link>
-              ) : null}
+                {yayinUrl ? (
+                  <Link href={yayinUrl} target="_blank" className="flex items-center gap-1.5 text-theme-sm font-medium text-brand-500 hover:text-brand-600">
+                    Sitede gör <ExternalLink className="size-3.5" aria-hidden />
+                  </Link>
+                ) : null}
+              </div>
+              {degisti ? <p className="mt-1 text-center text-theme-xs text-gray-500">Önizleme son kaydedilen hâli gösterir; önce kaydet.</p> : null}
             </div>
           ) : null}
-          {blog && degisti ? (
-            <p className="mt-1 text-center text-micro text-ink-faint">Önizleme son kaydedilen hâli gösterir; önce kaydet.</p>
-          ) : null}
 
-          <div className="mt-5 space-y-4 border-t border-line pt-4">
+          <div className="space-y-5 border-t border-gray-100 pt-5">
             <Field label="Dil">
-              <select name="locale" defaultValue={ilk.locale} disabled={readOnly} className={SELECT_CLASS}>
+              <Select name="locale" defaultValue={ilk.locale} disabled={readOnly}>
                 {Object.entries(DIL).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {blog ? (
               <Field
@@ -521,118 +559,94 @@ export function BlogForm({ blog, readOnly, kaydedildi }: { blog?: AdminBlog; rea
                     : "Taslakta adres başlığı izler; dilersen elle yaz."
                 }
               >
-                <input
+                <Input
                   name="slug"
                   defaultValue={ilk.slug}
                   pattern="[a-z0-9]+(-[a-z0-9]+)*"
                   minLength={3}
                   maxLength={120}
                   readOnly={readOnly}
-                  className={cn(INPUT_CLASS, "font-mono text-caption")}
+                  className="font-mono"
                 />
               </Field>
             ) : (
-              <p className="text-micro text-ink-faint">
-                Adres başlıktan üretilir: <span className="font-mono text-ink-soft">{yol}</span>
+              <p className="text-theme-xs text-gray-500">
+                Adres başlıktan üretilir: <span className="font-mono text-gray-700">{yol}</span>
               </p>
             )}
           </div>
-        </Card>
+        </ComponentCard>
 
-        <Card className="p-5">
-          <h2 className="font-display text-body font-semibold text-ink">Kapak görseli</h2>
-          <p className="mt-0.5 text-caption text-ink-soft">1200×630 önerilir. JPEG, PNG veya WebP; 10 MB&apos;a kadar.</p>
-          <div className="mt-4 overflow-hidden rounded-xl border border-line bg-surface-sunk">
+        <ComponentCard title="Kapak görseli" desc="1200×630 önerilir. JPEG, PNG veya WebP; 10 MB'a kadar.">
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
             {kapak ? (
               // eslint-disable-next-line @next/next/no-img-element -- yerel önizleme (blob) ve backend kapağı; next/image gerekmiyor
               <img src={kapak} alt="" className="aspect-[1.9/1] w-full object-cover" />
             ) : (
-              <div className="flex aspect-[1.9/1] items-center justify-center text-ink-faint">
+              <div className="flex aspect-[1.9/1] items-center justify-center text-gray-400">
                 <ImageOff className="size-6" aria-hidden />
                 <span className="sr-only">Kapak görseli yok</span>
               </div>
             )}
           </div>
           {!readOnly ? (
-            <>
-              <input
-                type="file"
-                name="cover"
-                accept="image/jpeg,image/png,image/webp"
-                aria-label="Kapak görseli seç"
-                className="mt-3 block w-full text-caption text-ink-soft file:me-3 file:rounded-lg file:border-0 file:bg-brand-wash file:px-3 file:py-2 file:text-caption file:font-semibold file:text-brand hover:file:bg-brand-wash-strong"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  // Büyük dosya formla gitmesin: seçerken söyle, seçimi geri al.
-                  if (f && f.size > KAPAK_SINIRI) {
-                    e.target.value = "";
-                    setOnizleme(null);
-                    setKapakHatasi(`Bu görsel ${(f.size / MB).toFixed(1)} MB; en fazla 10 MB olabilir.`);
-                    return;
-                  }
-                  setKapakHatasi(null);
-                  setOnizleme(f ? URL.createObjectURL(f) : null);
-                  if (f) setKapakSil(false);
-                }}
-              />
-              {kapakHatasi || state.fields?.cover ? (
-                <p role="alert" className="mt-2 text-caption text-bad">
-                  {kapakHatasi ?? state.fields?.cover}
-                </p>
-              ) : null}
-            </>
+            <Dropzone
+              name="cover"
+              accept={KAPAK_TURLERI}
+              maxSize={KAPAK_SINIRI}
+              compact
+              ariaLabel="Kapak görseli seç ya da sürükle bırak"
+              title={kapak ? "Yeni kapağı buraya sürükle" : "Kapağı buraya sürükle"}
+              description="ya da bilgisayarından seç"
+              browseLabel="Görsel seç"
+              error={state.fields?.cover}
+              onFilesChange={(dosyalar) => {
+                const f = dosyalar[0];
+                setOnizleme(f ? URL.createObjectURL(f) : null);
+                if (f) setKapakSil(false);
+                degisiklik();
+              }}
+            />
           ) : null}
           {kapak ? (
-            <div className="mt-4">
+            <div>
               <Field
                 label="Görsel açıklaması (alt metin)"
+                optional
                 hint={
-                  <span className="flex flex-wrap justify-between gap-2">
-                    <span>Görmeyen okur ve arama motoru için görselde ne olduğunu bir cümleyle yaz. Boşsa başlık kullanılır.</span>
+                  <SayacliIpucu metin="Görmeyen okur ve arama motoru için görselde ne olduğunu bir cümleyle yaz. Boşsa başlık kullanılır.">
                     <Sayac uzunluk={deger.image_alt.trim().length} ideal={[1, 125]} bos="isteğe bağlı" uzunNotu=" · uzun, ekran okuyucu böler" />
-                  </span>
+                  </SayacliIpucu>
                 }
               >
-                <input
-                  name="image_alt"
-                  defaultValue={ilk.image_alt}
-                  maxLength={200}
-                  readOnly={readOnly}
-                  placeholder="Örn. Masada açık bir matematik defteri ve kalem"
-                  className={cn(INPUT_CLASS, altOnerisi && "border-brand ring-4 ring-brand/12")}
-                />
+                {/* Öneri vurgusu sarmalayıcıda: alanın kendi kenar rengiyle çakışmasın. */}
+                <div className={altOnerisi ? "rounded-lg ring-3 ring-brand-500/25" : undefined}>
+                  <Input
+                    name="image_alt"
+                    defaultValue={ilk.image_alt}
+                    maxLength={200}
+                    readOnly={readOnly}
+                    placeholder="Örn. Masada açık bir matematik defteri ve kalem"
+                  />
+                </div>
               </Field>
               {altOnerisi ? (
-                <p className="mt-1.5 text-caption font-medium text-brand">
+                <p className="mt-1.5 text-theme-sm font-medium text-brand-500">
                   Yeni kapak seçtin: ne gösterdiğini kısaca yazman önerilir (zorunlu değil).
                 </p>
               ) : null}
             </div>
           ) : null}
-          {!readOnly ? (
-            <>
-              {blog?.image ? (
-                <label className="mt-3 flex items-center gap-2 text-caption text-ink-soft">
-                  <input
-                    type="checkbox"
-                    name="remove_cover"
-                    value="1"
-                    checked={kapakSil}
-                    onChange={(e) => setKapakSil(e.target.checked)}
-                    className={CHECKBOX_CLASS}
-                  />
-                  Kapağı kaldır
-                </label>
-              ) : null}
-            </>
+          {!readOnly && blog?.image ? (
+            <Checkbox name="remove_cover" value="1" checked={kapakSil} onChange={(e) => setKapakSil(e.target.checked)} label="Kapağı kaldır" />
           ) : null}
-        </Card>
+        </ComponentCard>
 
-        <Card className="p-5">
+        <ComponentCard title="Etiketler">
           <Field label="Etiketler" hint="Virgülle ayır: tyt, matematik, çalışma planı">
-            <input name="tags" defaultValue={ilk.tags} readOnly={readOnly} className={INPUT_CLASS} />
+            <Input name="tags" defaultValue={ilk.tags} readOnly={readOnly} />
           </Field>
-        </Card>
+        </ComponentCard>
       </aside>
     </form>
   );

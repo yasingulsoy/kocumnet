@@ -140,7 +140,7 @@ export default async function RootLayout({
        */
       className={`${inter.variable} ${poppins.variable} antialiased`}
     >
-      <body className="flex min-h-screen flex-col bg-bg font-sans text-ink-soft">
+      <body className="flex min-h-screen flex-col bg-white font-sans text-gray-600">
         {/*
           Güvenlik ağı: satır içi opacity:0 ile gelen bir öğe JavaScript
           yüklenmezse kalıcı olarak görünmez kalırdı (framer-motion döneminde

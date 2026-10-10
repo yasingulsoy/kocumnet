@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { jsonLd } from "@/lib/jsonld";
 import { fetchBlogBySlug, fetchBlogs, getImageUrl, BACKEND_URL } from "@/lib/api";
 import { getSiteUrl } from "@/lib/site";
@@ -17,7 +17,18 @@ import { BlogToc } from "@/components/BlogToc";
 import { BlogViewCounter } from "@/components/BlogViewCounter";
 import { BreadcrumbJsonLd } from "@/components/JsonLd";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
-import { Container, LinkButton, Section } from "@/components/ui";
+import {
+  IcindekilerKutusu,
+  KAPAK_CERCEVE,
+  KAPAK_DIS,
+  KAPAK_GORSEL,
+  MAKALE_PROSE,
+  YaziBilgisi,
+  YaziEtiketleri,
+  YazarKutusu,
+} from "@/components/BlogArticle";
+import { Container, Section } from "@/components/ui";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import {
   authorName as yazarAdi,
   coverAlt,
@@ -174,9 +185,9 @@ export default async function BlogDetailPage({ params }: Props) {
       />
 
       {/*
-        Blog detayında koyu hero KALIYOR (tone="deep"): yazının kendisi uzun
-        bir okuma, başlığın gövde metninden net ayrılması gerekiyor. Diğer
-        iç sayfalarda gradyan bant kaldırıldı.
+        Blog detayında koyu başlık KALIYOR (tone="deep"): yazının kendisi uzun
+        bir okuma, başlığın gövde metninden net ayrılması gerekiyor. İz,
+        kitin PageBreadcrumb'ı gibi ok ayraçlı.
       */}
       <PageHero
         tone="deep"
@@ -184,21 +195,20 @@ export default async function BlogDetailPage({ params }: Props) {
         description={blog.excerpt ?? undefined}
         breadcrumb={
           <nav aria-label={t.blog.breadcrumbLabel}>
-            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-white/70">
-              <li className="flex items-center gap-2">
+            <ol className="flex flex-wrap items-center gap-1.5 text-theme-sm text-gray-400">
+              <li className="flex items-center gap-1.5">
                 <Link href={localizedPath("home", lang)} className="transition hover:text-white">
                   {t.blog.breadcrumbHome}
                 </Link>
-                <span aria-hidden>/</span>
+                <ChevronRight className="size-4 text-gray-500 rtl:rotate-180" aria-hidden />
               </li>
-              <li className="flex items-center gap-2">
+              <li className="flex items-center gap-1.5">
                 <Link href={localizedPath("blog", lang)} className="transition hover:text-white">
                   {t.blog.title}
                 </Link>
-                <span aria-hidden>/</span>
+                <ChevronRight className="size-4 text-gray-500 rtl:rotate-180" aria-hidden />
               </li>
-              {/* Eskiden text-white/40: koyu zeminde 3,4:1, okunmuyordu. */}
-              <li aria-current="page" className="max-w-[16rem] truncate text-white/85">
+              <li aria-current="page" className="max-w-[16rem] truncate text-gray-200">
                 {blog.title}
               </li>
             </ol>
@@ -206,52 +216,28 @@ export default async function BlogDetailPage({ params }: Props) {
         }
       >
         <div className="space-y-6">
-          {blog.tags && blog.tags.length > 0 ? (
-            <ul className="flex flex-wrap gap-2">
-              {blog.tags.map((tag) => (
-                <li
-                  key={tag}
-                  className="rounded-full bg-white/15 px-3 py-1 text-micro font-semibold uppercase tracking-wider text-white"
-                >
-                  {tag}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-white/70">
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="flex size-9 items-center justify-center rounded-full bg-white/20 text-caption font-bold text-white"
-              >
-                {authorName.charAt(0).toUpperCase()}
-              </span>
-              <span className="text-white/85">{authorName}</span>
-            </div>
-            <span className="size-1 rounded-full bg-white/30" aria-hidden />
-            <time dateTime={postDate(blog)}>{formatDate(postDate(blog), lang)}</time>
-            <span className="size-1 rounded-full bg-white/30" aria-hidden />
-            <span>
-              {readingTime} {t.blog.readingTime}
-            </span>
-            <span className="size-1 rounded-full bg-white/30" aria-hidden />
-            <BlogViewCounter slug={slug} initialCount={blog.view_count ?? 0} label={t.blog.views} />
-          </div>
+          <YaziEtiketleri tags={blog.tags} />
+          <YaziBilgisi
+            yazar={authorName}
+            tarih={postDate(blog)}
+            tarihMetni={formatDate(postDate(blog), lang)}
+            okuma={`${readingTime} ${t.blog.readingTime}`}
+            ek={<BlogViewCounter slug={slug} initialCount={blog.view_count ?? 0} label={t.blog.views} />}
+          />
         </div>
       </PageHero>
 
       {imageUrl ? (
-        <div className="mx-auto w-full max-w-4xl px-5 sm:px-6">
-          <div className="relative -mt-12 overflow-hidden rounded-2xl shadow-pop sm:-mt-16">
+        <div className={KAPAK_DIS}>
+          <div className={KAPAK_CERCEVE}>
             <Image
               src={imageUrl}
               alt={coverAlt(blog, blog.title)}
               width={1280}
               height={720}
               preload
-              className="h-auto w-full object-cover"
-              sizes="(min-width: 896px) 848px, 100vw"
+              className={KAPAK_GORSEL}
+              sizes="(min-width: 896px) 832px, 100vw"
             />
           </div>
         </div>
@@ -268,7 +254,8 @@ export default async function BlogDetailPage({ params }: Props) {
       <div className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-6 sm:py-16 xl:grid xl:max-w-none xl:grid-cols-[minmax(0,1fr)_minmax(0,42rem)_minmax(0,1fr)] xl:gap-x-12 xl:px-8">
         {icindekiler.length >= ICINDEKILER_ALT_SINIR ? (
           <aside className="hidden xl:col-start-3 xl:row-start-1 xl:block">
-            <div className="sticky top-36 max-h-[calc(100vh-10rem)] max-w-60 overflow-y-auto pb-4">
+            {/* top-32: başlığın (112px) altında 16px pay — globals.css'teki scroll-padding-top ile aynı. */}
+            <div className="sticky top-32 max-h-[calc(100vh-9rem)] max-w-60 overflow-y-auto pb-4">
               <BlogToc items={icindekiler} label={t.blog.toc} />
             </div>
           </aside>
@@ -276,36 +263,14 @@ export default async function BlogDetailPage({ params }: Props) {
 
         <div className="min-w-0 xl:col-start-2 xl:row-start-1">
           {icindekiler.length >= ICINDEKILER_ALT_SINIR ? (
-            <nav aria-label={t.blog.toc} className="mb-10 rounded-2xl border border-line bg-surface-sunk xl:hidden">
-              <details open className="group">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-5 py-4 text-micro font-semibold uppercase tracking-[0.18em] text-brand [&::-webkit-details-marker]:hidden">
-                  {t.blog.toc}
-                  <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
-                </summary>
-                <ol className="space-y-2 border-t border-line px-5 py-4 text-body">
-                  {icindekiler.map((oge) => (
-                    <li key={oge.id} className={oge.seviye === 3 ? "ps-4 text-caption" : undefined}>
-                      <a
-                        href={`#${oge.id}`}
-                        className="text-ink-soft underline-offset-4 transition hover:text-brand hover:underline"
-                      >
-                        {oge.metin}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            </nav>
+            <IcindekilerKutusu items={icindekiler} label={t.blog.toc} className="mb-10 xl:hidden" />
           ) : null}
 
-          <article
-            className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-ink prose-p:text-ink-soft prose-p:leading-relaxed prose-a:text-brand prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl prose-strong:text-ink prose-blockquote:border-s-brand prose-blockquote:text-ink-soft"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <article className={MAKALE_PROSE} dangerouslySetInnerHTML={{ __html: html }} />
 
-          {/* Paylaş */}
-          <div className="mt-12 border-t border-line pt-8">
-            <p id="paylas-baslik" className="text-micro font-semibold uppercase tracking-[0.18em] text-brand">
+          {/* Paylaş — TailAdmin üst çubuğundaki yuvarlak ikon düğmeleri. */}
+          <div className="mt-12 border-t border-gray-200 pt-8">
+            <p id="paylas-baslik" className="text-theme-xs font-medium tracking-wide text-gray-500 uppercase">
               {t.blog.share}
             </p>
             <div role="group" aria-labelledby="paylas-baslik" className="mt-4 flex flex-wrap gap-3">
@@ -317,7 +282,7 @@ export default async function BlogDetailPage({ params }: Props) {
                   rel="noopener noreferrer"
                   aria-label={ad}
                   title={ad}
-                  className="flex size-10 items-center justify-center rounded-full bg-surface-sunk text-ink-soft ring-1 ring-inset ring-line transition hover:bg-brand-wash hover:text-brand hover:ring-brand/20"
+                  className="flex size-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-theme-xs transition hover:bg-gray-100 hover:text-gray-700"
                 >
                   <Ikon className="size-4" />
                 </a>
@@ -326,30 +291,15 @@ export default async function BlogDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Yazar kutusu */}
-          <div className="mt-12 rounded-2xl border border-line bg-surface-sunk p-6 sm:p-8">
-            <div className="flex items-start gap-5">
-              <span
-                aria-hidden
-                className="font-display flex size-14 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-h4 font-semibold text-white shadow-raised"
-              >
-                {authorName.charAt(0).toUpperCase()}
-              </span>
-              <div>
-                <p className="text-micro font-semibold uppercase tracking-[0.18em] text-brand">{t.blog.author}</p>
-                <p className="font-display mt-1 text-h4 font-semibold text-ink">{authorName}</p>
-                <p className="mt-2 text-caption text-ink-soft">{t.blog.authorBio}</p>
-              </div>
-            </div>
-          </div>
+          <YazarKutusu ad={authorName} etiket={t.blog.author} bio={t.blog.authorBio} className="mt-12" />
         </div>
       </div>
 
       {/* İlgili yazılar */}
       {relatedBlogs.length > 0 ? (
-        <Section tone="sunk" className="border-t border-line">
+        <Section tone="sunk" className="border-t border-gray-200">
           <Container>
-            <h2 className="font-display text-center text-h2 font-semibold tracking-tight text-ink">
+            <h2 className="font-display text-center text-title-sm font-semibold tracking-tight text-gray-800">
               {t.blog.relatedPosts}
             </h2>
             <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -369,10 +319,9 @@ export default async function BlogDetailPage({ params }: Props) {
       ) : null}
 
       <div className="flex justify-center px-5 py-12">
-        <LinkButton href={localizedPath("blog", lang)} variant="secondary">
-          <ArrowLeft className="rtl:rotate-180" />
+        <ButtonLink href={localizedPath("blog", lang)} variant="outline" startIcon={<ArrowLeft className="rtl:rotate-180" aria-hidden />}>
           {t.blog.backToBlog}
-        </LinkButton>
+        </ButtonLink>
       </div>
     </main>
   );

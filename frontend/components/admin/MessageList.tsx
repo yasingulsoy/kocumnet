@@ -6,7 +6,13 @@ import { useState, useTransition } from "react";
 import { Archive, CheckCheck, Loader2, Mail, MailOpen, ShieldBan, StickyNote, type LucideIcon } from "lucide-react";
 import { bulkMessageStatusAction } from "@/lib/admin/actions";
 import { MESSAGE_STATUS_LABEL, type MessageStatus } from "@/lib/admin/types";
-import { CHECKBOX_CLASS, Pill, buttonClass, cn } from "./ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { Avatar } from "@/components/tailadmin/ui/Avatar";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
+import { MESAJ_RENGI } from "./ui";
 
 /** Sunucuda hazırlanan satır: göreli zaman sunucuda hesaplanır (hidrasyon farkı olmasın). */
 export interface MessageRow {
@@ -22,14 +28,6 @@ export interface MessageRow {
   hasNote: boolean;
 }
 
-const TON: Record<MessageStatus, "brand" | "neutral" | "ok" | "bad"> = {
-  new: "brand",
-  read: "neutral",
-  answered: "ok",
-  archived: "neutral",
-  spam: "bad",
-};
-
 const TOPLU: { status: MessageStatus; label: string; icon: LucideIcon }[] = [
   { status: "read", label: "Okundu", icon: MailOpen },
   { status: "new", label: "Okunmadı", icon: Mail },
@@ -39,9 +37,10 @@ const TOPLU: { status: MessageStatus; label: string; icon: LucideIcon }[] = [
 ];
 
 /**
- * Mesaj listesi + toplu işlem. Satırlar seçilip tek seferde okundu,
+ * Mesaj tablosu + toplu işlem. Satırlar seçilip tek seferde okundu,
  * yanıtlandı, arşiv ya da spam yapılır — spam dalgasında ya da toplu
- * arşivlemede mesajları tek tek açmak gerekmesin.
+ * arşivlemede mesajları tek tek açmak gerekmesin. Satırın tamamı mesaja
+ * gider (gönderen bağlantısı satırı kaplar); onay kutusu onun üstünde.
  */
 export function MessageList({ rows }: { rows: MessageRow[] }) {
   const router = useRouter();
@@ -88,113 +87,120 @@ export function MessageList({ rows }: { rows: MessageRow[] }) {
   return (
     <>
       <div
-        className={cn(
-          "flex min-h-12 flex-wrap items-center gap-2 border-b border-line px-3 py-2 sm:px-5",
-          secililer.length ? "bg-brand-wash" : "bg-surface-sunk"
+        className={cx(
+          "flex min-h-13 flex-wrap items-center gap-2 border-y border-gray-100 px-4 py-2 sm:px-6",
+          secililer.length ? "bg-brand-25" : "bg-gray-50"
         )}
       >
-        <label className="-ms-1.5 flex size-9 items-center justify-center" title="Bu sayfadakilerin hepsini seç">
-          <input
-            type="checkbox"
-            className={CHECKBOX_CLASS}
-            checked={hepsi}
-            ref={(el) => {
-              if (el) el.indeterminate = bazisi;
-            }}
-            onChange={() => {
-              setSonuc(null);
-              setSecili(hepsi ? new Set() : new Set(rows.map((r) => r.id)));
-            }}
-            aria-label="Bu sayfadaki bütün mesajları seç"
-          />
-        </label>
         {secililer.length ? (
           <>
-            <span className="tabular text-caption font-semibold text-brand-deep">{secililer.length} seçili</span>
+            <span className="tabular text-theme-sm font-semibold text-brand-900">{secililer.length} seçili</span>
             <span className="flex flex-wrap gap-1.5" role="group" aria-label="Seçilenlere uygula">
               {TOPLU.map(({ status, label, icon: Icon }) => (
-                <button
+                <Button
                   key={status}
-                  type="button"
+                  variant={status === "spam" ? "danger-outline" : "outline"}
+                  size="xs"
                   disabled={pending}
                   onClick={() => topluUygula(status)}
-                  className={cn(buttonClass({ variant: "secondary", size: "sm" }), "min-h-8 px-2.5", status === "spam" && "text-warn")}
+                  startIcon={<Icon aria-hidden />}
                 >
-                  <Icon aria-hidden /> {label}
-                </button>
+                  {label}
+                </Button>
               ))}
             </span>
-            {pending ? <Loader2 className="size-4 animate-spin text-brand" aria-label="Uygulanıyor" /> : null}
+            {pending ? <Loader2 className="size-4 animate-spin text-brand-500" aria-label="Uygulanıyor" /> : null}
           </>
         ) : (
-          <span className="text-caption text-ink-faint">Seçip toplu işlem yapabilirsin.</span>
+          <span className="text-theme-sm text-gray-500">Satırları seçip toplu işlem yapabilirsin.</span>
         )}
         {sonuc ? (
-          <span role="status" className={cn("ms-auto text-caption", sonuc.tone === "ok" ? "text-ok" : "text-bad")}>
+          <span role="status" className={cx("ms-auto text-theme-sm", sonuc.tone === "ok" ? "text-success-700" : "text-error-600")}>
             {sonuc.text}
           </span>
         ) : null}
       </div>
 
-      <ul className="divide-y divide-line">
-        {rows.map((m) => {
-          const yeni = m.status === "new";
-          const isaretli = secili.has(m.id);
-          return (
-            <li
-              key={m.id}
-              className={cn(
-                "flex items-start gap-1 ps-1.5 pe-3 transition hover:bg-surface-hover sm:ps-3.5 sm:pe-5",
-                yeni && "bg-brand-wash/40",
-                isaretli && "bg-brand-wash"
-              )}
-            >
-              <label className="mt-2 flex size-9 shrink-0 items-center justify-center">
-                <input
-                  type="checkbox"
-                  className={CHECKBOX_CLASS}
-                  checked={isaretli}
-                  onChange={() => degistir(m.id)}
-                  aria-label={`Seç: ${m.name}${m.subject ? `, ${m.subject}` : ""}`}
-                />
-              </label>
-              <Link href={`/admin/mesajlar/${m.id}`} className="flex min-w-0 flex-1 items-start gap-3 py-4">
-                <span
-                  aria-hidden
-                  className={cn("mt-1.5 size-2 shrink-0 rounded-full", yeni ? "bg-brand" : "bg-transparent")}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-baseline gap-x-2">
-                    <span className={cn("text-caption text-ink", yeni ? "font-semibold" : "font-medium")}>
-                      {m.name}
-                      {yeni ? <span className="sr-only"> (okunmadı)</span> : null}
-                    </span>
-                    <span className="truncate text-micro text-ink-faint">{m.email}</span>
-                  </p>
-                  <p className="mt-0.5 truncate text-caption text-ink-soft">
-                    {m.subject ? <span className="font-medium text-ink">{m.subject} — </span> : null}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableCell isHeader className="w-12 pe-0 sm:pe-0">
+              <Checkbox
+                checked={hepsi}
+                indeterminate={bazisi}
+                onChange={() => {
+                  setSonuc(null);
+                  setSecili(hepsi ? new Set() : new Set(rows.map((r) => r.id)));
+                }}
+                aria-label="Bu sayfadaki bütün mesajları seç"
+              />
+            </TableCell>
+            <TableCell isHeader>Gönderen</TableCell>
+            <TableCell isHeader className="hidden md:table-cell">
+              Mesaj
+            </TableCell>
+            <TableCell isHeader>Durum</TableCell>
+            <TableCell isHeader align="end">
+              Zaman
+            </TableCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((m) => {
+            const yeni = m.status === "new";
+            const isaretli = secili.has(m.id);
+            return (
+              <TableRow key={m.id} hover selected={isaretli} className={cx("relative", yeni && !isaretli && "bg-brand-25/60")}>
+                <TableCell className="relative z-1 w-12 pe-0 sm:pe-0">
+                  <Checkbox
+                    checked={isaretli}
+                    onChange={() => degistir(m.id)}
+                    aria-label={`Seç: ${m.name}${m.subject ? `, ${m.subject}` : ""}`}
+                  />
+                </TableCell>
+                <TableCell className="max-w-72 min-w-56 md:w-72">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={m.name} size="medium" decorative />
+                    <div className="min-w-0">
+                      <Link
+                        href={`/admin/mesajlar/${m.id}`}
+                        className={cx("block truncate text-theme-sm text-gray-800 after:absolute after:inset-0", yeni ? "font-semibold" : "font-medium")}
+                      >
+                        {m.name}
+                        {yeni ? <span className="sr-only"> (okunmadı)</span> : null}
+                      </Link>
+                      <span className="block truncate text-theme-xs text-gray-500">{m.email}</span>
+                      <span className="mt-0.5 block truncate text-theme-xs text-gray-600 md:hidden">{m.subject ?? m.preview}</span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="hidden w-full max-w-0 min-w-48 md:table-cell">
+                  <p className="truncate text-theme-sm text-gray-600">
+                    {m.subject ? <span className="font-medium text-gray-800">{m.subject} — </span> : null}
                     {m.preview}
                   </p>
-                  <p className="mt-1 flex items-center gap-1.5 text-micro text-ink-faint">
+                  <p className="mt-1 flex items-center gap-1.5 text-theme-xs text-gray-500">
                     {m.kaynak}
                     {m.hasNote ? (
-                      <span className="inline-flex items-center gap-1 text-ink-soft">
+                      <span className="inline-flex items-center gap-1 text-gray-600">
                         · <StickyNote className="size-3" aria-hidden /> not var
                       </span>
                     ) : null}
                   </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <time className="text-micro text-ink-faint" title={m.tarih}>
-                    {m.zaman}
-                  </time>
-                  <Pill tone={TON[m.status]}>{MESSAGE_STATUS_LABEL[m.status]}</Pill>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                </TableCell>
+                <TableCell>
+                  <Badge size="sm" color={MESAJ_RENGI[m.status]}>
+                    {MESSAGE_STATUS_LABEL[m.status]}
+                  </Badge>
+                </TableCell>
+                <TableCell align="end" nowrap>
+                  <time title={m.tarih}>{m.zaman}</time>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </>
   );
 }

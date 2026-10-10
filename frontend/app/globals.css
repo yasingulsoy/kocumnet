@@ -8,6 +8,34 @@
  */
 @import "./tokens.css";
 
+/*
+ * TailAdmin kiti (MIT): kırılma noktaları, gri/anlam/marka ölçekleri,
+ * gölgeler, menü yardımcıları. Kaynak design/tailadmin/theme.css — bu kopyayı
+ * ELLE DÜZENLEME. Site arayüzü kitin bileşenleri ve dilinde (gray-*,
+ * brand-*, shadow-theme-*). dark: varyantı .dark sınıfına bağlı, koyu tema yok.
+ */
+@import "./tailadmin.css";
+
+/*
+ * Bu dosya YALNIZCA tanıtım sitesinin stili (app/[lang] ve global-not-found).
+ * Site yönetiminin kendi dosyası var: app/admin/admin.css. Tailwind her
+ * giriş dosyası için projeyi ayrı tarar; yönetimin sınıfları buraya girmesin
+ * diye yönetim dizinleri taranmaz.
+ *
+ * Kitten yalnızca sitenin kullandığı bileşenler taranır (pano çerçevesi,
+ * tablo, grafik… sitenin CSS'ine girmez). Sitede yeni bir kit bileşeni
+ * kullanırsan buraya ekle: eklenmezse sınıfları üretilmez, bileşen stilsiz
+ * görünür.
+ */
+@source not "./admin";
+@source not "../components/admin";
+@source not "../lib/admin";
+@source not "../components/tailadmin";
+@source "../components/tailadmin/ui/{Alert,Avatar,Badge,Button,Card,Dropdown,EmptyState,GridShape,MetricCard,Pagination,SegmentedTabs}.tsx";
+@source "../components/tailadmin/form/{styles.ts,Field.tsx,Label.tsx,Input.tsx,TextArea.tsx}";
+@source "../components/tailadmin/media/ResponsiveImage.tsx";
+@source "../components/tailadmin/pages/ErrorPage.tsx";
+
 /* ── Tanıtım sitesine özgü ───────────────────────────────────── */
 
 html {
@@ -21,24 +49,19 @@ html {
 
   /*
    * Çapaya (#anchor) gidince başlık sticky header'ın altında kalmasın.
-   * Header = marka şeridi (48px: py-2 + 32px dil düğmesi) + ana çubuk
-   * (72px, lg'de 80px) = 120-128px. Eskiden 6rem (96px) idi: footer'dan
-   * /hizmetlerimiz#tercih-danismanligi'ya gelen kullanıcı başlığın üst
-   * yarısını header'ın altında görüyordu. Header yüksekliği değişirse bunu da
-   * güncelle.
+   * Header = marka şeridi (40px, h-10) + ana çubuk (64px, lg'de 72px:
+   * TailAdmin'in h-16 / lg:h-18'i) = 104-112px; üstüne 16px pay. Footer'dan
+   * /hizmetlerimiz#tercih-danismanligi'ya gelen kullanıcı başlığı tam
+   * görsün. Header yüksekliği değişirse bunu, BlogToc'taki OKUMA_CIZGISI'ni
+   * ve blog yazısındaki yapışkan içindekilerin top-32'sini de güncelle.
    */
-  scroll-padding-top: 8.5rem;
+  scroll-padding-top: 8rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-}
-
-body {
-  background: var(--bg);
-  color: var(--ink-soft);
 }
 
 /* ── Kaydırınca belirme (components/Reveal.tsx + RevealObserver) ── */
@@ -91,6 +114,22 @@ body {
   }
 }
 
+/* ── Koyu zemin ─────────────────────────────────────────────── */
+
+/*
+ * Lacivert zeminde (marka şeridi, altbilgi, check-up kartı, blog yazısı
+ * başlığı) odak çerçevesi beyaz: marka mavisi lacivert üstünde 2,5:1
+ * kalıyordu, odak göstergesi için en az 3:1 gerekir.
+ */
+.zemin-koyu :focus-visible {
+  outline-color: white;
+}
+
+/* Koyu zeminin içindeki beyaz panel (şeritteki dil menüsü): yine marka mavisi. */
+.zemin-koyu .zemin-acik :focus-visible {
+  outline-color: var(--brand);
+}
+
 /* ── Arapça (RTL) ───────────────────────────────────────────── */
 
 [dir="rtl"] {
@@ -109,58 +148,8 @@ body {
 
 /* ── Blog içeriği ───────────────────────────────────────────── */
 
+/* Yönetimdeki yazı önizlemesi de aynı kuralı kullanır (admin.css). */
 .prose img {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-}
-
-/* ── Site yönetimi (/admin) ─────────────────────────────────── */
-
-.data-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--text-caption);
-}
-
-.data-table th {
-  padding: 0.625rem 1rem;
-  text-align: start;
-  font-size: var(--text-micro);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  background: var(--surface-sunk);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-.data-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-  color: var(--ink-soft);
-}
-
-.data-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.data-table tbody tr:hover td {
-  background: var(--surface-hover);
-}
-
-/* Tiptap editörü: boş belge ipucu ve seçili görsel çerçevesi. */
-.tiptap p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-  color: var(--ink-faint);
-}
-
-.tiptap img.ProseMirror-selectednode {
-  outline: 3px solid var(--brand);
-  outline-offset: 2px;
 }

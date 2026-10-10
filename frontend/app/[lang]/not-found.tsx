@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass } from "lucide-react";
-import { Container, buttonClass } from "@/components/ui";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { ErrorPage } from "@/components/tailadmin/pages/ErrorPage";
 import { localizedPath, type RouteKey } from "@/lib/routes";
 
 /*
@@ -12,8 +12,8 @@ import { localizedPath, type RouteKey } from "@/lib/routes";
  * not-found.tsx parametre alamadığı için dil adresten okunur; sözlükler
  * yalnızca sunucuda yüklendiğinden metin burada.
  *
- * Eskiden her 404'te "aradığın YAZI silinmiş olabilir" yazıyordu ve yalnızca
- * ana sayfa ile bloga dönülebiliyordu. Artık en çok aranan sayfalar da var.
+ * Görünüm kitin hata sayfası (ızgara, büyük "404"), site düzeninin içinde
+ * (`embedded`). Altında en çok aranan sayfalar.
  */
 const METIN = {
   tr: {
@@ -52,34 +52,31 @@ export default function NotFound() {
   const sayfalar = Object.entries(SAYFALAR[dil]) as [RouteKey, string][];
 
   return (
-    <main className="flex flex-1 flex-col">
-      <Container className="flex flex-1 flex-col items-center justify-center py-24 text-center">
-        <span className="flex size-16 items-center justify-center rounded-2xl bg-brand-wash text-brand">
-          <Compass className="size-7" aria-hidden />
-        </span>
-        <p className="font-display mt-6 text-caption font-semibold uppercase tracking-[0.18em] text-brand">404</p>
-        <h1 className="font-display mt-2 text-h2 font-semibold tracking-tight text-ink">{t.baslik}</h1>
-        <p className="mt-3 max-w-md text-body text-ink-soft">{t.metin}</p>
-        <Link href={localizedPath("home", dil)} className={`${buttonClass({ size: "md" })} mt-8`}>
+    <ErrorPage
+      embedded
+      title={t.baslik}
+      message={t.metin}
+      actions={
+        <ButtonLink href={localizedPath("home", dil)} size="md">
           {t.ana}
-        </Link>
-
-        <nav aria-label={t.oneriler} className="mt-10">
-          <p className="text-caption text-ink-faint">{t.oneriler}</p>
-          <ul className="mt-3 flex flex-wrap justify-center gap-2">
-            {sayfalar.map(([anahtar, ad]) => (
-              <li key={anahtar}>
-                <Link
-                  href={localizedPath(anahtar, dil)}
-                  className="flex min-h-10 items-center rounded-full bg-surface px-4 text-caption font-medium text-ink-soft ring-1 ring-inset ring-line transition hover:text-brand hover:ring-brand/30"
-                >
-                  {ad}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </Container>
-    </main>
+        </ButtonLink>
+      }
+    >
+      <nav aria-label={t.oneriler} className="mt-10">
+        <p className="text-sm text-gray-500">{t.oneriler}</p>
+        <ul className="mt-3 flex flex-wrap justify-center gap-2">
+          {sayfalar.map(([anahtar, ad]) => (
+            <li key={anahtar}>
+              <Link
+                href={localizedPath(anahtar, dil)}
+                className="flex h-10 items-center rounded-full border border-gray-200 bg-white px-4 text-theme-sm font-medium text-gray-700 shadow-theme-xs transition hover:border-gray-300 hover:text-brand-500"
+              >
+                {ad}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </ErrorPage>
   );
 }
