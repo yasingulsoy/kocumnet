@@ -12,8 +12,8 @@ ve öğrencinin öğrenme döngüsünü kapatmak için.
 
 | # | Eksik | Kimde | Neden önemli |
 | --- | --- | --- | --- |
-| 1 | Backend yayında değil; `api.kocum.net` başka bir siteye gidiyor. Yayına alırken `backend/uploads` kalıcı bir volume'da olmalı | Sen (Dokploy, DNS) | Canlı sitede iletişim formu ve blog çalışmıyor. Volume olmazsa her dağıtımda bütün blog görselleri silinir |
-| 2 | Check-up ve panel yayında değil | Sen | Öğrenci ve içerik ekibi giremiyor |
+| 1 | ✅ **10 Ekim: yayında** (api.kocum.net, veritabanı bağlı). Kalan: `backend/uploads` kalıcı volume'u, `CRON_SECRET`, e-posta (SMTP ve MX) | Sen (Dokploy, DNS) | Volume olmazsa her dağıtımda bütün blog görselleri silinir |
+| 2 | ✅ **10 Ekim: yayında** (checkup.kocum.net, admin.kocum.net). Kalan: tohum, ilk yönetici, sitenin yeniden dağıtımı | Sen | Öğrenci ve içerik ekibi giremiyor |
 | 3 | Kazanım listesi | Hoca | Seviye 1 bu liste olmadan kurulamıyor |
 | 4 | Gerçek sorular | Hoca ve içerik ekibi | Havuz boş: öğrenci hiçbir paketi göremez |
 | 5 | Sınav sabitleri ve tarihleri | Hoca | KPSS, DGS, ALES'te yanlış götürme kuralı netleri değiştiriyor |
@@ -82,7 +82,7 @@ Tek sınavla başlamak en doğrusu. Önerim TYT ya da ALES/DGS.
 
 | İş | Boyut | Fayda |
 | --- | --- | --- |
-| **Panelden toplu içe aktarma:** dosya yükle, hata raporunu gör, onayla | Küçük-orta | Şu an yalnızca komut satırından; içerik ekibi geliştiriciye bağımlı kalmaz |
+| ✅ **Panelden toplu içe aktarma** (10 Ekim): dosya yükle, hata raporunu gör, onayla | Küçük-orta | Şu an yalnızca komut satırından; içerik ekibi geliştiriciye bağımlı kalmaz |
 | Word (.docx) dosyasından içe aktarma | Orta | Hoca Word'de yazıyorsa dönüştürme adımı kalkar |
 | Parametrik soru şablonu (panelde tanım, örnek üretme, onay) | Orta-büyük | Seviye 1 havuzu hızla dolar, telafi tükenmez |
 | İnceleme notları (soruya yorum bırakma) | Küçük | Hoca ile ekip panel içinde yazışır |
@@ -97,12 +97,12 @@ kontrol testi; seviyeli check-up; gelişim grafiği.
 
 **Önerilen eklemeler (öğrenme döngüsünü kapatmak için):**
 
-1. **Çalışma modu.** Süresiz; her sorudan sonra hemen doğru/yanlış, çözüm ve yanlış
+1. ✅ **Çalışma modu** (10 Ekim). Süresiz; her sorudan sonra hemen doğru/yanlış, çözüm ve yanlış
    şıkkın neden yanlış olduğu. Sınav modu ölçmek için kalır, çalışma modu öğretmek için.
-2. **Yanlış defteri ve aralıklı tekrar.** Her yanlış ya da boş soru deftere girer.
+2. ✅ **Yanlış defteri ve aralıklı tekrar** (10 Ekim). Her yanlış ya da boş soru deftere girer.
    1, 3 ve 7 gün sonra aynı kazanımdan benzer bir soru sorulur; doğru yapılınca defterden
    çıkar. Pedagojik değeri en yüksek ekleme bu.
-3. **"Benzerini çöz".** Sonuç ekranında her yanlışın yanında, aynı kazanımdan yeni soru.
+3. ✅ **"Benzerini çöz"** (10 Ekim). Sonuç ekranında her yanlışın yanında, aynı kazanımdan yeni soru.
 4. **Çözüm sunumu:** adım adım açılan çözüm; isteğe bağlı video bağlantısı (soruya yeni
    bir alan gerekir).
 5. **Veliye rapor bağlantısı:** salt okunur, süreli bağlantı; WhatsApp'tan paylaşılır.
@@ -121,7 +121,7 @@ kontrol testi; seviyeli check-up; gelişim grafiği.
 - **Hatırlatma:** haftalık posta hazır; tarayıcı bildirimi eklenebilir.
 
 **Koç ve içerik ekibi:**
-- Yapılacak: panelden içe aktarma ve inceleme notları.
+- Yapıldı: panelden içe aktarma (10 Ekim). Yapılacak: inceleme notları.
 - Hazır: paket düzenleyici, riskli öğrenciler, koç notu ve madde analizi. Tohum betiği
   panelde düzenlenen paketleri artık ezmiyor; yalnızca `--guncelle` ile yazıyor.
 

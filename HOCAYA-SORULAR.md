@@ -1,4 +1,4 @@
-# Serhat Hoca'ya sorular — Check-up içeriği
+# Özgür Hoca'ya sorular — Check-up içeriği
 
 Merhaba hocam. Sistem büyük ölçüde hazır; aşağıdakiler **sizin cevabınız olmadan
 kesinleşemeyen** noktalar. Her maddenin altına kısaca yazmanız yeter — tek satır bile
@@ -48,7 +48,7 @@ geri sayımı kendiliğinden çıkıyor. Bilinmeyeni boş bırakın; uydurma tar
 
 ## 2. Seviyeli check-up — kapı eşikleri
 
-Akış şemanıza göre kuruldu. Sayılar şu an böyle:
+Seviyeli akış şemasına göre kuruldu. Sayılar şu an böyle:
 
 | | Soru | Süre | Geçme eşiği |
 | --- | ---: | ---: | ---: |
@@ -91,8 +91,8 @@ oturumda bitirmeli" mi?
 v2 şablonunda her TEMEL sorunun bir ÖSYM eşi vardı ("Çift" kodu) ve dört durumlu bir
 teşhis tablosu kuruluyordu. Seviyeli akış şemasında bu yok; v3 şablonundan kaldırdık.
 
-**Soru 3.1** — Çift tasarımını bilerek mi bıraktınız? Yoksa seviyeli akışla birlikte
-yürüsün mü istiyorsunuz? (İkisi birlikte yürüyecekse şablona `Eş Soru ID` alanı geri
+**Soru 3.1** — Çift tasarımı bilerek mi bırakıldı? Yoksa seviyeli akışla birlikte
+yürüsün mü? (İkisi birlikte yürüyecekse şablona `Eş Soru ID` alanı geri
 gelir ve sonuç ekranına "temeli var ama sınav sorusunu yapamıyor" teşhisi eklenir.)
 
 > Cevap:
@@ -196,8 +196,8 @@ Hepsi şu an **ücretsiz** işaretli; ücretli/ücretsiz ayrımı panelden tek t
 
 > Cevap:
 
-**Soru 7.2** — Ürün önerileri (sonuç ekranında "bu konuyu çalışmak için") sizin
-yayınlarınıza bağlanıyor. Yayın listesi güncel mi, eklenecek/çıkarılacak var mı?
+**Soru 7.2** — Ürün önerileri (sonuç ekranında "bu konuyu çalışmak için") Koçum.Net
+yayınlarına bağlanıyor. Yayın listesi güncel mi, eklenecek/çıkarılacak var mı?
 
 > Cevap:
 
@@ -267,6 +267,112 @@ Bir öğrenci şu durumlarda listeye düşüyor:
 | Düşüşte | Son iki testte en az 10 puan düşüş |
 
 Bu sınırlar koçluk pratiğinize uyuyor mu? Hangisinde öğrenciyi aramak istersiniz?
+
+> Cevap:
+
+---
+
+## 10. Ekip, iş akışı ve öğrenme döngüsü (yeni, 10 Ekim)
+
+**Soru 10.1** — Yeni soruları kim yazacak, kim inceleyecek? Sistem "taslak → inceleme →
+yayında" akışıyla çalışıyor; yazan ile onaylayan farklı kişi olunca hatalar daha çok
+yakalanıyor. Kazanım listesi (Bölüm 4) için de bir sorumlu ve hedef tarih yazabilir misiniz?
+
+> Cevap:
+
+**Soru 10.2** — Çözüm yazımında ortak standart: her soruya adım adım çözüm ve **her yanlış
+şıkkın hangi hatadan çıktığı** (Bölüm 6.2'deki hata tipleri) yazılırsa sonuç ekranındaki
+teşhis kendiliğinden çalışıyor. Ekip bu iki alanı her soruya yazabilir mi? Zor gelen bir
+kısım varsa söyleyin, şablonu sadeleştirelim.
+
+> Cevap:
+
+**Soru 10.3** — Seviye 1 için parametrik şablon önerimiz: siz bir soru kalıbı yazıyorsunuz
+(sayı aralıkları, doğru cevabın formülü, her yanlış şıkkın hangi hatadan çıktığı); sistem
+bu kalıptan onlarca farklı soru üretip her birini denetliyor. Telafi turunda öğrenciye aynı
+soru hiç gelmiyor. Seviye 1'de bu yolla ilerleyelim mi? Seviye 2 ve 3 yine elle yazılır.
+
+> Cevap:
+
+**Soru 10.4** — Öğrenme döngüsü için iki özellik ekledik; sizin onayınızla kalıcı olacak:
+
+- **Çalışma modu:** süresiz; her sorudan sonra hemen doğru/yanlış, çözüm ve seçilen yanlış
+  şıkkın neden yanlış olduğu gösteriliyor. Sonuç ekranında her yanlışın yanında "Benzerini
+  çöz" düğmesi var. Ölçmeye karışmıyor: netlere, gelişim grafiğine ve madde analizine girmiyor.
+- **Yanlış defteri:** sınavda yanlış ya da boş bırakılan her soru deftere giriyor. Ertesi gün
+  aynı kazanımdan benzer bir soru soruluyor; doğruysa 3 gün, sonra 7 gün sonra yeniden
+  soruluyor, üçüncü doğruda defterden çıkıyor. Yanlışsa yeniden 1 güne dönüyor.
+
+Pedagojik olarak uygun mu? Tekrar aralıkları (1, 3, 7 gün) ve "üç doğru tekrarla
+defterden çıkar" kuralı sizce doğru mu?
+
+> Cevap:
+
+**Soru 10.5** — Günlük sınırlar: öğrenciye günde en fazla 10 tekrar sorusu ve 24 saatte en
+fazla 30 alıştırma sorusu veriliyor. Bu sayılar uygun mu?
+
+> Cevap:
+
+**Soru 10.6** — Benzer soru bulunamazsa ne olsun? (a) Kazanımın başka sorusu yoksa aynı
+konudan bir soru gelsin mi? (b) Hiç benzer soru yoksa öğrencinin yanlış yaptığı asıl soru
+tekrar sorulsun mu, yoksa o madde bekletilsin mi?
+
+> Cevap:
+
+**Soru 10.7** — Çalışma modunda yanlış şıkkın açıklaması, hata tipinin genel tavsiyesinden
+geliyor (ör. işlem hatası için "işlemi adım adım kontrol et"). Tek bir yanlış için bu dil
+uygun mu, yoksa her şık için kısa, soruya özel açıklama mı yazılmalı?
+
+> Cevap:
+
+**Soru 10.8** — Haftalık plandaki "Yanlışlarını deftere geçir" maddesi: yanlışlar artık
+deftere kendiliğinden giriyor. Bu madde kalksın mı, yoksa "defterdeki tekrarlarını yap"
+gibi bir maddeye mi dönüşsün?
+
+> Cevap:
+
+**Soru 10.9** — Video çözümleriniz var mı? Varsa soruya bir bağlantı alanı açarız; sonuç
+ekranında yazılı çözümün yanında çıkar.
+
+> Cevap:
+
+**Soru 10.10** — Veliye salt okunur, süreli bir rapor bağlantısı (WhatsApp'tan
+paylaşılabilir) düşünüyoruz; bugün yalnızca PDF var. Veli neyi görmeli: yalnızca genel
+tablo (net, güçlü ve zayıf konular) mı, soru soru ayrıntı da mı?
+
+> Cevap:
+
+---
+
+## 11. Soru dosyası kuralları (yeni, 10 Ekim)
+
+Soru dosyaları artık panelden de yükleniyor: önce denetim raporu çıkıyor, sonra sorular
+taslak olarak kaydediliyor. Şu kurallar sizin kararınızı bekliyor:
+
+**Soru 11.1** — Sistemin çizemediği (yazımı hatalı) formüller şu an yalnızca uyarı veriyor;
+soru yine kaydediliyor. Bu sorular hiç kaydedilmesin mi?
+
+> Cevap:
+
+**Soru 11.2** — Görsel şu an yalnızca soru metninde kullanılabiliyor; şıklarda ve çözümde
+kabul edilmiyor. Şıkları görsel olan sorular (ör. grafik seçenekleri) ya da şekilli çözümler
+olacak mı?
+
+> Cevap:
+
+**Soru 11.3** — Şablonda "Çözüm Açıklaması" zorunlu yazıyor ama içe aktarma eksikliği yalnızca
+uyarıyla geçiyor. Çözümü olmayan soru kaydedilmesin mi?
+
+> Cevap:
+
+**Soru 11.4** — Kazanım kodu yalnızca Seviye 1 sorularında zorunlu. Seviye 2 ve 3 soruları
+birden çok kazanımı birleştirdiği için bu alan orada boş kalabiliyor. Uygun mu?
+
+> Cevap:
+
+**Soru 11.5** — Yüklenen sorular varsayılan olarak taslak; içerik yetkisi olan kişi isterse
+"doğrudan yayına al" seçeneğiyle hemen yayınlayabiliyor. Bu seçenek kalsın mı, yoksa her soru
+önce incelemeden mi geçsin (Soru 10.1)?
 
 > Cevap:
 
