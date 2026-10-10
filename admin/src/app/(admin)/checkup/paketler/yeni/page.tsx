@@ -3,7 +3,7 @@ import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { paketHavuzu, paketKonulari } from "@/lib/checkup/pool";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { PackageEditor } from "@/components/checkup/PackageEditor";
-import { PageHeader } from "@/components/checkup/ui";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 
 export const metadata: Metadata = { title: "Check-up · Yeni paket" };
 
@@ -19,12 +19,12 @@ export default async function NewPackagePage() {
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[
           { href: "/checkup", label: "Check-up" },
           { href: "/checkup/paketler", label: "Paketler" },
         ]}
-        title="Yeni paket"
+        pageTitle="Yeni paket"
         description="Katalogda görünen bir check-up: sınav, konular ve her konudan kaç soru."
       />
       <PackageEditor konular={konular} havuz={havuz} />

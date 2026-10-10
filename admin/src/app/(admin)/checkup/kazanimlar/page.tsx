@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Target } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { EXAM_SCOPES, QUESTION_STATUS_LABEL, examLabel, isExamScope } from "@/lib/checkup/format";
@@ -7,19 +8,13 @@ import { konuSinavdaMi, soruSinavdaKosulu } from "@/lib/checkup/exam-scope";
 import { MIN_L1_PER_OBJECTIVE, levelSizes } from "@/lib/checkup/levels";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { ObjectiveCreateForm, ObjectiveRowEditor, type ObjectiveRow } from "@/components/checkup/ObjectiveForms";
-import {
-  Card,
-  CardHeader,
-  EmptyState,
-  FilterTabs,
-  MONO,
-  Notice,
-  PageHeader,
-  Pill,
-  ProgressLine,
-  QUESTION_STATUS_TONE,
-  qs,
-} from "@/components/checkup/ui";
+import { CODE, ProgressLine, QUESTION_STATUS_COLOR, qs } from "@/components/checkup/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { SegmentedTabs } from "@/components/tailadmin/ui/SegmentedTabs";
 
 export const metadata: Metadata = { title: "Check-up · Kazanımlar" };
 
@@ -107,18 +102,19 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[{ href: "/checkup", label: "Check-up" }]}
-        title="Kazanımlar"
+        pageTitle="Kazanımlar"
         description="Seviyeli check-up'ın yapı taşı: Seviye 1 her kazanımdan bir soru sorar. Kod kalıcıdır, soru dosyalarında bu geçer."
       />
 
-      <FilterTabs
+      <SegmentedTabs
         label="Sınav süzgeci"
         className="mb-4"
         items={[
-          { href: "/checkup/kazanimlar", label: "Tüm sınavlar", active: !sinav, count: tumSatirlar.length },
+          { key: "hepsi", href: "/checkup/kazanimlar", label: "Tüm sınavlar", active: !sinav, count: tumSatirlar.length },
           ...EXAM_SCOPES.map((s) => ({
+            key: s,
             href: qs("/checkup/kazanimlar", { sinav: s }),
             label: examLabel(s),
             active: s === sinav,
@@ -128,24 +124,22 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
       />
 
       {sinav ? (
-        <Card className="mb-4 p-5">
+        <Card className="mb-4 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1 basis-72">
-              <h2 className="font-display text-h3 font-semibold text-ink">
-                {examLabel(sinav)} seviye 1 hazırlığı
-              </h2>
-              <p className="mt-0.5 text-caption text-ink-soft">
+              <h2 className="font-display text-base font-semibold text-gray-800">{examLabel(sinav)} seviye 1 hazırlığı</h2>
+              <p className="mt-1 text-theme-sm text-gray-500">
                 {hazir >= hedef
                   ? `Seviye 1 bu sınav için açılabilir: ${hedef} kazanımın her birinde en az ${MIN_L1_PER_OBJECTIVE} yayında temel soru var.`
                   : `Seviye 1 ${hedef} kazanım ister; şu an ${hazir} tanesi hazır (yayında + en az ${MIN_L1_PER_OBJECTIVE} yayında L1 sorusu). Eksik kazanımları ekle ve her birine en az ${MIN_L1_PER_OBJECTIVE} temel soru bağla.`}
               </p>
               {tekSorulu > 0 ? (
-                <p className="mt-1 text-micro text-warn">
+                <p className="mt-1 text-theme-xs text-warning-700">
                   {tekSorulu} kazanımın tek L1 sorusu var: öğrenci o kazanımı kaçırırsa telafi turunda yeni soru gelemez.
                 </p>
               ) : null}
               {yayindaKazanim > hedef ? (
-                <p className="mt-1 text-micro text-ink-faint">
+                <p className="mt-1 text-theme-xs text-gray-500">
                   Bu sınavda {yayindaKazanim} yayında kazanım var; seviye 1 konu sırasına göre ilk {hedef} tanesini
                   sorar, kalanı hiç sorulmaz.
                 </p>
@@ -157,20 +151,21 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
           </div>
         </Card>
       ) : (
-        <Notice tone="info" className="mb-4">
+        <Alert variant="info" compact className="mb-4">
           Bir sınav seçince o sınavın seviye 1 hazırlığı (hazır kazanım / gereken) burada görünür.
-        </Notice>
+        </Alert>
       )}
 
-      <div className={yazabilir ? "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
-        <div className="min-w-0 space-y-4">
+      <div className={yazabilir ? "grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
+        <div className="min-w-0 space-y-4 md:space-y-6">
           {gruplar.size === 0 ? (
             <Card>
               <EmptyState
+                icon={<Target />}
                 title={sinav ? "Bu sınavda ölçülen kazanım yok" : "Kazanım yok"}
                 description={
                   yazabilir
-                    ? "Sağdaki formdan ilk kazanımı ekle ya da içe aktarma betiğini çalıştır."
+                    ? "Yandaki formdan ilk kazanımı ekle ya da içe aktarma betiğini çalıştır."
                     : "Kazanımlar içe aktarma betiğiyle ya da içerik ekibince eklenir."
                 }
               />
@@ -180,36 +175,43 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
               const konu = konuAdi.get(topicId);
               const konuSinavlari = konu ? (konu.examScopes as string[]) : [];
               return (
-                <Card key={topicId}>
-                  <CardHeader
-                    title={konu?.name ?? "Konu"}
-                    description={
-                      liste.length +
-                      " kazanım · " +
-                      (konu ? (konuSinavlari.length ? konuSinavlari.map(examLabel).join(", ") : examLabel(konu.examScope)) : "")
-                    }
-                  />
-                  <ul className="divide-y divide-line">
+                <ComponentCard
+                  key={topicId}
+                  flush
+                  title={konu?.name ?? "Konu"}
+                  desc={
+                    liste.length +
+                    " kazanım · " +
+                    (konu ? (konuSinavlari.length ? konuSinavlari.map(examLabel).join(", ") : examLabel(konu.examScope)) : "")
+                  }
+                >
+                  <ul className="divide-y divide-gray-100">
                     {liste.map((o) => (
-                      <li key={o.id} className="px-5 py-3 sm:px-6">
-                        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-                          <code className={MONO + " rounded bg-surface-sunk px-1.5 py-0.5 text-micro text-ink"}>{o.code}</code>
-                          <p className="min-w-0 flex-1 text-caption text-ink">{o.name}</p>
-                          <div className="flex items-center gap-1.5">
-                            <Pill tone={QUESTION_STATUS_TONE[o.status]}>{QUESTION_STATUS_LABEL[o.status]}</Pill>
-                            <Pill
-                              tone={o.l1Count >= MIN_L1_PER_OBJECTIVE ? "ok" : o.l1Count > 0 ? "warn" : "bad"}
+                      <li key={o.id} className="px-4 py-3 sm:px-6">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                          <code className={CODE}>{o.code}</code>
+                          <p className="min-w-0 flex-1 basis-48 text-theme-sm text-gray-800">{o.name}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge size="sm" color={QUESTION_STATUS_COLOR[o.status]}>
+                              {QUESTION_STATUS_LABEL[o.status]}
+                            </Badge>
+                            <Badge
+                              size="sm"
+                              color={o.l1Count >= MIN_L1_PER_OBJECTIVE ? "success" : o.l1Count > 0 ? "warning" : "error"}
                               className="tabular"
+                              title="Yayındaki seviye 1 (temel) sorusu"
                             >
-                              <span title="Yayındaki seviye 1 (temel) sorusu">{o.l1Count} L1</span>
-                            </Pill>
+                              {o.l1Count} L1
+                            </Badge>
                             {o.questionCount !== o.l1Count ? (
-                              <Pill className="tabular">{o.questionCount} soru</Pill>
+                              <Badge size="sm" color="light" className="tabular">
+                                {o.questionCount} soru
+                              </Badge>
                             ) : null}
                             {o.questionCount > 0 ? (
                               <Link
                                 href={qs("/checkup/sorular", { kazanim: o.code })}
-                                className="ms-1 text-micro font-medium text-brand hover:text-brand-hover"
+                                className="ms-1 text-theme-xs font-medium text-brand-500 hover:text-brand-600"
                               >
                                 Sorular
                               </Link>
@@ -218,31 +220,29 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
                           <ObjectiveRowEditor row={o} canEdit={yazabilir} />
                         </div>
                         {o.examScopes.length ? (
-                          <p className="mt-1 text-micro text-ink-faint">{o.examScopes.map(examLabel).join(" · ")}</p>
+                          <p className="mt-1 text-theme-xs text-gray-500">{o.examScopes.map(examLabel).join(" · ")}</p>
                         ) : null}
                       </li>
                     ))}
                   </ul>
-                </Card>
+                </ComponentCard>
               );
             })
           )}
         </div>
 
         {yazabilir ? (
-          <Card className="self-start p-5 xl:sticky xl:top-6">
-            <h2 className="font-display text-h3 font-semibold text-ink">Yeni kazanım</h2>
-            <p className="mt-0.5 text-caption text-ink-soft">
-              Soru formunda bu listeden seçilir. Kod kalıcı — sonradan değiştirmek içe aktarmayı bozar.
-            </p>
-            <div className="mt-4">
-              <ObjectiveCreateForm
-                topics={topics
-                  .filter((t) => t._count.children === 0)
-                  .map((t) => ({ id: t.id, name: t.name, scope: t.examScope }))}
-              />
-            </div>
-          </Card>
+          <ComponentCard
+            className="self-start xl:sticky xl:top-24"
+            title="Yeni kazanım"
+            desc="Soru formunda bu listeden seçilir. Kod kalıcı — sonradan değiştirmek içe aktarmayı bozar."
+          >
+            <ObjectiveCreateForm
+              topics={topics
+                .filter((t) => t._count.children === 0)
+                .map((t) => ({ id: t.id, name: t.name, scope: t.examScope }))}
+            />
+          </ComponentCard>
         ) : null}
       </div>
     </>

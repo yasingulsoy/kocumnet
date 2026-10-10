@@ -14,7 +14,9 @@ import { GateNotice } from "@/components/checkup/GateNotice";
 import { ItemAnalysisCard } from "@/components/checkup/ItemAnalysis";
 import { CopyIdButton } from "@/components/checkup/CopyIdButton";
 import { QuestionForm } from "@/components/checkup/QuestionForm";
-import { LinkButton, Notice, PageHeader, buttonClass } from "@/components/checkup/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { ButtonLink, buttonClass } from "@/components/tailadmin/ui/Button";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 
 export const metadata: Metadata = { title: "Check-up · Soruyu düzenle" };
 
@@ -86,11 +88,11 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
   if (hasUneditableBlocks(stemContent)) {
     return (
       <>
-        <PageHeader crumbs={crumbs} title="Soruyu düzenle" />
-        <Notice tone="warn" title="Bu soru metin editöründe düzenlenemiyor">
+        <PageBreadcrumb crumbs={crumbs} pageTitle="Soruyu düzenle" />
+        <Alert variant="warning" title="Bu soru metin editöründe düzenlenemiyor">
           Soru, yazım biçiminin temsil edemediği bir blok (tablo ya da altyazılı şekil)
           içeriyor. Bu formda kaydetmek o bloğu silerdi, bu yüzden düzenleme kapalı.
-        </Notice>
+        </Alert>
       </>
     );
   }
@@ -141,63 +143,64 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={crumbs}
-        title="Soruyu düzenle"
+        pageTitle="Soruyu düzenle"
         description={alt}
         actions={
           <>
             {komsu ? (
               <nav aria-label="Listede gezinme" className="flex items-center gap-1">
                 {komsu.onceki ? (
-                  <Link href={soruAdresi(komsu.onceki, geri)} className={buttonClass("ghost", "sm")} aria-label="Önceki soru">
-                    <ChevronLeft aria-hidden />
+                  <Link href={soruAdresi(komsu.onceki, geri)} className={buttonClass({ variant: "ghost", size: "xs" })} aria-label="Önceki soru">
+                    <ChevronLeft aria-hidden className="rtl:rotate-180" />
                   </Link>
                 ) : (
-                  <span className={buttonClass("ghost", "sm") + " pointer-events-none opacity-40"} aria-hidden>
-                    <ChevronLeft />
+                  <span className={buttonClass({ variant: "ghost", size: "xs" }) + " pointer-events-none opacity-40"} aria-hidden>
+                    <ChevronLeft className="rtl:rotate-180" />
                   </span>
                 )}
-                <span className="tabular min-w-16 text-center text-caption text-ink-soft">
+                <span className="tabular min-w-16 text-center text-theme-sm text-gray-500">
                   {komsu.sira ? komsu.sira + " / " + komsu.toplam : komsu.toplam + " soru"}
                 </span>
                 {komsu.sonraki ? (
-                  <Link href={soruAdresi(komsu.sonraki, geri)} className={buttonClass("ghost", "sm")} aria-label="Sonraki soru">
-                    <ChevronRight aria-hidden />
+                  <Link href={soruAdresi(komsu.sonraki, geri)} className={buttonClass({ variant: "ghost", size: "xs" })} aria-label="Sonraki soru">
+                    <ChevronRight aria-hidden className="rtl:rotate-180" />
                   </Link>
                 ) : (
-                  <span className={buttonClass("ghost", "sm") + " pointer-events-none opacity-40"} aria-hidden>
-                    <ChevronRight />
+                  <span className={buttonClass({ variant: "ghost", size: "xs" }) + " pointer-events-none opacity-40"} aria-hidden>
+                    <ChevronRight className="rtl:rotate-180" />
                   </span>
                 )}
               </nav>
             ) : null}
             <CopyIdButton id={question.id} />
             {yazabilir ? (
-              <LinkButton
+              <ButtonLink
                 href={
                   "/checkup/sorular/yeni?kopya=" +
                   encodeURIComponent(question.id) +
                   (geri ? "&geri=" + encodeURIComponent(geri) : "")
                 }
                 variant="outline"
-                size="sm"
+                size="xs"
+                startIcon={<CopyPlus />}
               >
-                <CopyPlus aria-hidden /> Benzerini oluştur
-              </LinkButton>
+                Benzerini oluştur
+              </ButtonLink>
             ) : null}
           </>
         }
       />
 
       {kaydedilen ? (
-        <Notice tone="ok" className="mb-4">
+        <Alert variant="success" compact className="mb-4">
           Önceki soru kaydedildi —{" "}
-          <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold underline underline-offset-2">
+          <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold text-gray-800 underline underline-offset-2">
             ona dön
           </Link>
           . Listede sıradaki bu.
-        </Notice>
+        </Alert>
       ) : null}
 
       <ItemAnalysisCard analysis={analysis} version={question.version} />

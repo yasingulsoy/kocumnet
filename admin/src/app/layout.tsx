@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Poppins } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
@@ -32,10 +32,14 @@ export const metadata: Metadata = {
   },
 };
 
+// Üst çubuk beyaz (TailAdmin): telefonun tarayıcı çubuğu da beyaz.
+export const viewport: Viewport = { themeColor: "#ffffff" };
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="tr" className={`${inter.variable} ${poppins.variable} antialiased`}>
-      <body className="min-h-screen bg-canvas font-sans text-ink">
+      {/* Zemin kitin grisi (DashboardShell ile aynı); arayüz TailAdmin kitinden (components/tailadmin). */}
+      <body className="min-h-screen bg-gray-50 font-sans text-gray-800">
         {children}
         <Toaster
           position="top-right"

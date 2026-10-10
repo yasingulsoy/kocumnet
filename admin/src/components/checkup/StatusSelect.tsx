@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import { setQuestionStatusAction } from "@/lib/checkup/actions/questions";
 import { QUESTION_STATUS_LABEL, QUESTION_STATUSES } from "@/lib/checkup/format";
-import { SMALL_SELECT_CLASS } from "./ui";
+import { Select } from "@/components/tailadmin/form/Select";
 
 /**
  * Listeden hızlı durum değiştirme. Bir soruyu yayına almak için formu
@@ -18,8 +18,10 @@ export function StatusSelect({ id, status }: { id: string; status: string }) {
   const [pending, start] = useTransition();
 
   return (
-    <select
+    <Select
       aria-label="Durumu değiştir"
+      compact
+      wrapperClassName="w-36"
       value={value}
       disabled={pending}
       onChange={(e) => {
@@ -36,13 +38,7 @@ export function StatusSelect({ id, status }: { id: string; status: string }) {
           }
         });
       }}
-      className={SMALL_SELECT_CLASS}
-    >
-      {QUESTION_STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {QUESTION_STATUS_LABEL[s]}
-        </option>
-      ))}
-    </select>
+      options={QUESTION_STATUSES.map((s) => ({ value: s, label: QUESTION_STATUS_LABEL[s] }))}
+    />
   );
 }

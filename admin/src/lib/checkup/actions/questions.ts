@@ -202,8 +202,12 @@ function isDuplicate(e: unknown): boolean {
  * kazanım ZORUNLU (seviye 1 seçimi kazanım üzerinden gider).
  */
 async function levelFieldsError(input: { level: string; objectiveId: string; topicId: string }): Promise<Record<string, string> | null> {
-  if (input.level && !input.objectiveId) {
-    return { objectiveId: "Seviyeli soru için kazanım seç." };
+  // Kazanım yalnızca seviye 1'de zorunlu: seviye 1 kazanım üzerinden seçilir.
+  // Seviye 2-3 seviye ölçütüyle seçilir (app/lib/level-selection.ts) ve şablon
+  // onlara kazanım yazdırmaz; içe aktarılan seviye 2-3 soruları kazanımsız gelir
+  // ve eskiden formda hiç kaydedilemiyordu.
+  if (input.level === "L1_TEMEL" && !input.objectiveId) {
+    return { objectiveId: "Seviye 1 sorusu için kazanım seç." };
   }
   if (!input.objectiveId) return null;
   const o = await db.objective.findUnique({ where: { id: input.objectiveId }, select: { topicId: true } });

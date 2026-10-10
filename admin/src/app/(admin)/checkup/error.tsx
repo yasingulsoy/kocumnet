@@ -1,10 +1,11 @@
 "use client";
 
 import { startTransition, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RotateCcw, ServerCrash } from "lucide-react";
-import { Card, MONO, buttonClass } from "@/components/checkup/ui";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { MONO } from "@/components/checkup/ui";
 
 /**
  * Check-up ekranlarında beklenmeyen hata (veritabanına ulaşılamadı, bozuk
@@ -32,35 +33,35 @@ export default function CheckupError({
 
   return (
     <Card className="mx-auto mt-6 max-w-xl p-6 sm:p-8">
-      <span className="flex size-12 items-center justify-center rounded-xl bg-bad-wash text-bad">
+      <span className="flex size-12 items-center justify-center rounded-xl bg-error-50 text-error-600">
         <ServerCrash className="size-6" aria-hidden />
       </span>
-      <h1 className="font-display mt-4 text-h2 font-semibold text-ink">Bu ekran yüklenemedi</h1>
-      <p className="mt-2 text-body text-ink-soft">
+      <h1 className="mt-4 font-display text-xl font-semibold text-gray-800">Bu ekran yüklenemedi</h1>
+      <p className="mt-2 text-sm leading-relaxed text-gray-500">
         Veritabanına ulaşılamamış ya da beklenmeyen bir hata oluşmuş olabilir. Tekrar dene; sorun
         sürerse aşağıdaki kodu teknik ekibe ilet.
       </p>
       {error.digest ? (
-        <p className="mt-3 text-micro text-ink-faint">
-          Hata kodu: <span className={MONO + " tabular text-ink-soft"}>{error.digest}</span>
+        <p className="mt-3 text-theme-xs text-gray-500">
+          Hata kodu: <span className={MONO + " tabular text-gray-700"}>{error.digest}</span>
         </p>
       ) : null}
       <div className="mt-6 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          size="xs"
+          startIcon={<RotateCcw />}
           onClick={() =>
             startTransition(() => {
               router.refresh();
               (retry ?? reset)?.();
             })
           }
-          className={buttonClass("primary", "sm")}
         >
-          <RotateCcw aria-hidden /> Tekrar dene
-        </button>
-        <Link href="/checkup" className={buttonClass("outline", "sm")}>
+          Tekrar dene
+        </Button>
+        <ButtonLink href="/checkup" variant="outline" size="xs">
           Genel bakışa dön
-        </Link>
+        </ButtonLink>
       </div>
     </Card>
   );

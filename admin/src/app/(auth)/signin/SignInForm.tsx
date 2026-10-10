@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { loginRequest } from "@/lib/api";
-import { Field, INPUT_CLASS, Notice, buttonClass } from "@/components/checkup/ui";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
 
-export function SignInForm() {
+export function SignInForm({ forgotHref }: { forgotHref: string }) {
   const router = useRouter();
   const [goster, setGoster] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
@@ -29,51 +32,54 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={gonder} className="space-y-5" noValidate>
-      {hata ? <Notice tone="bad">{hata}</Notice> : null}
+    <form onSubmit={gonder} className="space-y-6" noValidate>
+      {hata ? <Alert variant="error">{hata}</Alert> : null}
 
-      <Field label="E-posta veya kullanıcı adı" htmlFor="kimlik">
-        <input
-          id="kimlik"
+      <Field label="E-posta veya kullanıcı adı" required>
+        <Input
           name="kimlik"
           type="text"
           autoComplete="username"
           required
           autoFocus
           disabled={bekliyor}
-          className={INPUT_CLASS}
           placeholder="ad@kocum.net"
         />
       </Field>
 
-      <Field label="Parola" htmlFor="parola">
-        <div className="relative">
-          <input
-            id="parola"
-            name="parola"
-            type={goster ? "text" : "password"}
-            autoComplete="current-password"
-            required
-            disabled={bekliyor}
-            className={INPUT_CLASS + " pe-12"}
-            placeholder="••••••••"
-          />
-          <button
-            type="button"
-            onClick={() => setGoster((v) => !v)}
-            aria-label={goster ? "Parolayı gizle" : "Parolayı göster"}
-            aria-pressed={goster}
-            className="absolute inset-y-0 end-0 flex w-12 items-center justify-center text-ink-faint transition hover:text-ink"
-          >
-            {goster ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
-          </button>
-        </div>
+      <Field
+        label="Parola"
+        required
+        labelAction={
+          <a href={forgotHref} className="text-brand-500 hover:text-brand-600">
+            Parolamı unuttum
+          </a>
+        }
+      >
+        <Input
+          name="parola"
+          type={goster ? "text" : "password"}
+          autoComplete="current-password"
+          required
+          disabled={bekliyor}
+          placeholder="••••••••"
+          endSlot={
+            <button
+              type="button"
+              onClick={() => setGoster((v) => !v)}
+              aria-label={goster ? "Parolayı gizle" : "Parolayı göster"}
+              aria-pressed={goster}
+              className="flex h-full w-12 cursor-pointer items-center justify-center text-gray-500 transition hover:text-gray-700"
+            >
+              {goster ? <EyeOff className="size-5" aria-hidden /> : <Eye className="size-5" aria-hidden />}
+            </button>
+          }
+        />
       </Field>
 
-      <button type="submit" disabled={bekliyor} className={buttonClass("primary", "md") + " w-full"}>
-        {bekliyor ? <Loader2 className="animate-spin" /> : null}
+      <Button type="submit" block loading={bekliyor}>
         {bekliyor ? "Giriş yapılıyor…" : "Giriş yap"}
-      </button>
+      </Button>
     </form>
   );
 }

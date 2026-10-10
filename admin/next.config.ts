@@ -7,7 +7,9 @@ const nextConfig: NextConfig = {
     /**
      * Check-up şekil yükleme bir server action. Varsayılan gövde sınırı 1 MB:
      * telefonla çekilmiş bir şekil fotoğrafı bunu aşar ve yükleme sessizce
-     * reddedilir. Dosya sınırı 8 MB (lib/checkup/actions/media.ts); pay bırakıyoruz.
+     * reddedilir. Dosya sınırı 8 MB (lib/checkup/media-image.ts); pay bırakıyoruz.
+     * Toplu soru içe aktarma (.md + görseller tek istekte) da bu sınıra tabi:
+     * değiştirirsen lib/checkup/import-report.ts → ISTEK_SINIRI'nı da değiştir.
      */
     serverActions: {
       bodySizeLimit: "10mb",

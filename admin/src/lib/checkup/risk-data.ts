@@ -56,7 +56,8 @@ export async function loadRiskliOgrenciler(now: Date = new Date()): Promise<{ li
     WITH testler AS (
       SELECT "userId", max("submittedAt") AS son, count(*)::int AS n
       FROM "CheckupSession"
-      WHERE status = 'SUBMITTED'
+      -- Alıştırma test sayılmaz: ölçüm değil (öğrenci uygulaması, lib/practice.ts).
+      WHERE status = 'SUBMITTED' AND kind <> 'PRACTICE'
       GROUP BY "userId"
     ),
     paket AS (

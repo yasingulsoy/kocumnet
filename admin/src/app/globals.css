@@ -4,18 +4,22 @@
  * Ortak belirteçler: renk, yazı tipi, ölçek, köşe, gölge, taban kuralları.
  * Kaynak design/tokens.css — bu kopyayı ELLE DÜZENLEME, `node design/sync.mjs`.
  * Tanıtım sitesi ve check-up uygulaması aynı dosyayı kullanır.
- *
- * Eskiden burada TailAdmin şablonunun 700 satırlık kendi teması vardı
- * (Outfit, #465fff marka, gri skala, koyu tema, kaldırılmış kütüphanelerin
- * ölü CSS'i). Üç yüzey üç ayrı dil konuşuyordu; artık tek dil.
- *
- * Koyu tema YOK: check-up uygulamasıyla aynı sebep — soru görselleri beyaz
- * zeminli, KaTeX çıktısı açık zemine ayarlı.
  */
 @import "./tokens.css";
 
+/*
+ * TailAdmin kiti (MIT): kırılmalar, gri/anlam/marka ölçekleri, gölgeler,
+ * menü yardımcıları. Kaynak design/tailadmin/theme.css — bu kopyayı ELLE
+ * DÜZENLEME. Panelin bütün ekranları kitin bileşenleriyle
+ * (components/tailadmin) çiziliyor.
+ *
+ * Koyu tema YOK: soru görselleri beyaz zeminli, KaTeX çıktısı açık zemine
+ * ayarlı. Kitin dark: varyantı .dark sınıfına bağlı ve o sınıf eklenmiyor.
+ */
+@import "./tailadmin.css";
+
 /* ── Panel yoğunluğu ───────────────────────────────────────── */
-/* Araç arayüzü: başlıklar sıkı, tablolar yoğun. Aynı belirteç adları. */
+/* Araç arayüzü: başlıklar sıkı. Aynı belirteç adları (tokens.css @theme). */
 :root {
   --text-h1: 1.5rem;
   --text-h1--line-height: 1.2;
@@ -23,11 +27,6 @@
   --text-h2--line-height: 1.3;
   --text-h3: 1rem;
   --text-h3--line-height: 1.35;
-}
-
-body {
-  background: var(--canvas);
-  color: var(--ink);
 }
 
 /* ── KaTeX (soru önizlemesi) ───────────────────────────────── */
@@ -40,41 +39,4 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.25rem 0;
-}
-
-/* ── Tablolar ──────────────────────────────────────────────── */
-/* Panelde tablo çok; hücre dolgusu ve çizgi tek yerde. */
-.data-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--text-caption);
-}
-
-.data-table th {
-  padding: 0.625rem 1rem;
-  text-align: start;
-  font-size: var(--text-micro);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  background: var(--surface-sunk);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-.data-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-  color: var(--ink-soft);
-}
-
-.data-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.data-table tbody tr:hover td {
-  background: var(--surface-hover);
 }

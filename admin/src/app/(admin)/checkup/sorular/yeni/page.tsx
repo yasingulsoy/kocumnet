@@ -8,7 +8,8 @@ import { parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { QuestionForm, type QuestionInitial } from "@/components/checkup/QuestionForm";
-import { Notice, PageHeader } from "@/components/checkup/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 
 export const metadata: Metadata = { title: "Check-up · Yeni soru" };
 
@@ -119,34 +120,34 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[
           { href: "/checkup", label: "Check-up" },
           { href: listeAdresi(geri), label: "Sorular" },
         ]}
-        title={kopyaNotu ? "Benzer soru" : "Yeni soru"}
+        pageTitle={kopyaNotu ? "Benzer soru" : "Yeni soru"}
         description="Yayına almadan önce önizlemeyi öğrencinin gözüyle kontrol et."
       />
 
       {kaydedilen && !kopyaId ? (
-        <Notice tone="ok" className="mb-4">
+        <Alert variant="success" compact className="mb-4">
           Soru kaydedildi —{" "}
-          <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold underline underline-offset-2">
+          <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold text-gray-800 underline underline-offset-2">
             kaydedileni aç
           </Link>
           . Konu, seviye, kazanım ve zorluk aynen kaldı; sıradakini yaz.
-        </Notice>
+        </Alert>
       ) : null}
       {kopyaNotu ? (
-        <Notice tone="info" className="mb-4" title="Kopyadan başlıyorsun">
+        <Alert variant="info" className="mb-4" title="Kopyadan başlıyorsun">
           Kaynak: “{kopyaNotu}”. Metin aynı kaldıkça kaydedilemez — aynı soru iki kez havuza giremez.
           Sayıları ya da ifadeyi değiştir; şıkları ve çözümü buna göre güncelle.
-        </Notice>
+        </Alert>
       ) : null}
       {kopyaHatasi ? (
-        <Notice tone="warn" className="mb-4">
+        <Alert variant="warning" compact className="mb-4">
           {kopyaHatasi}
-        </Notice>
+        </Alert>
       ) : null}
 
       <QuestionForm

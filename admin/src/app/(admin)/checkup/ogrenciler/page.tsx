@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Search, UserRoundX, Users } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
 import { loadRiskliOgrenciler } from "@/lib/checkup/risk-data";
 import { GateNotice } from "@/components/checkup/GateNotice";
-import {
-  Card,
-  EmptyState,
-  INPUT_CLASS,
-  LinkButton,
-  PageHeader,
-  Pagination,
-  Pill,
-  SELECT_CLASS,
-  buttonClass,
-  qs,
-} from "@/components/checkup/ui";
+import { qs } from "@/components/checkup/ui";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { Avatar } from "@/components/tailadmin/ui/Avatar";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { Pagination } from "@/components/tailadmin/ui/Pagination";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
 
 export const metadata: Metadata = { title: "Check-up · Öğrenciler" };
 
@@ -68,9 +69,10 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
         targetExam: true,
         createdAt: true,
         lastLoginAt: true,
-        _count: { select: { checkupSessions: { where: { status: "SUBMITTED" } } } },
+        // Alıştırma (PRACTICE) test sayılmaz: ölçüm değil.
+        _count: { select: { checkupSessions: { where: { status: "SUBMITTED", kind: { not: "PRACTICE" } } } } },
         checkupSessions: {
-          where: { status: "SUBMITTED" },
+          where: { status: "SUBMITTED", kind: { not: "PRACTICE" } },
           orderBy: { submittedAt: "desc" },
           take: 1,
           select: {
@@ -91,127 +93,130 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[{ href: "/checkup", label: "Check-up" }]}
-        title="Öğrenciler"
+        pageTitle="Öğrenciler"
         description={
           trNumber(toplam) + (ara ? " öğrenci aramaya uyuyor." : " kayıtlı öğrenci.") +
           " Kişisel veri: yalnızca yönetici ve müdür görür."
         }
         actions={
-          <LinkButton href="/checkup/ogrenciler/riskli" variant="outline">
+          <ButtonLink
+            href="/checkup/ogrenciler/riskli"
+            variant="outline"
+            size="xs"
+            startIcon={<UserRoundX />}
+            endIcon={
+              <Badge size="sm" color={risk.liste.length ? "warning" : "light"} className="tabular">
+                {trNumber(risk.liste.length)}
+              </Badge>
+            }
+          >
             Riskli öğrenciler
-            <Pill tone={risk.liste.length ? "warn" : "neutral"} className="tabular">
-              {trNumber(risk.liste.length)}
-            </Pill>
-          </LinkButton>
+          </ButtonLink>
         }
       />
 
       <Card>
-        <form method="get" className="flex flex-wrap items-end gap-3 border-b border-line p-5 sm:px-6">
-          <label className="min-w-0 flex-1 basis-64">
-            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Ara</span>
-            <input name="ara" type="search" defaultValue={ara} placeholder="Ad veya e-posta…" className={INPUT_CLASS} />
-          </label>
-          <label className="min-w-0 basis-48">
-            <span className="mb-1.5 block text-micro font-medium text-ink-faint">Sırala</span>
-            <select name="sirala" defaultValue={sirala} className={SELECT_CLASS}>
-              {Object.entries(SIRALAMA).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <form method="get" role="search" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 sm:px-6 sm:py-5">
+          <Field label="Ara" className="min-w-0 grow basis-64">
+            <Input name="ara" type="search" defaultValue={ara} placeholder="Ad veya e-posta…" compact startIcon={<Search />} />
+          </Field>
+          <Field label="Sırala" className="min-w-0 grow basis-48">
+            <Select
+              name="sirala"
+              defaultValue={sirala}
+              compact
+              options={Object.entries(SIRALAMA).map(([k, v]) => ({ value: k, label: v.label }))}
+            />
+          </Field>
           <div className="flex gap-2">
-            <button type="submit" className={buttonClass("outline", "md")}>
+            <Button type="submit" variant="outline" size="xs">
               Uygula
-            </button>
+            </Button>
             {ara || sirala !== "yeni" ? (
-              <Link href="/checkup/ogrenciler" className={buttonClass("ghost", "md")}>
+              <ButtonLink href="/checkup/ogrenciler" variant="ghost" size="xs">
                 Temizle
-              </Link>
+              </ButtonLink>
             ) : null}
           </div>
         </form>
 
         {ogrenciler.length === 0 ? (
           <EmptyState
+            icon={<Users />}
             title={ara ? "Aramaya uyan öğrenci yok" : "Henüz kayıtlı öğrenci yok"}
             description={ara ? "Ad ya da e-postanın bir kısmını yazmayı dene." : undefined}
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-caption">
-              <thead>
-                <tr className="border-b border-line bg-surface-sunk text-left text-micro text-ink-faint">
-                  <th className="px-5 py-3 font-medium sm:px-6">Öğrenci</th>
-                  <th className="px-3 py-3 font-medium">Sınıf</th>
-                  <th className="px-3 py-3 font-medium">Kayıt</th>
-                  <th className="px-3 py-3 font-medium">Son giriş</th>
-                  <th className="px-3 py-3 text-end font-medium">Test</th>
-                  <th className="px-3 py-3 text-end font-medium">Son başarı</th>
-                  <th className="px-5 py-3 font-medium sm:px-6">Erişim</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {ogrenciler.map((o) => {
-                  const son = o.checkupSessions[0]?.result;
-                  const sonToplam = son ? son.correctCount + son.wrongCount + son.blankCount : 0;
-                  return (
-                    <tr key={o.id} className="group hover:bg-surface-hover">
-                      <td className="px-5 py-3 sm:px-6">
-                        <Link href={"/checkup/ogrenciler/" + o.id} className="flex items-center gap-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-micro font-semibold text-brand">
-                            {o.name.trim().charAt(0).toLocaleUpperCase("tr-TR")}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium text-ink group-hover:text-brand">
-                              {o.name}
-                            </span>
-                            <span className="block truncate text-micro text-ink-faint">{o.email}</span>
-                          </span>
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft">
-                        {gradeLabel(o.grade) ?? "—"}
-                        {o.targetExam ? <span className="text-ink-faint"> · {examLabel(o.targetExam)}</span> : null}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft" title={trDate(o.createdAt, { time: true })}>
-                        {trDate(o.createdAt)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-ink-soft">
-                        {o.lastLoginAt ? relativeDay(o.lastLoginAt, now) : <span className="text-ink-faint">hiç girmedi</span>}
-                      </td>
-                      <td className="px-3 py-3 text-end tabular text-ink">
-                        {o._count.checkupSessions}
-                      </td>
-                      <td className="px-3 py-3 text-end tabular text-ink">
-                        {son && sonToplam > 0 ? percent(son.correctCount / sonToplam) : <span className="text-ink-faint">—</span>}
-                      </td>
-                      <td className="px-5 py-3 sm:px-6">
-                        {o.entitlements.length > 0 ? (
-                          <Pill tone="brand">{o.entitlements.length} aktif hak</Pill>
-                        ) : (
-                          <span className="text-micro text-ink-faint">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell isHeader>Öğrenci</TableCell>
+                <TableCell isHeader>Sınıf</TableCell>
+                <TableCell isHeader>Kayıt</TableCell>
+                <TableCell isHeader>Son giriş</TableCell>
+                <TableCell isHeader align="end">
+                  Test
+                </TableCell>
+                <TableCell isHeader align="end" nowrap>
+                  Son başarı
+                </TableCell>
+                <TableCell isHeader>Erişim</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ogrenciler.map((o) => {
+                const son = o.checkupSessions[0]?.result;
+                const sonToplam = son ? son.correctCount + son.wrongCount + son.blankCount : 0;
+                return (
+                  <TableRow key={o.id} hover className="relative">
+                    <TableCell className="w-full max-w-0 min-w-60">
+                      <Link href={"/checkup/ogrenciler/" + o.id} className="group flex items-center gap-3 after:absolute after:inset-0">
+                        <Avatar name={o.name} size="medium" decorative />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-gray-800 group-hover:text-brand-500">{o.name}</span>
+                          <span className="block truncate text-theme-xs">{o.email}</span>
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell nowrap>
+                      {gradeLabel(o.grade) ?? "—"}
+                      {o.targetExam ? <span> · {examLabel(o.targetExam)}</span> : null}
+                    </TableCell>
+                    <TableCell nowrap title={trDate(o.createdAt, { time: true })}>
+                      {trDate(o.createdAt)}
+                    </TableCell>
+                    <TableCell nowrap>{o.lastLoginAt ? relativeDay(o.lastLoginAt, now) : "hiç girmedi"}</TableCell>
+                    <TableCell align="end">
+                      <span className="tabular text-gray-800">{o._count.checkupSessions}</span>
+                    </TableCell>
+                    <TableCell align="end">
+                      <span className="tabular text-gray-800">
+                        {son && sonToplam > 0 ? percent(son.correctCount / sonToplam) : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell nowrap>
+                      {o.entitlements.length > 0 ? (
+                        <Badge size="sm" color="primary">
+                          {o.entitlements.length} aktif hak
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </Card>
 
       <Pagination
-        page={Math.min(sayfa, sonSayfa)}
-        pages={sonSayfa}
-        href={(p) =>
-          qs("/checkup/ogrenciler", { ara, sirala: sirala !== "yeni" ? sirala : undefined, sayfa: p > 1 ? p : undefined })
-        }
+        currentPage={Math.min(sayfa, sonSayfa)}
+        totalPages={sonSayfa}
+        href={(p) => qs("/checkup/ogrenciler", { ara, sirala: sirala !== "yeni" ? sirala : undefined, sayfa: p > 1 ? p : undefined })}
       />
     </>
   );

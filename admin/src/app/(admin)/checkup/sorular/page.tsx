@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChartColumn, Plus } from "lucide-react";
+import type { ReactNode } from "react";
+import { ChartColumn, FileUp, ListChecks, Plus, Search, X } from "lucide-react";
 import { db } from "@/lib/checkup/db";
+import { partiBilgisi } from "@/lib/checkup/question-import";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import {
   QUESTION_LEVEL_LABEL,
@@ -16,25 +18,40 @@ import { listeSorgusuParams, soruAdresi } from "@/lib/checkup/question-list";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { StatusSelect } from "@/components/checkup/StatusSelect";
 import { BulkCheckbox, BulkProvider, BulkSelectAll } from "@/components/checkup/BulkStatus";
-import {
-  Card,
-  EmptyState,
-  INPUT_CLASS,
-  LinkButton,
-  MONO,
-  Notice,
-  PageHeader,
-  Pagination,
-  Pill,
-  QUESTION_STATUS_TONE,
-  SELECT_CLASS,
-  buttonClass,
-  qs,
-} from "@/components/checkup/ui";
+import { MONO, QUESTION_STATUS_COLOR, qs } from "@/components/checkup/ui";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
+import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { Pagination } from "@/components/tailadmin/ui/Pagination";
 
 export const metadata: Metadata = { title: "Check-up · Sorular" };
 
 const SAYFA_BOYU = 30;
+
+/** Etkin süzgeç çipi (kazanım, içe aktarma partisi): değer + kaldır. */
+function SuzgecCipi({ etiket, children, kaldir }: { etiket: string; children: ReactNode; kaldir: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-brand-50 py-1 ps-3 pe-1 text-theme-xs text-brand-700">
+      <span className="min-w-0 truncate">
+        <span className="text-gray-600">{etiket}:</span> <span className="font-medium">{children}</span>
+      </span>
+      <Link
+        href={kaldir}
+        aria-label={etiket + " süzgecini kaldır"}
+        title="Süzgeci kaldır"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-brand-500 transition hover:bg-brand-100"
+      >
+        <X className="size-3.5" aria-hidden />
+      </Link>
+    </span>
+  );
+}
 
 export default async function QuestionsPage({ searchParams }: PageProps<"/checkup/sorular">) {
   const gate = await checkStaff(ANY_STAFF);
@@ -46,11 +63,11 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
   // Süzgeç ve sıra tek yerde (lib/checkup/question-query.ts): soru ekranındaki
   // önceki/sonraki gezinmesi aynı listeyi izliyor.
   const suzgec = listeSuzgeci(sp);
-  const { konu, durum, ara, kazanim, eksik, sayfa } = suzgec;
+  const { konu, durum, ara, kazanim, eksik, parti, sayfa } = suzgec;
 
   const where = listeKosulu(suzgec);
 
-  const [topics, toplam, questions] = await Promise.all([
+  const [topics, toplam, questions, partiKaydi] = await Promise.all([
     db.topic.findMany({
       where: { children: { none: {} } },
       orderBy: [{ examScope: "asc" }, { name: "asc" }],
@@ -80,169 +97,194 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         objective: { select: { code: true } },
       },
     }),
+    parti ? partiBilgisi(parti) : Promise.resolve(null),
   ]);
 
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
-  const suzgecVar = Boolean(konu || durum || ara || eksik || kazanim);
+  const suzgecVar = Boolean(konu || durum || ara || eksik || kazanim || parti);
   // Soruyu açıp kaydedince bu süzgece ve sayfaya dönülür.
-  const geri = listeSorgusuParams({ ara, konu, durum, eksik, kazanim, sayfa: sayfa > 1 ? String(sayfa) : undefined });
+  const geri = listeSorgusuParams({ ara, konu, durum, eksik, kazanim, parti, sayfa: sayfa > 1 ? String(sayfa) : undefined });
 
   const kaydedilen = tek(sp.kaydedildi);
   const guncellenen = tek(sp.guncellendi);
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[{ href: "/checkup", label: "Check-up" }]}
-        title="Sorular"
+        pageTitle="Sorular"
         description={trNumber(toplam) + (suzgecVar ? " soru bu süzgeçlere uyuyor." : " soru havuzda.")}
         actions={
           <>
-            <LinkButton href="/checkup/sorular/analiz" variant="outline">
-              <ChartColumn aria-hidden /> Madde analizi
-            </LinkButton>
+            <ButtonLink href="/checkup/sorular/analiz" variant="outline" size="xs" startIcon={<ChartColumn />}>
+              Madde analizi
+            </ButtonLink>
+            <ButtonLink href="/checkup/sorular/ice-aktar" variant="outline" size="xs" startIcon={<FileUp />}>
+              {yazabilir ? "Toplu içe aktar" : "İçe aktarma geçmişi"}
+            </ButtonLink>
             {yazabilir ? (
-              <LinkButton href={"/checkup/sorular/yeni" + (geri ? "?geri=" + encodeURIComponent(geri) : "")}>
-                <Plus aria-hidden /> Yeni soru
-              </LinkButton>
+              <ButtonLink
+                href={"/checkup/sorular/yeni" + (geri ? "?geri=" + encodeURIComponent(geri) : "")}
+                size="xs"
+                startIcon={<Plus />}
+              >
+                Yeni soru
+              </ButtonLink>
             ) : null}
           </>
         }
       />
 
       {kaydedilen ? (
-        <Notice tone="ok" className="mb-4">
+        <Alert variant="success" compact className="mb-4">
           Soru kaydedildi.{" "}
           {kaydedilen !== "1" ? (
-            <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold underline underline-offset-2">
+            <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold text-gray-800 underline underline-offset-2">
               Aç
             </Link>
           ) : null}
-        </Notice>
+        </Alert>
       ) : null}
       {guncellenen ? (
-        <Notice tone="ok" className="mb-4">
+        <Alert variant="success" compact className="mb-4">
           Soru güncellendi.{" "}
           {guncellenen !== "1" ? (
-            <Link href={soruAdresi(guncellenen, geri)} className="font-semibold underline underline-offset-2">
+            <Link href={soruAdresi(guncellenen, geri)} className="font-semibold text-gray-800 underline underline-offset-2">
               Tekrar aç
             </Link>
           ) : null}
-        </Notice>
+        </Alert>
       ) : null}
 
       <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []}>
         <Card>
           {/* Süzgeçler — GET formu: seçim adres çubuğunda kalır, paylaşılabilir. */}
-          <form method="get" className="flex flex-wrap items-end gap-3 border-b border-line p-5 sm:px-6">
+          <form method="get" role="search" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 sm:px-6 sm:py-5">
             {kazanim ? <input type="hidden" name="kazanim" value={kazanim} /> : null}
-            <label className="min-w-0 flex-1 basis-60">
-              <span className="mb-1.5 block text-micro font-medium text-ink-faint">Ara</span>
-              <input
+            {parti ? <input type="hidden" name="parti" value={parti} /> : null}
+            <Field label="Ara" className="min-w-0 grow basis-60">
+              <Input
                 name="ara"
                 type="search"
                 defaultValue={ara}
                 placeholder="Metin, kaynak ya da #kimlik…"
-                className={INPUT_CLASS}
+                compact
+                startIcon={<Search />}
               />
-            </label>
+            </Field>
 
-            <label className="min-w-0 basis-60">
-              <span className="mb-1.5 block text-micro font-medium text-ink-faint">Konu</span>
-              <select name="konu" defaultValue={konu} className={SELECT_CLASS}>
+            <Field label="Konu" className="min-w-0 grow basis-60">
+              <Select name="konu" defaultValue={konu} compact>
                 <option value="">Tümü</option>
                 {topics.map((t) => (
                   <option key={t.slug} value={t.slug}>
                     {examLabel(t.examScope)} · {t.name}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Field>
 
-            <label className="min-w-0 basis-40">
-              <span className="mb-1.5 block text-micro font-medium text-ink-faint">Durum</span>
-              <select name="durum" defaultValue={durum} className={SELECT_CLASS}>
+            <Field label="Durum" className="min-w-0 grow basis-40">
+              <Select name="durum" defaultValue={durum} compact>
                 <option value="">Tümü</option>
                 {Object.entries(QUESTION_STATUS_LABEL).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Field>
 
-            <label className="min-w-0 basis-52">
-              <span className="mb-1.5 block text-micro font-medium text-ink-faint">Eksik</span>
-              <select name="eksik" defaultValue={eksik} className={SELECT_CLASS}>
+            <Field label="Eksik" className="min-w-0 grow basis-52">
+              <Select name="eksik" defaultValue={eksik} compact>
                 <option value="">Hepsi</option>
                 {Object.entries(EKSIK).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v.label}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Field>
 
             <div className="flex gap-2">
-              <button type="submit" className={buttonClass("outline", "md")}>
+              <Button type="submit" variant="outline" size="xs">
                 Süz
-              </button>
+              </Button>
               {suzgecVar ? (
-                <Link href="/checkup/sorular" className={buttonClass("ghost", "md")}>
+                <ButtonLink href="/checkup/sorular" variant="ghost" size="xs">
                   Temizle
-                </Link>
+                </ButtonLink>
               ) : null}
             </div>
           </form>
 
-          {kazanim ? (
-            <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-2.5 text-caption text-ink-soft sm:px-6">
-              Kazanım: <code className={MONO + " rounded bg-surface-sunk px-1.5 py-0.5 text-micro text-ink"}>{kazanim}</code>
-              <Link
-                href={qs("/checkup/sorular", { ara, konu, durum, eksik })}
-                className="text-micro font-medium text-brand hover:text-brand-hover"
-              >
-                kaldır
-              </Link>
+          {kazanim || parti ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 sm:px-6">
+              {kazanim ? (
+                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, parti })}>
+                  <span className={MONO}>{kazanim}</span>
+                </SuzgecCipi>
+              ) : null}
+              {parti ? (
+                <>
+                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim })}>
+                    {partiKaydi ? (
+                      <>
+                        {partiKaydi.dosyaAdi} · {trDate(partiKaydi.tarih, { time: true })}
+                      </>
+                    ) : (
+                      <span className="text-warning-700">kaydı bulunamadı (geri alınmış olabilir)</span>
+                    )}
+                  </SuzgecCipi>
+                  <Link href="/checkup/sorular/ice-aktar" className="text-theme-xs font-medium text-brand-500 hover:text-brand-600">
+                    İçe aktarma geçmişi
+                  </Link>
+                </>
+              ) : null}
             </div>
           ) : null}
 
           {questions.length === 0 ? (
             <EmptyState
+              icon={<ListChecks />}
               title={suzgecVar ? "Bu süzgeçlere uyan soru yok" : "Havuzda henüz soru yok"}
               description={suzgecVar ? "Süzgeçleri gevşetmeyi dene." : undefined}
               action={
-                !suzgecVar && yazabilir ? <LinkButton href="/checkup/sorular/yeni">İlk soruyu ekle</LinkButton> : null
+                !suzgecVar && yazabilir ? (
+                  <ButtonLink href="/checkup/sorular/yeni" size="xs" startIcon={<Plus />}>
+                    İlk soruyu ekle
+                  </ButtonLink>
+                ) : null
               }
             />
           ) : (
             <>
               {yazabilir ? (
-                <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-sunk px-5 py-2 sm:px-6">
+                <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2.5 sm:px-6">
                   <BulkSelectAll />
-                  <span className="text-micro text-ink-faint">Seçince toplu durum değiştirme çubuğu açılır.</span>
+                  <span className="hidden text-theme-xs text-gray-500 sm:inline">Seçince toplu durum değiştirme çubuğu açılır.</span>
                 </div>
               ) : null}
-              <ul className="divide-y divide-line">
+              <ul className="divide-y divide-gray-100">
                 {questions.map((q) => {
                   const ozet = (q.stemText || "metinsiz soru").slice(0, 80);
                   return (
-                    <li key={q.id} className="flex items-start gap-3 px-5 py-4 sm:px-6">
+                    <li key={q.id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                       {yazabilir ? <BulkCheckbox id={q.id} label={"Seç: " + ozet} /> : null}
                       <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-4 gap-y-2 sm:flex-nowrap">
                         <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                           <Link
                             href={soruAdresi(q.id, geri)}
-                            className="line-clamp-2 text-body font-medium text-ink hover:text-brand"
+                            className="line-clamp-2 text-sm font-medium text-gray-800 hover:text-brand-500"
                           >
                             {q.stemText || "(metinsiz soru)"}
                           </Link>
-                          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
+                          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-theme-xs text-gray-500">
                             <span>
                               {examLabel(q.topic.examScope)} · {q.topic.name}
                             </span>
                             {q.examScopes.length ? (
-                              <span className="text-brand-deep">yalnızca {q.examScopes.map(examLabel).join(", ")}</span>
+                              <span className="text-brand-700">yalnızca {q.examScopes.map(examLabel).join(", ")}</span>
                             ) : null}
                             <span>zorluk {q.difficulty}</span>
                             {q.level ? <span>{QUESTION_LEVEL_LABEL[q.level]?.split(" — ")[0]}</span> : null}
@@ -253,7 +295,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                                 {q.shownCount} kez soruldu · {percent(q.correctCount / q.shownCount)} doğru
                               </span>
                             ) : null}
-                            {q.solution === null ? <span className="text-warn">çözüm yok</span> : null}
+                            {q.solution === null ? <span className="text-warning-700">çözüm yok</span> : null}
                             {q.sourceRef ? <span>{q.sourceRef}</span> : null}
                             <span title={q.updatedByStaff ?? undefined}>
                               güncellendi {trDate(q.updatedAt, { year: false })}
@@ -265,7 +307,9 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                         </div>
 
                         <div className="flex shrink-0 items-center gap-2">
-                          <Pill tone={QUESTION_STATUS_TONE[q.status]}>{QUESTION_STATUS_LABEL[q.status]}</Pill>
+                          <Badge size="sm" color={QUESTION_STATUS_COLOR[q.status]}>
+                            {QUESTION_STATUS_LABEL[q.status]}
+                          </Badge>
                           {/* key: toplu değişiklikten sonra seçim kutusu yeni durumla yeniden kurulsun. */}
                           {yazabilir ? <StatusSelect key={q.id + q.status} id={q.id} status={q.status} /> : null}
                         </div>
@@ -279,9 +323,9 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         </Card>
 
         <Pagination
-          page={Math.min(sayfa, sonSayfa)}
-          pages={sonSayfa}
-          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, sayfa: p > 1 ? p : undefined })}
+          currentPage={Math.min(sayfa, sonSayfa)}
+          totalPages={sonSayfa}
+          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, parti, sayfa: p > 1 ? p : undefined })}
         />
       </BulkProvider>
     </>

@@ -48,6 +48,10 @@ const MODULLER = [
   // etiketi. Panel koç notunu "bu haftanın" planına yazıyor; hafta sınırı
   // öğrencinin gördüğüyle aynı olmalı. Yalnızca ./scoring'den tip alıyor.
   "coaching.ts",
+  // Soru dosyası içe aktarma: SORU-SABLONU çözümleme ve denetimi. Komut
+  // satırı betiği (app/scripts/import-questions.mts) ile panelin "Toplu içe
+  // aktar" ekranı aynı kuralla reddetsin. Yukarıdaki modüllerden içe aktarıyor.
+  "question-import.ts",
 ];
 
 /**

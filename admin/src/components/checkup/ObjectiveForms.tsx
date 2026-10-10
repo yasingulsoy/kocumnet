@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import clsx from "clsx";
 import toast from "react-hot-toast";
-import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createObjectiveAction,
   deleteObjectiveAction,
@@ -11,7 +10,16 @@ import {
   type ObjectiveFormState,
 } from "@/lib/checkup/actions/objectives";
 import { EXAM_LABEL, EXAM_SCOPES, QUESTION_STATUS_LABEL, QUESTION_STATUSES } from "@/lib/checkup/format";
-import { Field, INPUT_CLASS, MONO, Notice, SELECT_CLASS, buttonClass } from "./ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { Field, FieldHint } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { labelClass } from "@/components/tailadmin/form/styles";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { useOnay } from "./Onay";
+import { MONO } from "./ui";
 
 /*
  * Formlar `<form action>` ile DEĞİL, onSubmit'te action'ı elle çağırarak
@@ -40,15 +48,17 @@ export interface ObjectiveRow {
   questionCount: number;
 }
 
+const DURUM_SECENEKLERI = QUESTION_STATUSES.map((s) => ({ value: s, label: QUESTION_STATUS_LABEL[s] }));
+
 function ScopeChecks({ secili, name = "examScopes" }: { secili: string[]; name?: string }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {EXAM_SCOPES.map((k) => (
         <label
           key={k}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-micro text-ink-soft has-[:checked]:border-brand has-[:checked]:bg-brand-wash has-[:checked]:text-brand has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand"
+          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-theme-xs font-medium text-gray-700 transition hover:bg-gray-50 has-checked:border-brand-500 has-checked:bg-brand-50 has-checked:text-brand-500"
         >
-          <input type="checkbox" name={name} value={k} defaultChecked={secili.includes(k)} className="size-3 accent-brand" />
+          <Checkbox name={name} value={k} defaultChecked={secili.includes(k)} />
           {EXAM_LABEL[k]}
         </label>
       ))}
@@ -90,79 +100,44 @@ export function ObjectiveCreateForm({ topics }: { topics: TopicOpt[] }) {
           if (kod instanceof HTMLInputElement) kod.focus();
         });
       }}
-      className="space-y-4"
+      className="space-y-5"
     >
-      {state.error ? <Notice>{state.error}</Notice> : null}
+      {state.error ? <Alert variant="error">{state.error}</Alert> : null}
 
-      <Field label="Konu" error={state.fields?.topicId} htmlFor="kazanim-konu">
-        <select id="kazanim-konu" name="topicId" required className={SELECT_CLASS} defaultValue="">
+      <Field label="Konu" required error={state.fields?.topicId}>
+        <Select name="topicId" required defaultValue="">
           <option value="">Seç…</option>
           {topics.map((t) => (
             <option key={t.id} value={t.id}>
               {(EXAM_LABEL[t.scope] ?? t.scope) + " · " + t.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
-      <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
-        <Field
-          label="Kod"
-          htmlFor="kazanim-kod"
-          error={state.fields?.code}
-          hint="Soru dosyalarında geçen kalıcı kod. Örn: TYT.PROB.03"
-        >
-          <input
-            id="kazanim-kod"
-            name="code"
-            required
-            maxLength={40}
-            autoComplete="off"
-            className={clsx(INPUT_CLASS, MONO, "uppercase")}
-            placeholder="TYT.PROB.03"
-          />
+      <div className="grid gap-5 sm:grid-cols-[160px_1fr]">
+        <Field label="Kod" required error={state.fields?.code} hint="Soru dosyalarında geçen kalıcı kod. Örn: TYT.PROB.03">
+          <Input name="code" required maxLength={40} autoComplete="off" className={cx(MONO, "uppercase")} placeholder="TYT.PROB.03" />
         </Field>
-        <Field label="Kazanım" htmlFor="kazanim-ad" error={state.fields?.name} hint="Öğrencinin karnesinde bu cümle görünür.">
-          <input
-            id="kazanim-ad"
-            name="name"
-            required
-            maxLength={200}
-            className={INPUT_CLASS}
-            placeholder="Yüzde problemlerinde kâr-zarar oranını hesaplar"
-          />
+        <Field label="Kazanım" required error={state.fields?.name} hint="Öğrencinin karnesinde bu cümle görünür.">
+          <Input name="name" required maxLength={200} placeholder="Yüzde problemlerinde kâr-zarar oranını hesaplar" />
         </Field>
       </div>
       <fieldset>
-        <legend className="mb-1.5 block text-caption font-medium text-ink">Hangi sınavlarda ölçülür</legend>
+        <legend className={cx(labelClass, "mb-1.5")}>Hangi sınavlarda ölçülür</legend>
         <ScopeChecks secili={[]} />
-        <p className="mt-1.5 text-micro text-ink-faint">Hiçbiri seçilmezse konunun geçtiği her sınavda.</p>
+        <FieldHint>Hiçbiri seçilmezse konunun geçtiği her sınavda.</FieldHint>
       </fieldset>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Durum" htmlFor="kazanim-durum" hint="Yalnızca “Yayında” kazanımlar seviye 1'e girer.">
-          <select id="kazanim-durum" name="status" defaultValue="DRAFT" className={SELECT_CLASS}>
-            {QUESTION_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {QUESTION_STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Durum" hint="Yalnızca “Yayında” kazanımlar seviye 1'e girer.">
+          <Select name="status" defaultValue="DRAFT" options={DURUM_SECENEKLERI} />
         </Field>
-        <Field label="Sıra" htmlFor="kazanim-sira" hint="Konu içindeki sırası (karne düzeni).">
-          <input
-            id="kazanim-sira"
-            name="sortOrder"
-            type="number"
-            min={0}
-            max={9999}
-            defaultValue={0}
-            className={INPUT_CLASS}
-          />
+        <Field label="Sıra" hint="Konu içindeki sırası (karne düzeni).">
+          <Input name="sortOrder" type="number" min={0} max={9999} defaultValue={0} />
         </Field>
       </div>
-      <button type="submit" disabled={pending} className={buttonClass("primary", "md")}>
-        {pending ? <Loader2 className="animate-spin" /> : <Plus />}
+      <Button type="submit" loading={pending} startIcon={<Plus />}>
         {pending ? "Ekleniyor…" : "Kazanım ekle"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -173,40 +148,49 @@ export function ObjectiveRowEditor({ row, canEdit }: { row: ObjectiveRow; canEdi
   const [state, setState] = useState<ObjectiveFormState>({});
   const [pending, start] = useTransition();
   const [silPending, startSil] = useTransition();
+  const onayla = useOnay();
 
   if (!acik) {
     return (
       <div className="flex items-center gap-1">
         {canEdit ? (
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="xs"
+              startIcon={<Pencil />}
               onClick={() => {
                 setState({});
                 setAcik(true);
               }}
-              className={buttonClass("ghost", "xs")}
               aria-label={row.code + " kazanımını düzenle"}
             >
-              <Pencil /> Düzenle
-            </button>
-            <button
-              type="button"
-              disabled={silPending || row.questionCount > 0}
+              Düzenle
+            </Button>
+            <Button
+              variant="danger-outline"
+              size="xs"
+              loading={silPending}
+              disabled={row.questionCount > 0}
               title={row.questionCount > 0 ? "Sorusu olan kazanım silinmez; arşivle." : "Sil"}
-              onClick={() => {
-                if (!window.confirm(`${row.code} silinsin mi?`)) return;
+              onClick={async () => {
+                const evet = await onayla({
+                  title: row.code + " silinsin mi?",
+                  description: "Kazanım kalıcı olarak silinir; sorusu yok.",
+                  confirmLabel: "Sil",
+                  tone: "danger",
+                });
+                if (!evet) return;
                 startSil(async () => {
                   const r = await deleteObjectiveAction(row.id);
                   if (r.ok) toast.success(`${row.code} silindi.`);
                   else toast.error(r.error ?? "Silinemedi.");
                 });
               }}
-              className={clsx(buttonClass("ghost", "xs"), "text-bad disabled:text-ink-muted")}
               aria-label={row.code + " kazanımını sil"}
             >
-              <Trash2 />
-            </button>
+              <Trash2 aria-hidden />
+            </Button>
           </>
         ) : null}
       </div>
@@ -230,30 +214,25 @@ export function ObjectiveRowEditor({ row, canEdit }: { row: ObjectiveRow; canEdi
       onKeyDown={(e) => {
         if (e.key === "Escape") setAcik(false);
       }}
-      className="mt-2 w-full space-y-3 rounded-xl border border-brand/20 bg-brand-wash/40 p-3"
+      className="mt-2 w-full space-y-3 rounded-xl border border-brand-100 bg-brand-25 p-3"
     >
       <input type="hidden" name="id" value={row.id} />
-      {state.error ? <Notice>{state.error}</Notice> : null}
+      {state.error ? (
+        <Alert variant="error" compact>
+          {state.error}
+        </Alert>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-        <Field label="Kod" htmlFor={"kod-" + row.id} error={state.fields?.code}>
-          <input
-            id={"kod-" + row.id}
-            name="code"
-            defaultValue={row.code}
-            required
-            maxLength={40}
-            autoComplete="off"
-            className={clsx(INPUT_CLASS, MONO, "h-9 uppercase")}
-          />
+        <Field label="Kod" error={state.fields?.code}>
+          <Input name="code" defaultValue={row.code} required maxLength={40} autoComplete="off" compact className={cx(MONO, "uppercase")} />
         </Field>
-        <Field label="Kazanım" htmlFor={"ad-" + row.id} error={state.fields?.name}>
-          <input
-            id={"ad-" + row.id}
+        <Field label="Kazanım" error={state.fields?.name}>
+          <Input
             name="name"
             defaultValue={row.name}
             required
             maxLength={200}
-            className={clsx(INPUT_CLASS, "h-9")}
+            compact
             // Düzenle'ye basınca doğrudan yazmaya başlanabilsin.
             autoFocus
           />
@@ -264,34 +243,15 @@ export function ObjectiveRowEditor({ row, canEdit }: { row: ObjectiveRow; canEdi
         <ScopeChecks secili={row.examScopes} />
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
-        <select name="status" defaultValue={row.status} className={clsx(SELECT_CLASS, "h-9")} aria-label="Durum">
-          {QUESTION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {QUESTION_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-        <input
-          name="sortOrder"
-          type="number"
-          min={0}
-          max={9999}
-          defaultValue={row.sortOrder}
-          className={clsx(INPUT_CLASS, "h-9")}
-          aria-label="Sıra"
-        />
+        <Select name="status" defaultValue={row.status} compact aria-label="Durum" options={DURUM_SECENEKLERI} />
+        <Input name="sortOrder" type="number" min={0} max={9999} defaultValue={row.sortOrder} compact aria-label="Sıra" />
         <div className="flex gap-1">
-          <button type="submit" disabled={pending} className={buttonClass("primary", "sm")}>
-            {pending ? <Loader2 className="animate-spin" /> : null} Kaydet
-          </button>
-          <button
-            type="button"
-            onClick={() => setAcik(false)}
-            className={buttonClass("ghost", "sm")}
-            aria-label="Düzenlemeyi kapat"
-          >
-            <X />
-          </button>
+          <Button type="submit" size="xs" loading={pending}>
+            Kaydet
+          </Button>
+          <Button variant="ghost" size="xs" onClick={() => setAcik(false)} aria-label="Düzenlemeyi kapat">
+            <X aria-hidden />
+          </Button>
         </div>
       </div>
     </form>

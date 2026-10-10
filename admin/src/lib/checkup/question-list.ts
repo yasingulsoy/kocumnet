@@ -10,8 +10,11 @@
  * yere dönülüyor.
  */
 
-/** Listenin anladığı süzgeçler. Başka hiçbir şey taşınmaz (açık yönlendirme yok). */
-const LISTE_ANAHTARLARI = ["ara", "konu", "durum", "eksik", "kazanim", "sayfa"] as const;
+/**
+ * Listenin anladığı süzgeçler. Başka hiçbir şey taşınmaz (açık yönlendirme yok).
+ * `parti`: toplu içe aktarma kimliği (İçe aktarma geçmişi → "Soruları aç").
+ */
+const LISTE_ANAHTARLARI = ["ara", "konu", "durum", "eksik", "kazanim", "parti", "sayfa"] as const;
 
 /** Ham sorgu dizesinden yalnızca liste süzgeçlerini süzer. */
 export function listeSorgusu(raw: string | null | undefined): string {

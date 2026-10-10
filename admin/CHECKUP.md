@@ -7,7 +7,8 @@ bağlanır; backend yalnızca giriş ve oturum doğrulaması için kullanılır.
 | Ekran | Adres | Kim görür |
 |---|---|---|
 | Genel bakış — kayıt/test sayıları, son 14 gün, içerik kuyruğu, dikkat isteyen paketler, zorlanılan konular | `/checkup` | tüm personel (öğrenci adları yalnızca yönetici/müdür) |
-| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım), hızlı ve toplu durum değiştirme | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
+| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım, içe aktarma partisi `?parti=`), hızlı ve toplu durum değiştirme | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
+| Toplu içe aktar — SORU-SABLONU `.md` + görseller (klasör seçimi ya da sürükle-bırak); **Denetle** (soru başına hata/uyarı, çift kayıt, hiçbir şey yazılmaz) → **Taslak olarak kaydet** (isteğe bağlı doğrudan yayın); içe aktarma geçmişi ve **Geri al** | `/checkup/sorular/ice-aktar` | geçmiş: tüm personel; içe aktarma ve geri alma: yazma rolleri |
 | Soru ekle / düzenle — `$…$` yazımı, canlı KaTeX önizleme, şekil yükleme, madde analizi kartı, "kaydet ve yenisini ekle", "benzerini oluştur", süzgeçli listede önceki/sonraki ve "kaydet ve sonrakine geç" | `/checkup/sorular/yeni`, `/[id]` | yazma: yönetici, müdür, editör |
 | Madde analizi — gerçek cevaplardan doğru oranı, ayırt edicilik, şık dağılımı, süre ve bulgular; sınav ve dönem süzgeci, CSV, önerilen zorluğu toplu uygulama (yazma rolleri) | `/checkup/sorular/analiz`, `/analiz/csv` | tüm personel (kişisel veri yok) |
 | Havuz durumu — katalog paketi × konu doldurulabilirlik, zorluk bantları | `/checkup/havuz` | tüm personel |
@@ -40,9 +41,12 @@ src/lib/checkup/
   coach-note.ts    Koç notu sınırı ve temizliği (düzenleyici ve eylem ortak)
   package-rules.ts Paket düzenleme kuralları (MIN_PER_TOPIC, sınırlar, adres önerisi) — istemci ve sunucu ortak
   package-save.ts  Katalog paketi doğrulama ve yazma (server-only; yetkiyi eylem denetler)
+  question-import.ts Toplu içe aktarma: dosya okuma, denetim bağlamı, görsel çevirme, yazma, geri alma, geçmiş (server-only)
+  import-report.ts İçe aktarma rapor tipleri ve sınırları (10 MB) — istemci ve sunucu ortak
+  media-image.ts   Görsel → WebP (EXIF, 1200 px) — tek şekil yükleme ve toplu içe aktarma ortak
   format.ts        Etiketler (sınav, sınıf, durum), tarih/sayı biçimleri (Türkiye saati)
   actions/         Server action'lar: sorular (seviye, kazanım, hedef sınav; toplu durum; önerilen zorluk),
-                   kazanımlar, şekil, erişim hakkı, paket, plan (koç notu)
+                   kazanımlar, şekil, erişim hakkı, paket, plan (koç notu), toplu içe aktarma
   shared/          ⚠️ app/lib'den KOPYA — elle düzenlemeyin (aşağıya bakın)
   generated/       Prisma client (gitignore'da, üretilir)
 src/components/checkup/   Ekran bileşenleri (ortak tasarım belirteçleri: src/app/tokens.css)
@@ -89,7 +93,8 @@ zaman verdi/aldı kayıtta kalır.
 - Kopyalanan saf modüller (`scripts/checkup-sync.mjs` → `MODULLER`): question-content,
   question-markup, error-types, scoring, insights, **exams** (sınav listesi, sınıf adları),
   **levels** (seviye soru sayıları), **exam-scope** (sınav kapsamı kuralı), **coaching**
-  (hafta başı, hafta etiketi). Panelde elle tutulan ayna kalmadı: hoca bir sayıyı
+  (hafta başı, hafta etiketi), **question-import** (SORU-SABLONU dosyasını çözümleme ve
+  denetleme; `app/scripts/import-questions.mts` ile aynı kurallar). Panelde elle tutulan ayna kalmadı: hoca bir sayıyı
   değiştirince `checkup:check` (CI dahil) kopya eskiyse hata verir.
 - Paylaşılan modül `@/...` import edemez (kopyada başka yeri gösterir). Tek istisna
   Prisma'nın üretilmiş TİPLERİNİN `import type`ı: betik yolu panelin client'ına çevirir
@@ -160,6 +165,26 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   Ayrıntı: `app/DEPLOY.md` §3.
 - **Görseller veritabanında** (`MediaAsset.data`); SVG kabul edilmiyor (script
   taşıyabilir), yükleme 8 MB / 1200 px / WebP.
+- **Toplu içe aktarma** komut satırıyla aynı kuralları kullanır (`shared/question-import.ts`):
+  çift kayıt (dosyada ve havuzdaki TÜM sorularda, parmak izi), `validateChoices`, sınav
+  kapsamı, kazanım/seviye kodları; panel her sorunun bütün hatalarını ve uyarılarını
+  (tanınmayan alan, çözümsüz soru, KaTeX'in çizemediği formül, şık sayısı) gösterir.
+  "Denetle" hiçbir şey yazmaz; "Kaydet" dosyaları yeniden gönderir ve baştan denetler
+  (istemcideki rapora güvenilmez). Geçerli sorular tek `ImportBatch` partisinde, tek
+  işlemde yazılır (`createdByStaff` damgası); görseller tek şekil yüklemeyle aynı biçimde
+  (`media-image.ts`) ve `import/<parti>/<dosya>` anahtarıyla saklanır. Doğrudan yayına
+  alma, paneldeki durum değiştirmeyle aynı yetkide (yazma rolleri), onay sorarak.
+- **Geri al** komut satırının `--geri-al`'ıyla aynı kural: yalnızca hiçbir öğrenciye
+  sorulmamış (SessionItem'ı olmayan; alıştırma da sayılır) sorular silinir. Yanlış defterindeki
+  soru zaten cevaplanmış olduğundan korunur. Kalanlar partide durur, parti
+  "kısmen geri alındı" olur ve ekran neyin neden korunduğunu yazar. Görsel yalnızca artık
+  hiçbir soruda geçmiyorsa silinir (korunan soru ya da "benzerini oluştur" kopyası
+  kullanıyor olabilir); kazanım yalnızca bu partiyle açılmış ve sorusu kalmamışsa. Geri
+  alanın adı tabloda tutulmuyor, sunucu günlüğüne yazılıyor.
+- **İçe aktarmanın gövde sınırı 10 MB** (`next.config.ts` ile `import-report.ts`
+  `ISTEK_SINIRI` aynı olmalı). Next aşan isteği bağlantıyı keserek reddediyor, tarayıcı
+  sebebi göremiyor; bu yüzden ekran dosya toplamını göndermeden önce denetler
+  (multipart için 256 KB pay) ve sunucu aynı sınırı yeniden uygular.
 - Tek aralıklı yazı için `components/checkup/ui.tsx`'teki `MONO` (`font-mono`,
   tokens.css'teki `--font-mono`). `tailwind-merge` (v2) bu bölümde kullanılmıyor:
   `text-theme-xs` gibi v4 belirteçlerini renk sanıp siliyor.

@@ -2,12 +2,18 @@
 
 import { useActionState, useTransition } from "react";
 import toast from "react-hot-toast";
+import { KeyRound } from "lucide-react";
 import {
   grantEntitlementAction,
   revokeEntitlementAction,
   type GrantState,
 } from "@/lib/checkup/actions/students";
-import { Field, INPUT_CLASS, Notice, SELECT_CLASS, buttonClass } from "./ui";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { useOnay } from "./Onay";
 
 const initial: GrantState = {};
 
@@ -29,53 +35,42 @@ export function GrantForm({
   const [state, formAction, pending] = useActionState(grantEntitlementAction, initial);
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-5">
       <input type="hidden" name="userId" value={userId} />
 
-      {state.error ? <Notice>{state.error}</Notice> : null}
-      {state.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
+      {state.error ? <Alert variant="error" compact>{state.error}</Alert> : null}
+      {state.ok ? <Alert variant="success" compact>{state.ok}</Alert> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Kapsam" htmlFor="grant-package">
-          <select
-            id="grant-package"
-            name="packageId"
-            className={SELECT_CLASS}
-            defaultValue={packages[0]?.id ?? "all"}
-          >
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field label="Kapsam">
+          <Select name="packageId" defaultValue={packages[0]?.id ?? "all"}>
             <option value="all">Tüm paketler (abonelik)</option>
             {packages.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
 
-        <Field label="Süre" htmlFor="grant-days">
-          <select id="grant-days" name="days" className={SELECT_CLASS} defaultValue="0">
+        <Field label="Süre">
+          <Select name="days" defaultValue="0">
             <option value="0">Süresiz</option>
             <option value="30">30 gün</option>
             <option value="90">90 gün</option>
             <option value="180">180 gün</option>
             <option value="365">1 yıl</option>
-          </select>
+          </Select>
         </Field>
       </div>
 
-      <Field label="Not" htmlFor="grant-note" hint="Ör. havale dekont no, promosyon kodu. Uyuşmazlıkta kayıt olur.">
-        <input
-          id="grant-note"
-          name="note"
-          maxLength={200}
-          placeholder="Havale — 21.09.2026"
-          className={INPUT_CLASS}
-        />
+      <Field label="Not" optional hint="Ör. havale dekont no, promosyon kodu. Uyuşmazlıkta kayıt olur.">
+        <Input name="note" maxLength={200} placeholder="Havale — 21.09.2026" />
       </Field>
 
-      <button type="submit" disabled={pending} className={buttonClass("primary", "sm")}>
+      <Button type="submit" size="xs" loading={pending} startIcon={<KeyRound />}>
         {pending ? "Veriliyor…" : "Erişim hakkı ver"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -83,24 +78,29 @@ export function GrantForm({
 /** Hakkı geri al. Satır silinmiyor, revokedAt işaretleniyor (kayıt kalsın). */
 export function RevokeButton({ id, label }: { id: string; label: string }) {
   const [pending, start] = useTransition();
+  const onayla = useOnay();
 
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => {
-        if (!window.confirm(`"${label}" erişimi geri alınsın mı? Öğrenci bu kapsamda yeni test başlatamaz.`)) {
-          return;
-        }
+    <Button
+      variant="danger-outline"
+      size="xs"
+      loading={pending}
+      onClick={async () => {
+        const evet = await onayla({
+          title: `"${label}" erişimi geri alınsın mı?`,
+          description: "Öğrenci bu kapsamda yeni test başlatamaz. Hak silinmez; kim, ne zaman geri aldı kayıtta kalır.",
+          confirmLabel: "Geri al",
+          tone: "danger",
+        });
+        if (!evet) return;
         start(async () => {
           const res = await revokeEntitlementAction(id);
           if (res.ok) toast.success("Erişim geri alındı.");
           else toast.error(res.error ?? "Geri alınamadı.");
         });
       }}
-      className={buttonClass("danger", "xs")}
     >
-      {pending ? "…" : "Geri al"}
-    </button>
+      Geri al
+    </Button>
   );
 }

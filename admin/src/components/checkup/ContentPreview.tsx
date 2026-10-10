@@ -36,7 +36,7 @@ function renderLatex(latex: string, displayMode: boolean): string {
 /** Görseller check-up veritabanında; panel kendi yetkili rotasından sunuyor. */
 export const mediaUrl = (id: string) => "/api/checkup-media/" + encodeURIComponent(id);
 
-function Inline({ nodes }: { nodes: InlineNode[] }) {
+function Inline({ nodes, src }: { nodes: InlineNode[]; src: (id: string) => string }) {
   return (
     <>
       {nodes.map((node, i) => {
@@ -50,7 +50,7 @@ function Inline({ nodes }: { nodes: InlineNode[] }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={i}
-              src={mediaUrl(node.mediaId)}
+              src={src(node.mediaId)}
               alt={node.alt}
               className="inline-block h-[1.4em] w-auto align-text-bottom"
             />
@@ -68,22 +68,28 @@ export function ContentPreview({
   markup,
   compact = false,
   placeholder = "Önizleme burada görünecek.",
+  gorselAdresi = mediaUrl,
 }: {
   markup: string;
   /** Şık önizlemesi: formüller satır içi, dikey boşluk yok. */
   compact?: boolean;
   placeholder?: string;
+  /**
+   * Görsel kimliğinden adres. Varsayılan: kayıtlı görsel (panelin rotası).
+   * Toplu içe aktarma henüz yüklenmemiş dosyayı tarayıcıdaki kopyasından gösterir.
+   */
+  gorselAdresi?: (id: string) => string;
 }) {
   const content = useMemo(() => markupToContent(markup), [markup]);
 
   if (!content.blocks.length) {
-    return <p className="text-caption italic text-ink-faint">{placeholder}</p>;
+    return <p className="text-theme-sm text-gray-500 italic">{placeholder}</p>;
   }
 
   return (
     <div
       className={
-        "text-ink " + (compact ? "text-body" : "space-y-1 text-read")
+        "text-gray-800 " + (compact ? "text-body" : "space-y-1 text-read")
       }
     >
       {content.blocks.map((block, i) => {
@@ -91,7 +97,7 @@ export function ContentPreview({
           case "paragraph":
             return (
               <p key={i} className={compact ? "leading-normal" : "leading-[1.75]"}>
-                <Inline nodes={block.content} />
+                <Inline nodes={block.content} src={gorselAdresi} />
               </p>
             );
 
@@ -115,7 +121,7 @@ export function ContentPreview({
               <ul key={i} className="my-3 space-y-1.5">
                 {block.items.map((item, j) => (
                   <li key={j} className="flex gap-2.5">
-                    <span className="min-w-[1.75rem] shrink-0 text-caption font-medium text-ink-faint">
+                    <span className="min-w-[1.75rem] shrink-0 text-theme-sm font-medium text-gray-500">
                       {block.style === "roman"
                         ? (ROMAN[j] ?? j + 1) + "."
                         : block.style === "ordered"
@@ -123,7 +129,7 @@ export function ContentPreview({
                           : "•"}
                     </span>
                     <span className="leading-[1.7]">
-                      <Inline nodes={item} />
+                      <Inline nodes={item} src={gorselAdresi} />
                     </span>
                   </li>
                 ))}
@@ -135,11 +141,11 @@ export function ContentPreview({
               <figure key={i} className="my-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={mediaUrl(block.mediaId)}
+                  src={gorselAdresi(block.mediaId)}
                   alt={block.alt}
-                  className="mx-auto max-h-64 max-w-full rounded-lg border border-line bg-surface"
+                  className="mx-auto max-h-64 max-w-full rounded-lg border border-gray-200 bg-white"
                 />
-                <figcaption className="mt-1 text-center text-micro text-ink-faint">
+                <figcaption className="mt-1 text-center text-theme-xs text-gray-500">
                   {block.alt}
                 </figcaption>
               </figure>

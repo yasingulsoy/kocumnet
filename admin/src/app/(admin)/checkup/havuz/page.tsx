@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import clsx from "clsx";
 import { ANY_STAFF, checkStaff } from "@/lib/checkup/staff";
 import { BLUEPRINT_KINDS, PACKAGE_STATE_LABEL, loadPackageHealth, loadTopicPool } from "@/lib/checkup/pool";
 import { QUESTION_STATUS_LABEL, examLabel, trNumber } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
-import { Card, CardHeader, PACKAGE_STATE_TONE, PageHeader, Pill, qs } from "@/components/checkup/ui";
+import { PACKAGE_STATE_COLOR, qs } from "@/components/checkup/ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Badge } from "@/components/tailadmin/ui/Badge";
+import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
 
 export const metadata: Metadata = { title: "Check-up · Havuz durumu" };
 
@@ -27,52 +31,48 @@ export default async function PoolPage() {
 
   return (
     <>
-      <PageHeader
+      <PageBreadcrumb
         crumbs={[{ href: "/checkup", label: "Check-up" }]}
-        title="Havuz durumu"
-        description={
-          trNumber(toplamYayinda) + " soru yayında, " + trNumber(toplamTaslak) + " taslak / incelemede."
-        }
+        pageTitle="Havuz durumu"
+        description={trNumber(toplamYayinda) + " soru yayında, " + trNumber(toplamTaslak) + " taslak / incelemede."}
       />
 
       <section aria-labelledby="havuz-paketler">
-        <h2 id="havuz-paketler" className="font-display text-h2 font-semibold text-ink">
+        <h2 id="havuz-paketler" className="font-display text-lg font-semibold text-gray-800">
           Katalog paketleri
         </h2>
-        <p className="mt-0.5 max-w-3xl text-caption text-ink-faint">
+        <p className="mt-1 max-w-3xl text-theme-sm text-gray-500">
           Bir paket, istediği her konuda paketin sınavında sorulabilen yeterli yayında soru yoksa
           başlatılamaz. Tekrar engeli yüzünden ihtiyacın 2 katı sağlıklı sayılır — öğrenci aynı paketi
           ikinci kez çözebilsin. Seviyeli check-up ve konu tekrar testlerinin hazırlığı{" "}
-          <Link href="/checkup/paketler" className="font-medium text-brand hover:text-brand-hover">
+          <Link href="/checkup/paketler" className="font-medium text-brand-500 hover:text-brand-600">
             Paketler
           </Link>{" "}
           sayfasında.
         </p>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
           {packages.map((p) => (
             <Card key={p.id} className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-body font-semibold text-ink">{p.name}</p>
-                  <p className="mt-0.5 text-micro text-ink-faint">
-                    {examLabel(p.examScope)} · {p.questionCount} soru · {p.topicCount} konu ·{" "}
-                    {QUESTION_STATUS_LABEL[p.status]}
+                  <p className="truncate text-sm font-semibold text-gray-800">{p.name}</p>
+                  <p className="mt-0.5 text-theme-xs text-gray-500">
+                    {examLabel(p.examScope)} · {p.questionCount} soru · {p.topicCount} konu · {QUESTION_STATUS_LABEL[p.status]}
                   </p>
                 </div>
-                <Pill tone={PACKAGE_STATE_TONE[p.state]}>{PACKAGE_STATE_LABEL[p.state]}</Pill>
+                <Badge size="sm" color={PACKAGE_STATE_COLOR[p.state]}>
+                  {PACKAGE_STATE_LABEL[p.state]}
+                </Badge>
               </div>
 
               {p.gaps.length > 0 ? (
-                <ul className="mt-4 space-y-1.5 border-t border-line pt-3 text-caption">
+                <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-theme-sm">
                   {p.gaps.map((g) => (
                     <li key={g.name} className="flex justify-between gap-3">
-                      <span className="truncate text-ink-soft">{g.name}</span>
+                      <span className="truncate text-gray-600">{g.name}</span>
                       <span
-                        className={clsx(
-                          "shrink-0 tabular font-medium",
-                          g.have < g.need ? "text-bad" : "text-warn"
-                        )}
+                        className={cx("tabular shrink-0 font-medium", g.have < g.need ? "text-error-600" : "text-warning-700")}
                         title={"Yayında " + g.have + ", sağlıklı havuz için " + g.need * 2}
                       >
                         {g.have}/{g.need * 2}
@@ -81,7 +81,7 @@ export default async function PoolPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="mt-4 border-t border-line pt-3 text-caption text-ok">
+                <p className={cx("mt-4 border-t border-gray-100 pt-3 text-theme-sm", p.topicCount === 0 ? "text-error-600" : "text-success-700")}>
                   {p.topicCount === 0 ? "Pakette konu tanımlı değil." : "Her konuda yeterli soru var."}
                 </p>
               )}
@@ -90,79 +90,83 @@ export default async function PoolPage() {
         </div>
       </section>
 
-      <Card className="mt-8">
-        <CardHeader
-          title="Konular"
-          description="Seçim algoritması kolay %30 · orta %50 · zor %20 dağılımı arar; her bantta yayında soru olmalı."
-        />
-        <div className="scroll-x">
-          <table className="data-table min-w-[44rem]">
-            <thead>
-              <tr>
-                <th scope="col">Konu</th>
-                <th scope="col" className="text-end">
-                  Yayında
-                </th>
-                <th scope="col" className="text-end">
-                  Kolay
-                </th>
-                <th scope="col" className="text-end">
-                  Orta
-                </th>
-                <th scope="col" className="text-end">
-                  Zor
-                </th>
-                <th scope="col" className="text-end">
-                  Taslak
-                </th>
-                <th scope="col">
-                  <span className="sr-only">Durum ve bağlantı</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {topicRows.map((r) => {
-                const eksikBant = r.published > 0 && (r.easy === 0 || r.medium === 0 || r.hard === 0);
-                return (
-                  <tr key={r.topicId}>
-                    <td>
-                      <span className="me-2 rounded bg-surface-sunk px-1.5 py-0.5 text-micro font-semibold text-ink-faint">
-                        {examLabel(r.examScope)}
-                      </span>
-                      <span className="font-medium text-ink">{r.name}</span>
-                    </td>
-                    <td
-                      className={clsx(
-                        "text-end tabular font-medium",
-                        r.published === 0 ? "text-bad" : "text-ink"
-                      )}
+      <ComponentCard
+        className="mt-8"
+        title="Konular"
+        desc="Seçim algoritması kolay %30 · orta %50 · zor %20 dağılımı arar; her bantta yayında soru olmalı."
+        flush
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableCell isHeader>Konu</TableCell>
+              <TableCell isHeader align="end">
+                Yayında
+              </TableCell>
+              <TableCell isHeader align="end">
+                Kolay
+              </TableCell>
+              <TableCell isHeader align="end">
+                Orta
+              </TableCell>
+              <TableCell isHeader align="end">
+                Zor
+              </TableCell>
+              <TableCell isHeader align="end">
+                Taslak
+              </TableCell>
+              <TableCell isHeader align="end">
+                <span className="sr-only">Durum ve bağlantı</span>
+              </TableCell>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {topicRows.map((r) => {
+              const eksikBant = r.published > 0 && (r.easy === 0 || r.medium === 0 || r.hard === 0);
+              return (
+                <TableRow key={r.topicId} hover>
+                  <TableCell>
+                    <Badge size="sm" color="light" className="me-2">
+                      {examLabel(r.examScope)}
+                    </Badge>
+                    <span className="font-medium text-gray-800">{r.name}</span>
+                  </TableCell>
+                  <TableCell align="end">
+                    <span className={cx("tabular font-medium", r.published === 0 ? "text-error-600" : "text-gray-800")}>{r.published}</span>
+                  </TableCell>
+                  <NumCell value={r.easy} />
+                  <NumCell value={r.medium} />
+                  <NumCell value={r.hard} />
+                  <TableCell align="end" className="tabular">
+                    {r.draft || ""}
+                  </TableCell>
+                  <TableCell align="end" nowrap>
+                    {eksikBant ? (
+                      <Badge size="sm" color="warning">
+                        zorluk dengesiz
+                      </Badge>
+                    ) : null}
+                    <Link
+                      href={qs("/checkup/sorular", { konu: r.slug })}
+                      className="ms-3 text-theme-sm font-medium text-brand-500 hover:text-brand-600"
                     >
-                      {r.published}
-                    </td>
-                    <NumCell value={r.easy} />
-                    <NumCell value={r.medium} />
-                    <NumCell value={r.hard} />
-                    <td className="text-end tabular text-ink-faint">{r.draft || ""}</td>
-                    <td className="whitespace-nowrap text-end">
-                      {eksikBant ? <Pill tone="warn">zorluk dengesiz</Pill> : null}
-                      <Link
-                        href={qs("/checkup/sorular", { konu: r.slug })}
-                        className="ms-3 text-caption font-medium text-brand hover:text-brand-hover"
-                      >
-                        Sorular
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                      Sorular
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </ComponentCard>
     </>
   );
 }
 
 function NumCell({ value }: { value: number }) {
-  return <td className={clsx("text-end tabular", value === 0 ? "text-bad" : "text-ink-soft")}>{value}</td>;
+  return (
+    <TableCell align="end">
+      <span className={cx("tabular", value === 0 && "text-error-600")}>{value}</span>
+    </TableCell>
+  );
 }

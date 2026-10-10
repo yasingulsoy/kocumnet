@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import clsx from "clsx";
 import toast from "react-hot-toast";
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
 import { savePackageAction } from "@/lib/checkup/actions/packages";
 import type { PaketKayitSonucu } from "@/lib/checkup/package-save";
 import { EXAM_LABEL, EXAM_SCOPES, QUESTION_STATUSES, QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
@@ -24,8 +22,17 @@ import {
   type HavuzSayisi,
   type KonuHavuzu,
 } from "@/lib/checkup/package-rules";
+import { cx } from "@/components/tailadmin/cx";
+import { Field } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
 import { useUnsavedGuard } from "./useUnsavedGuard";
-import { Card, CardHeader, Field, INPUT_CLASS, MONO, Notice, Pill, SELECT_CLASS, TEXTAREA_CLASS, buttonClass, type Tone } from "./ui";
+import { CODE, MONO } from "./ui";
 
 /**
  * Katalog paketi düzenleyici (yalnızca yönetici/müdür; sayfa ve eylem
@@ -56,7 +63,7 @@ export interface DuzenlenenPaket {
 type Satir = { key: number; topicId: string; count: string };
 type Hata = Extract<PaketKayitSonucu, { ok: false }>;
 
-const HAVUZ_TON: Record<KonuHavuzu, Tone> = { ready: "ok", narrow: "warn", blocked: "bad" };
+const HAVUZ_RENGI: Record<KonuHavuzu, BadgeColor> = { ready: "success", narrow: "warning", blocked: "error" };
 const HAVUZ_ETIKET: Record<KonuHavuzu, string> = { ready: "yeterli", narrow: "dar", blocked: "yetmiyor" };
 const BOS_HAVUZ: HavuzSayisi = { have: 0, easy: 0, medium: 0, hard: 0 };
 
@@ -220,44 +227,41 @@ export function PackageEditor({
       }}
     >
       <div className="space-y-4">
-        <Notice tone="info">
+        <Alert variant="info" compact>
           Paket ayarları test başlarken kopyalanır: değişiklik yalnızca bundan sonra başlayan testleri etkiler.
           Süren ve bitmiş testler eski hâliyle kalır.
-        </Notice>
-        {hata?.error ? <Notice>{hata.error}</Notice> : null}
+        </Alert>
+        {hata?.error ? <Alert variant="error">{hata.error}</Alert> : null}
       </div>
 
-      <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-6">
-          <Card>
-            <CardHeader title="Paket" description="Öğrencinin katalogda gördüğü ad, özet ve süre." />
-            <div className="space-y-4 p-5 sm:p-6">
+      <div className="mt-4 grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4 md:space-y-6">
+          <ComponentCard title="Paket" desc="Öğrencinin katalogda gördüğü ad, özet ve süre.">
+            <div className="space-y-5">
               {yeni ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Sınav" htmlFor="paket-sinav" error={alanHatasi("examScope")} hint="Sonradan değişmez: yanlış götürme oranı ve konu kapsamı buna bağlı.">
-                    <select
-                      id="paket-sinav"
-                      value={sinav}
-                      onChange={(e) => setSinav(e.target.value)}
-                      required
-                      className={SELECT_CLASS}
-                    >
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <Field
+                    label="Sınav"
+                    required
+                    error={alanHatasi("examScope")}
+                    hint="Sonradan değişmez: yanlış götürme oranı ve konu kapsamı buna bağlı."
+                  >
+                    <Select value={sinav} onChange={(e) => setSinav(e.target.value)} required>
                       <option value="">Seç…</option>
                       {EXAM_SCOPES.map((s) => (
                         <option key={s} value={s}>
                           {EXAM_LABEL[s] ?? s}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </Field>
                   <Field
                     label="Adres"
-                    htmlFor="paket-slug"
+                    required
                     error={alanHatasi("slug")}
                     hint="Kalıcı: paket oluşturulduktan sonra değişmez (bağlantılar ve kayıtlar buna bağlı)."
                   >
-                    <input
-                      id="paket-slug"
+                    <Input
                       value={gorunenSlug}
                       onChange={(e) => {
                         setSlugElle(true);
@@ -268,86 +272,83 @@ export function PackageEditor({
                       maxLength={SLUG_SINIR.max}
                       pattern="[a-z0-9]+(-[a-z0-9]+)*"
                       autoComplete="off"
-                      className={clsx(INPUT_CLASS, MONO)}
+                      className={MONO}
                       placeholder="tyt-geometri-2"
                     />
                   </Field>
                 </div>
               ) : (
-                <p className="text-caption text-ink-soft">
-                  {EXAM_LABEL[paket.examScope] ?? paket.examScope} ·{" "}
-                  <span className={MONO + " rounded bg-surface-sunk px-1.5 py-0.5 text-micro text-ink"}>{paket.slug}</span>{" "}
-                  <span className="text-ink-faint">— sınav ve adres kalıcıdır.</span>
+                <p className="text-theme-sm text-gray-500">
+                  {EXAM_LABEL[paket.examScope] ?? paket.examScope} · <code className={CODE}>{paket.slug}</code>{" "}
+                  — sınav ve adres kalıcıdır.
                 </p>
               )}
 
-              <Field label="Ad" htmlFor="paket-ad" error={alanHatasi("name")}>
-                <input
-                  id="paket-ad"
+              <Field label="Ad" required error={alanHatasi("name")}>
+                <Input
                   value={ad}
                   onChange={(e) => setAd(e.target.value)}
                   required
                   minLength={AD_SINIR.min}
                   maxLength={AD_SINIR.max}
-                  className={INPUT_CLASS}
                   placeholder="TYT Geometri"
                 />
               </Field>
 
               <Field
                 label="Özet"
-                htmlFor="paket-ozet"
                 error={alanHatasi("summary")}
                 hint={ozet.trim().length + "/" + OZET_SINIR + " · Katalog kartında görünür; ne ölçtüğünü bir cümleyle söyle."}
               >
-                <textarea
-                  id="paket-ozet"
+                <TextArea
                   rows={2}
                   value={ozet}
                   onChange={(e) => setOzet(e.target.value)}
                   maxLength={OZET_SINIR + 50}
-                  className={TEXTAREA_CLASS}
                   placeholder="Açılar, üçgenler, dörtgenler ve çemberde temel seviye ölçümü."
                 />
               </Field>
 
               <Field
                 label="Süre (dakika)"
-                htmlFor="paket-sure"
+                required
                 error={alanHatasi("durationMinutes")}
                 hint={toplam > 0 ? toplam + " soru için " + Math.round((Number(sure) * 60) / toplam) + " sn/soru" : undefined}
               >
-                <input
-                  id="paket-sure"
+                <Input
                   type="number"
                   min={SURE_SINIR.min}
                   max={SURE_SINIR.max}
                   value={sure}
                   onChange={(e) => setSure(e.target.value)}
                   required
-                  className={clsx(INPUT_CLASS, "max-w-40")}
+                  fullWidth={false}
+                  className="w-40"
                 />
               </Field>
             </div>
-          </Card>
+          </ComponentCard>
 
-          <Card>
-            <CardHeader
-              title="Konu dağılımı"
-              description={
-                "Konu başına en az " +
-                MIN_PER_TOPIC +
-                " soru. Havuz: paketin sınavında sorulabilen yayındaki sorular (öğrenci uygulamasının seçim kuralıyla)."
-              }
-              action={
-                <span className="text-micro tabular text-ink-faint">
-                  {satirlar.length}/{MAX_KONU} konu · {toplam} soru
-                </span>
-              }
-            />
-            <div className="space-y-3 p-5 sm:p-6">
-              {alanHatasi("topics") ? <Notice>{alanHatasi("topics")}</Notice> : null}
-              {!sinav ? <Notice tone="info">Önce sınavı seç: konular sınava göre listelenir.</Notice> : null}
+          <ComponentCard
+            title="Konu dağılımı"
+            desc={
+              "Konu başına en az " +
+              MIN_PER_TOPIC +
+              " soru. Havuz: paketin sınavında sorulabilen yayındaki sorular (öğrenci uygulamasının seçim kuralıyla)."
+            }
+            actions={
+              <span className="tabular text-theme-xs text-gray-500">
+                {satirlar.length}/{MAX_KONU} konu · {toplam} soru
+              </span>
+            }
+          >
+            <div className="space-y-3">
+              {alanHatasi("topics") ? <Alert variant="error" compact>{alanHatasi("topics")}</Alert> : null}
+              {!sinav ? (
+                <Alert variant="info" compact>
+                  Önce sınavı seç: konular sınava göre listelenir.
+                </Alert>
+              ) : null}
 
               <ol className="space-y-3">
                 {satirlar.map((s, i) => {
@@ -358,24 +359,18 @@ export function PackageEditor({
                   return (
                     <li
                       key={s.key}
-                      className={clsx(
-                        "rounded-xl border p-3",
-                        mesaj && s.topicId ? "border-bad/40 bg-bad-wash/40" : "border-line"
-                      )}
+                      className={cx("rounded-xl border p-3", mesaj && s.topicId ? "border-error-300 bg-error-25" : "border-gray-200")}
                     >
                       <div className="grid gap-2 sm:grid-cols-[2rem_minmax(0,1fr)_6.5rem_auto] sm:items-center">
-                        <span className="hidden text-center text-micro font-semibold text-ink-faint tabular sm:block">{i + 1}</span>
-                        <select
+                        <span className="tabular hidden text-center text-theme-xs font-semibold text-gray-500 sm:block">{i + 1}</span>
+                        <Select
                           value={s.topicId}
                           onChange={(e) => satirDegistir(i, { topicId: e.target.value })}
                           aria-label={i + 1 + ". konu"}
                           disabled={!sinav}
-                          className={SELECT_CLASS}
                         >
                           <option value="">Konu seç…</option>
-                          {s.topicId && !listede && konu ? (
-                            <option value={s.topicId}>{konu.name} (bu sınavda yok)</option>
-                          ) : null}
+                          {s.topicId && !listede && konu ? <option value={s.topicId}>{konu.name} (bu sınavda yok)</option> : null}
                           {[...gruplar.entries()].map(([grup, liste]) => (
                             <optgroup key={grup} label={grup}>
                               {liste.map((k) => (
@@ -385,61 +380,63 @@ export function PackageEditor({
                               ))}
                             </optgroup>
                           ))}
-                        </select>
-                        <input
+                        </Select>
+                        <Input
                           type="number"
                           min={MIN_PER_TOPIC}
                           max={MAX_PER_TOPIC}
                           value={s.count}
                           onChange={(e) => satirDegistir(i, { count: e.target.value })}
                           aria-label={i + 1 + ". konunun soru sayısı"}
-                          className={clsx(INPUT_CLASS, "tabular")}
+                          className="tabular"
                         />
                         <div className="flex items-center justify-end gap-0.5">
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="xs"
                             onClick={() => tasi(i, -1)}
                             disabled={i === 0}
-                            className={buttonClass("ghost", "xs")}
                             aria-label={i + 1 + ". konuyu yukarı taşı"}
                           >
                             <ArrowUp aria-hidden />
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
                             onClick={() => tasi(i, 1)}
                             disabled={i === satirlar.length - 1}
-                            className={buttonClass("ghost", "xs")}
                             aria-label={i + 1 + ". konuyu aşağı taşı"}
                           >
                             <ArrowDown aria-hidden />
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="danger-outline"
+                            size="xs"
                             onClick={() => setSatirlar((onceki) => onceki.filter((_, j) => j !== i))}
-                            className={clsx(buttonClass("ghost", "xs"), "text-bad")}
                             aria-label={i + 1 + ". konuyu çıkar"}
                           >
                             <Trash2 aria-hidden />
-                          </button>
+                          </Button>
                         </div>
                       </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro sm:ps-10">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-theme-xs sm:ps-10">
                         {mesaj ? (
-                          <span role={d.sunucu ? "alert" : undefined} className={s.topicId || d.sunucu ? "text-bad" : "text-ink-faint"}>
+                          <span role={d.sunucu ? "alert" : undefined} className={s.topicId || d.sunucu ? "text-error-600" : "text-gray-500"}>
                             {mesaj}
                           </span>
                         ) : d.havuzDurumu ? (
                           <>
-                            <Pill tone={HAVUZ_TON[d.havuzDurumu]}>Havuz {HAVUZ_ETIKET[d.havuzDurumu]}</Pill>
-                            <span className="tabular text-ink-soft">
+                            <Badge size="sm" color={HAVUZ_RENGI[d.havuzDurumu]}>
+                              Havuz {HAVUZ_ETIKET[d.havuzDurumu]}
+                            </Badge>
+                            <span className="tabular text-gray-600">
                               {d.h.have} yayında soru · paket {d.n} istiyor
                             </span>
-                            <span className="tabular text-ink-faint">
+                            <span className="tabular text-gray-500">
                               kolay {d.h.easy} · orta {d.h.medium} · zor {d.h.hard}
                             </span>
                             {d.eksikBant.length ? (
-                              <span className="text-warn">{d.eksikBant.join(", ")} bandı eksik (seçim gevşer, zorluk kayar)</span>
+                              <span className="text-warning-700">{d.eksikBant.join(", ")} bandı eksik (seçim gevşer, zorluk kayar)</span>
                             ) : null}
                           </>
                         ) : null}
@@ -449,16 +446,11 @@ export function PackageEditor({
                 })}
               </ol>
 
-              <button
-                type="button"
-                onClick={ekle}
-                disabled={!sinav || satirlar.length >= MAX_KONU}
-                className={buttonClass("outline", "sm")}
-              >
-                <Plus aria-hidden /> Konu ekle
-              </button>
+              <Button variant="outline" size="xs" onClick={ekle} disabled={!sinav || satirlar.length >= MAX_KONU} startIcon={<Plus />}>
+                Konu ekle
+              </Button>
             </div>
-          </Card>
+          </ComponentCard>
         </div>
 
         {/* ── Sağ: durum ve kaydet ─────────────────────────── */}
@@ -466,52 +458,47 @@ export function PackageEditor({
           <Card className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-display tabular text-num-sm font-bold text-ink">{toplam}</p>
-                <p className="text-micro text-ink-faint">
+                <p className="tabular font-display text-title-sm font-bold text-gray-800">{toplam}</p>
+                <p className="text-theme-xs text-gray-500">
                   soru · {satirlar.length} konu · {Number(sure) || 0} dk
                 </p>
               </div>
-              <Pill tone={HAVUZ_TON[genelHavuz]}>
+              <Badge size="sm" color={HAVUZ_RENGI[genelHavuz]}>
                 {genelHavuz === "ready" ? "Başlatılabilir" : genelHavuz === "narrow" ? "Havuz dar" : "Başlatılamaz"}
-              </Pill>
+              </Badge>
             </div>
 
-            <div className="mt-4">
-              <Field label="Durum" htmlFor="paket-durum" error={alanHatasi("status")}>
-                <select id="paket-durum" value={durum} onChange={(e) => setDurum(e.target.value)} className={SELECT_CLASS}>
+            <div className="mt-5">
+              <Field label="Durum" error={alanHatasi("status")}>
+                <Select value={durum} onChange={(e) => setDurum(e.target.value)}>
                   {QUESTION_STATUSES.map((s) => (
                     <option key={s} value={s} disabled={s === "PUBLISHED" && !yayinlanabilir && durum !== "PUBLISHED"}>
                       {QUESTION_STATUS_LABEL[s]}
                       {s === "PUBLISHED" && !yayinlanabilir ? " — havuz yetmiyor" : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               {yayinEngeli ? (
-                <p className="mt-2 text-micro text-bad">
+                <p className="mt-2 text-theme-xs text-error-600">
                   Havuzu yetmeyen konu varken yayında kaydedilemez. Taslak seç; havuz dolunca yayına alırsın.
                 </p>
               ) : null}
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <button
-                type="submit"
-                disabled={pending || yayinEngeli}
-                className={clsx(buttonClass("primary", "md"), "flex-1")}
-              >
-                {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
+              <Button type="submit" loading={pending} disabled={yayinEngeli} startIcon={<Save />} className="flex-1">
                 {pending ? "Kaydediliyor…" : yeni ? "Paketi oluştur" : "Değişiklikleri kaydet"}
-              </button>
-              <Link href="/checkup/paketler" className={buttonClass("outline", "md")}>
+              </Button>
+              <ButtonLink href="/checkup/paketler" variant="outline">
                 Vazgeç
-              </Link>
+              </ButtonLink>
             </div>
-            <p className="mt-3 text-micro text-ink-faint" aria-live="polite">
+            <p className="mt-3 text-theme-xs text-gray-500" aria-live="polite">
               {kirli ? "Kaydedilmemiş değişiklik var · " : ""}Ctrl/⌘ + S kaydeder.
             </p>
           </Card>
-          <p className="px-1 text-micro text-ink-faint">
+          <p className="px-1 text-theme-xs text-gray-500">
             Ücretli/ücretsiz ayarı burada değişmez{yeni ? "; yeni paket şemadaki varsayılanla ücretsiz başlar" : ""}. Yanlış
             götürme oranı sınavdan gelir.
           </p>

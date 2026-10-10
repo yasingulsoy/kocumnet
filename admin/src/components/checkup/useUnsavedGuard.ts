@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, type RefObject } from "react";
-
-const AYRILMA_UYARISI = "Kaydedilmemiş değişiklikler var. Sayfadan çıkarsan kaybolacak. Çıkılsın mı?";
+import { useRouter } from "next/navigation";
+import { useOnay } from "./Onay";
 
 /**
  * Kaydedilmemiş değişiklik varken sayfadan ayrılmadan önce sorar.
@@ -10,13 +10,18 @@ const AYRILMA_UYARISI = "Kaydedilmemiş değişiklikler var. Sayfadan çıkarsan
  * - Sekmeyi kapatma, yenileme, başka siteye gitme: tarayıcının kendi uyarısı
  *   (beforeunload).
  * - Panel içi bağlantılar (kenar çubuğu, Vazgeç, gezinti izi) istemci
- *   tarafında gezdiği için beforeunload'a düşmez; tıklama yakalama evresinde
- *   soruluyor. Next'in Link'i `defaultPrevented` olayda gezinmiyor.
+ *   tarafında gezdiği için beforeunload'a düşmez; tıklama `window` üzerinde,
+ *   yakalama evresinde (React'in dinleyicilerinden ÖNCE) durdurulur ve kitin
+ *   onay penceresi sorar. "Yine de çık" denirse aynı adrese yönlendiriciyle
+ *   gidilir.
  * - Tarayıcının geri/ileri tuşu yakalanmaz (istemci yönlendirmesi).
  *
  * `gonderiliyor` doğruyken (kayıt sürüyor, yönlendirme gelecek) sorulmaz.
  */
 export function useUnsavedGuard(kirli: boolean, gonderiliyor: RefObject<boolean>) {
+  const onayla = useOnay();
+  const router = useRouter();
+
   useEffect(() => {
     if (!kirli) return;
     const kapanis = (e: BeforeUnloadEvent) => {
@@ -33,16 +38,24 @@ export function useUnsavedGuard(kirli: boolean, gonderiliyor: RefObject<boolean>
       const hedef = new URL(a.href, window.location.href);
       if (hedef.origin !== window.location.origin) return; // tam sayfa geçişi: beforeunload sorar
       if (hedef.pathname === window.location.pathname && hedef.search === window.location.search) return;
-      if (!window.confirm(AYRILMA_UYARISI)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      void onayla({
+        title: "Kaydedilmemiş değişiklikler var",
+        description: "Sayfadan çıkarsan kaydedilmemiş değişiklikler kaybolacak. Yine de çıkılsın mı?",
+        confirmLabel: "Yine de çık",
+        cancelLabel: "Sayfada kal",
+        // Değişiklik kaybolur: odak "Sayfada kal"da başlasın (yanlışlıkla Enter çıkarmasın).
+        tone: "danger",
+      }).then((evet) => {
+        if (evet) router.push(hedef.pathname + hedef.search + hedef.hash);
+      });
     };
     window.addEventListener("beforeunload", kapanis);
-    document.addEventListener("click", tiklama, true);
+    window.addEventListener("click", tiklama, true);
     return () => {
       window.removeEventListener("beforeunload", kapanis);
-      document.removeEventListener("click", tiklama, true);
+      window.removeEventListener("click", tiklama, true);
     };
-  }, [kirli, gonderiliyor]);
+  }, [kirli, gonderiliyor, onayla, router]);
 }

@@ -19,6 +19,8 @@ import {
  * Hangi cevaplar sayılır:
  * - Yalnızca TAMAMLANMIŞ testler (SUBMITTED). Süresi dolan testler de cron
  *   tarafından puanlanıp SUBMITTED olur; yarım kalan test sayılmaz.
+ * - Alıştırma (PRACTICE) SAYILMAZ: orada her cevaptan sonra çözüm gösteriliyor,
+ *   cevaplar ölçüm değil. Sayılsaydı soru olduğundan kolay görünürdü.
  * - Yalnızca sorunun ŞU ANKİ sürümü (SessionItem.questionVersion). Cevap
  *   anahtarı değişince sürüm artar ve eski cevapların doğru/yanlış bilgisi
  *   eski anahtara göredir — karıştırılırsa düzeltilen soru "hâlâ hatalı"
@@ -104,7 +106,7 @@ export async function loadItemAnalysis(kapsam: AnalizKapsami = {}): Promise<Item
       SELECT si."sessionId" AS sid, si."questionId" AS qid, si."questionVersion" AS qv,
              a."choiceId" AS cid, a."timeSpentMs" AS ms, COALESCE(a."isCorrect", false) AS ok
       FROM "SessionItem" si
-      JOIN "CheckupSession" s ON s.id = si."sessionId" AND s.status = 'SUBMITTED'
+      JOIN "CheckupSession" s ON s.id = si."sessionId" AND s.status = 'SUBMITTED' AND s.kind <> 'PRACTICE'
       ${sinavSuzgeci}
       LEFT JOIN "Answer" a ON a."sessionItemId" = si.id
       ${donemSuzgeci}
@@ -225,7 +227,7 @@ export async function loadQuestionAnalysis(q: {
       WITH sess AS (
         SELECT si."sessionId" AS sid
         FROM "SessionItem" si
-        JOIN "CheckupSession" s ON s.id = si."sessionId" AND s.status = 'SUBMITTED'
+        JOIN "CheckupSession" s ON s.id = si."sessionId" AND s.status = 'SUBMITTED' AND s.kind <> 'PRACTICE'
         WHERE si."questionId" = ${q.id} AND si."questionVersion" = ${q.version}
       ),
       totals AS (
@@ -245,7 +247,7 @@ export async function loadQuestionAnalysis(q: {
       WHERE si."questionId" = ${q.id} AND si."questionVersion" = ${q.version}
     `,
     db.sessionItem.count({
-      where: { questionId: q.id, questionVersion: { not: q.version }, session: { status: "SUBMITTED" } },
+      where: { questionId: q.id, questionVersion: { not: q.version }, session: { status: "SUBMITTED", kind: { not: "PRACTICE" } } },
     }),
   ]);
 

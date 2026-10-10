@@ -1,8 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import clsx from "clsx";
+import { Save } from "lucide-react";
 import {
   createQuestionAction,
   updateQuestionAction,
@@ -11,21 +10,20 @@ import {
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
 import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "@/lib/checkup/format";
 import { listeAdresi } from "@/lib/checkup/question-list";
+import { cx } from "@/components/tailadmin/cx";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { Field, FieldError, FieldHint } from "@/components/tailadmin/form/Field";
+import { Input } from "@/components/tailadmin/form/Input";
+import { Select } from "@/components/tailadmin/form/Select";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { labelClass } from "@/components/tailadmin/form/styles";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
+import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { ContentPreview } from "./ContentPreview";
 import { ImageUploader } from "./ImageUploader";
 import { useUnsavedGuard } from "./useUnsavedGuard";
-import {
-  Card,
-  CardHeader,
-  Field,
-  INPUT_CLASS,
-  MONO,
-  Notice,
-  SELECT_CLASS,
-  SMALL_SELECT_CLASS,
-  TEXTAREA_CLASS,
-  buttonClass,
-} from "./ui";
+import { CODE, MONO } from "./ui";
 
 const initial: QuestionFormState = {};
 const LABELS = ["A", "B", "C", "D", "E"];
@@ -86,9 +84,8 @@ const BOS: QuestionInitial = {
   shownCount: 0,
 };
 
-const PREVIEW_BOX = "rounded-xl border border-line bg-surface-sunk p-4";
-const PREVIEW_LABEL = "mb-2 text-micro font-semibold uppercase tracking-wide text-ink-faint";
-const CODE = "rounded bg-surface-sunk px-1 py-0.5 text-micro " + MONO;
+const PREVIEW_BOX = "rounded-xl border border-gray-200 bg-gray-50 p-4";
+const PREVIEW_LABEL = "mb-2 text-theme-xs font-semibold tracking-wide text-gray-500 uppercase";
 
 export function QuestionForm({
   topics,
@@ -144,8 +141,9 @@ export function QuestionForm({
    *  1. Forma giden değerler aşağıdaki GİZLİ alanlardan okunuyor. React gizli
    *     alana value niteliğini de yazdığı için form.reset() onları bozamıyor.
    *  2. Görünen select'ler eylemden sonra durumdan DOM'a elle geri yazılıyor
-   *     (aşağıdaki efekt). Select'i yeniden monte etmek ya da denetimli yapmak
-   *     YETMİYOR: sıfırlama en sonda çalışıyor.
+   *     (aşağıdaki efekt; select'ler aria-label'larıyla bulunur). Select'i
+   *     yeniden monte etmek ya da denetimli yapmak YETMİYOR: sıfırlama en
+   *     sonda çalışıyor.
    */
   const [topicId, setTopicId] = useState(mevcut.topicId);
   const [status, setStatus] = useState(mevcut.status);
@@ -194,12 +192,14 @@ export function QuestionForm({
   /*
    * Eylem döndüyse (yönlendirme olmadıysa) bir sorun vardır: koruma yeniden
    * devreye girer ve ilk hatalı alana kaydırılır — kaydet düğmesi sağ
-   * sütunun dibinde, hata ise çoğu zaman ekranın dışında kalıyordu.
+   * sütunun dibinde, hata ise çoğu zaman ekranın dışında kalıyordu. Hatalı
+   * alanı kitin Field'ı aria-invalid ile işaretliyor; alan dışı hatalar
+   * (şıklar, hedef sınav) data-alan-hatasi taşıyor.
    */
   useEffect(() => {
     gonderiliyor.current = false;
     if (!state.error && !state.fields) return;
-    const ilk = formRef.current?.querySelector("[data-alan-hatasi]") ?? formRef.current;
+    const ilk = formRef.current?.querySelector('[data-alan-hatasi], [aria-invalid="true"]') ?? formRef.current;
     ilk?.scrollIntoView({ block: "center" });
   }, [state]);
 
@@ -283,164 +283,156 @@ export function QuestionForm({
       ))}
 
       <div className="space-y-4">
-        {state.error ? <Notice>{state.error}</Notice> : null}
+        {state.error ? <Alert variant="error">{state.error}</Alert> : null}
         {hataSayisi > 0 ? (
-          <Notice title="Kaydedilmedi">
+          <Alert variant="error" title="Kaydedilmedi">
             {hataSayisi === 1 ? "Bir alanda" : hataSayisi + " alanda"} düzeltilmesi gereken bir
             sorun var — kırmızı işaretli alanlara bakın.
-          </Notice>
+          </Alert>
         ) : null}
         {!canEdit ? (
-          <Notice tone="info">
-            Görüntüleyici rolündesin: formu inceleyebilirsin ama kaydedemezsin.
-          </Notice>
+          <Alert variant="info">Görüntüleyici rolündesin: formu inceleyebilirsin ama kaydedemezsin.</Alert>
         ) : null}
         {duzenleme && mevcut.shownCount > 0 ? (
-          <Notice tone="warn">
+          <Alert variant="warning">
             Bu soru öğrencilere {mevcut.shownCount} kez soruldu. Cevap anahtarını değiştirirsen
             sürüm artar (şu an v{mevcut.version}) ve eski sonuçlar ayırt edilebilir kalır.
-          </Notice>
+          </Alert>
         ) : null}
       </div>
 
-      <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mt-4 grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── Sol: içerik ─────────────────────────────── */}
-        <div className="min-w-0 space-y-6">
-          <Card>
-            <CardHeader
-              title="Soru metni"
-              description={
-                <>
-                  Formülleri <code className={CODE}>$…$</code> içine yaz; önizleme anında
-                  güncellenir.
-                </>
-              }
-            />
-            <div className="space-y-4 p-5 sm:p-6">
-              <Field label="Metin" htmlFor="stem" error={state.fields?.stem}>
-                <textarea
-                  id="stem"
-                  name="stem"
-                  required
-                  rows={7}
-                  value={stem}
-                  onChange={(e) => setStem(e.target.value)}
-                  aria-invalid={state.fields?.stem ? true : undefined}
-                  className={clsx(TEXTAREA_CLASS, MONO, "leading-relaxed")}
-                  placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
-                />
-              </Field>
+        <div className="min-w-0 space-y-4 md:space-y-6">
+          <ComponentCard
+            title="Soru metni"
+            desc={
+              <>
+                Formülleri <code className={CODE}>$…$</code> içine yaz; önizleme anında güncellenir.
+              </>
+            }
+          >
+            <Field label="Metin" error={state.fields?.stem}>
+              <TextArea
+                name="stem"
+                required
+                rows={7}
+                value={stem}
+                onChange={(e) => setStem(e.target.value)}
+                className={cx(MONO, "leading-relaxed")}
+                placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
+              />
+            </Field>
 
-              <details className="group text-caption text-ink-soft">
-                <summary className="cursor-pointer select-none font-medium text-ink-soft hover:text-brand">
-                  Yazım kuralları
-                </summary>
-                <ul className="mt-2 space-y-1.5 ps-4">
-                  <li>
-                    Formül: <code className={CODE}>$x^2 + 1$</code> — satır içinde
-                  </li>
-                  <li>
-                    Ortalanmış formül: <code className={CODE}>$$x = v \cdot t$$</code> — tek
-                    başına bir satırda
-                  </li>
-                  <li>
-                    Öncül listesi (I, II, III): satırlara <code className={CODE}>- </code> ile başla
-                  </li>
-                  <li>
-                    Gerçek dolar işareti: <code className={CODE}>\$</code>
-                  </li>
-                  <li>
-                    Şekil: aşağıdaki yükleyiciyi kullan — metne{" "}
-                    <code className={CODE}>![alt](kimlik)</code> eklenir. Tek başına bir satırdaysa
-                    ortalanmış şekil, cümle içindeyse satır içi simge olur.
-                  </li>
-                  <li>Boş satır yeni paragraf açar.</li>
-                  <li>
-                    Kaydet: <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>S</kbd> (Mac’te{" "}
-                    <kbd className={CODE}>⌘</kbd> + <kbd className={CODE}>S</kbd>)
-                    {duzenleme && !sonrakiId ? null : (
-                      <>
-                        {" "}
-                        · {duzenleme ? "kaydet ve sonrakine geç" : "kaydet ve yenisini ekle"}:{" "}
-                        <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>Shift</kbd> +{" "}
-                        <kbd className={CODE}>Enter</kbd>
-                      </>
-                    )}
-                  </li>
-                </ul>
-              </details>
+            <details className="group text-theme-sm text-gray-500">
+              <summary className="cursor-pointer font-medium text-gray-700 select-none hover:text-brand-500">
+                Yazım kuralları
+              </summary>
+              <ul className="mt-2 space-y-1.5 ps-4">
+                <li>
+                  Formül: <code className={CODE}>$x^2 + 1$</code> — satır içinde
+                </li>
+                <li>
+                  Ortalanmış formül: <code className={CODE}>$$x = v \cdot t$$</code> — tek başına bir satırda
+                </li>
+                <li>
+                  Öncül listesi (I, II, III): satırlara <code className={CODE}>- </code> ile başla
+                </li>
+                <li>
+                  Gerçek dolar işareti: <code className={CODE}>\$</code>
+                </li>
+                <li>
+                  Şekil: aşağıdaki yükleyiciyi kullan — metne <code className={CODE}>![alt](kimlik)</code> eklenir. Tek
+                  başına bir satırdaysa ortalanmış şekil, cümle içindeyse satır içi simge olur.
+                </li>
+                <li>Boş satır yeni paragraf açar.</li>
+                <li>
+                  Kaydet: <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>S</kbd> (Mac’te{" "}
+                  <kbd className={CODE}>⌘</kbd> + <kbd className={CODE}>S</kbd>)
+                  {duzenleme && !sonrakiId ? null : (
+                    <>
+                      {" "}
+                      · {duzenleme ? "kaydet ve sonrakine geç" : "kaydet ve yenisini ekle"}:{" "}
+                      <kbd className={CODE}>Ctrl</kbd> + <kbd className={CODE}>Shift</kbd> +{" "}
+                      <kbd className={CODE}>Enter</kbd>
+                    </>
+                  )}
+                </li>
+              </ul>
+            </details>
 
-              {canEdit ? (
-                <ImageUploader
-                  onInsert={(markup) =>
-                    // Ayrı bir satır olarak ekliyoruz: tek başına duran ![...](...)
-                    // blok görsel olur, paragraf içine karışırsa satır içi simge.
-                    setStem((prev) => (prev.trimEnd() ? prev.trimEnd() + "\n\n" : "") + markup + "\n")
-                  }
-                />
-              ) : null}
+            {canEdit ? (
+              <ImageUploader
+                onInsert={(markup) =>
+                  // Ayrı bir satır olarak ekliyoruz: tek başına duran ![...](...)
+                  // blok görsel olur, paragraf içine karışırsa satır içi simge.
+                  setStem((prev) => (prev.trimEnd() ? prev.trimEnd() + "\n\n" : "") + markup + "\n")
+                }
+              />
+            ) : null}
 
-              <div className={PREVIEW_BOX}>
-                <p className={PREVIEW_LABEL}>Öğrencinin göreceği</p>
-                <ContentPreview markup={stem} placeholder="Soru metnini yaz, burada görünecek." />
-                {doluSikSayisi > 0 ? (
-                  // Test ekranındaki şık kartlarının sadeleştirilmiş eşi. Doğru şık
-                  // işaretli değil (öğrenci görmez); etiketler kaydedilecek sırayla.
-                  <ol className="mt-4 space-y-2" aria-label="Şıklar, öğrencinin göreceği sırayla">
-                    {choices
-                      .filter((c) => c.trim())
-                      .map((c, i) => (
-                        <li
-                          key={i}
-                          className="flex items-center gap-3 rounded-xl border-2 border-line bg-surface px-3 py-2.5"
+            <div className={PREVIEW_BOX}>
+              <p className={PREVIEW_LABEL}>Öğrencinin göreceği</p>
+              <ContentPreview markup={stem} placeholder="Soru metnini yaz, burada görünecek." />
+              {doluSikSayisi > 0 ? (
+                // Test ekranındaki şık kartlarının sadeleştirilmiş eşi. Doğru şık
+                // işaretli değil (öğrenci görmez); etiketler kaydedilecek sırayla.
+                <ol className="mt-4 space-y-2" aria-label="Şıklar, öğrencinin göreceği sırayla">
+                  {choices
+                    .filter((c) => c.trim())
+                    .map((c, i) => (
+                      <li key={i} className="flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-3 py-2.5">
+                        <span
+                          aria-hidden
+                          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-theme-sm font-bold text-gray-600 ring-1 ring-gray-300 ring-inset"
                         >
-                          <span
-                            aria-hidden
-                            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-sunk text-caption font-bold text-ink-soft ring-1 ring-inset ring-line-strong"
-                          >
-                            {LABELS[i]}
-                          </span>
-                          <span className="sr-only">{LABELS[i]} şıkkı: </span>
-                          <div className="min-w-0 flex-1">
-                            <ContentPreview markup={c} compact placeholder="—" />
-                          </div>
-                        </li>
-                      ))}
-                  </ol>
-                ) : null}
-              </div>
+                          {LABELS[i]}
+                        </span>
+                        <span className="sr-only">{LABELS[i]} şıkkı: </span>
+                        <div className="min-w-0 flex-1">
+                          <ContentPreview markup={c} compact placeholder="—" />
+                        </div>
+                      </li>
+                    ))}
+                </ol>
+              ) : null}
             </div>
-          </Card>
+          </ComponentCard>
 
-          <Card>
-            <CardHeader
-              title="Şıklar"
-              description="Doğru şıkkı harfe tıklayarak seç. Hata tipi, öğrenci o çeldiriciyi seçtiğinde hangi hatayı yaptığını kaydeder."
-              action={
-                <span className="text-micro tabular text-ink-faint">
-                  {doluSikSayisi} şık · doğru: <strong className="text-ok">{LABELS[correctIndex]}</strong>
-                </span>
-              }
-            />
-            <div className="space-y-3 p-5 sm:p-6">
+          <ComponentCard
+            title="Şıklar"
+            desc="Doğru şıkkı harfe tıklayarak seç. Hata tipi, öğrenci o çeldiriciyi seçtiğinde hangi hatayı yaptığını kaydeder."
+            actions={
+              <span className="tabular text-theme-xs text-gray-500">
+                {doluSikSayisi} şık · doğru: <strong className="text-success-700">{LABELS[correctIndex]}</strong>
+              </span>
+            }
+          >
+            <div className="space-y-3">
               {state.fields?.choices ? (
                 <div data-alan-hatasi>
-                  <Notice>{state.fields.choices}</Notice>
+                  <Alert variant="error" compact>
+                    {state.fields.choices}
+                  </Alert>
                 </div>
               ) : null}
               {state.fields?.correctIndex ? (
                 <div data-alan-hatasi>
-                  <Notice>{state.fields.correctIndex}</Notice>
+                  <Alert variant="error" compact>
+                    {state.fields.correctIndex}
+                  </Alert>
                 </div>
               ) : null}
               {aradakiBos !== -1 && !state.fields?.choices ? (
-                <Notice tone="warn">
+                <Alert variant="warning" compact>
                   {LABELS[aradakiBos]} şıkkı boş ama sonrasında dolu şık var. Boş şık yalnızca sonda
                   olabilir (4 şıklı soruda E boş kalır) — böyle kaydedilemez.
-                </Notice>
+                </Alert>
               ) : null}
               {dogruBos ? (
-                <Notice tone="warn">Doğru olarak işaretlenen {LABELS[correctIndex]} şıkkı boş.</Notice>
+                <Alert variant="warning" compact>
+                  Doğru olarak işaretlenen {LABELS[correctIndex]} şıkkı boş.
+                </Alert>
               ) : null}
 
               {choices.map((value, i) => {
@@ -448,10 +440,7 @@ export function QuestionForm({
                 return (
                   <div
                     key={i}
-                    className={clsx(
-                      "rounded-xl border p-3 transition",
-                      dogru ? "border-ok/60 bg-ok-wash/60" : "border-line"
-                    )}
+                    className={cx("rounded-xl border p-3 transition", dogru ? "border-success-500 bg-success-25" : "border-gray-200")}
                   >
                     <div className="flex items-start gap-3">
                       <button
@@ -459,37 +448,38 @@ export function QuestionForm({
                         onClick={() => setCorrectIndex(i)}
                         aria-label={LABELS[i] + " şıkkını doğru olarak işaretle"}
                         aria-pressed={dogru}
-                        className={clsx(
-                          "mt-1 flex size-9 shrink-0 items-center justify-center rounded-full border text-caption font-bold transition",
+                        className={cx(
+                          "mt-1 flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border text-theme-sm font-bold transition",
                           dogru
-                            ? "border-ok bg-ok-fill text-white"
-                            : "border-line-strong text-ink-faint hover:border-ok hover:text-ok"
+                            ? "border-success-600 bg-success-600 text-white"
+                            : "border-gray-300 text-gray-500 hover:border-success-600 hover:text-success-700"
                         )}
                       >
                         {LABELS[i]}
                       </button>
 
                       <div className="min-w-0 flex-1 space-y-2">
-                        <input
+                        <Input
                           name={"choice_" + i}
                           value={value}
                           onChange={(e) => setChoice(i, e.target.value)}
                           aria-label={LABELS[i] + " şıkkı"}
-                          className={clsx(INPUT_CLASS, MONO)}
+                          className={MONO}
                           placeholder={i === 4 ? "$180$  (boş bırakılırsa 4 şıklı soru)" : "$180$"}
                         />
 
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface-sunk px-3 py-1.5">
+                          <div className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
                             <ContentPreview markup={value} compact placeholder="—" />
                           </div>
 
                           {/* Doğru şıkta hata tipi yok: çeldirici değil. */}
                           {!dogru && value.trim() ? (
-                            <select
+                            <Select
                               value={errorTypes[i]}
                               onChange={(e) => setErrorType(i, e.target.value)}
-                              className={SMALL_SELECT_CLASS}
+                              compact
+                              wrapperClassName="w-full sm:w-auto sm:max-w-64"
                               aria-label={LABELS[i] + " şıkkının hata tipi"}
                             >
                               <option value="">Hata tipi (isteğe bağlı)</option>
@@ -498,7 +488,7 @@ export function QuestionForm({
                                   {v}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           ) : null}
                         </div>
                       </div>
@@ -507,46 +497,40 @@ export function QuestionForm({
                 );
               })}
             </div>
-          </Card>
+          </ComponentCard>
 
-          <Card>
-            <CardHeader
-              title="Çözüm"
-              description={
-                <>
-                  İsteğe bağlı ama <strong className="font-semibold">en çok işe yarayan alan</strong>:
-                  öğrenci test bitince yanlışının nasıl çözüldüğünü burada görüyor.
-                </>
-              }
-            />
-            <div className="space-y-4 p-5 sm:p-6">
-              <Field label="Adım adım çözüm" htmlFor="solution" error={state.fields?.solution}>
-                <textarea
-                  id="solution"
-                  name="solution"
-                  rows={6}
-                  value={solution}
-                  onChange={(e) => setSolution(e.target.value)}
-                  className={clsx(TEXTAREA_CLASS, MONO, "leading-relaxed")}
-                  placeholder={"Pisagor bağıntısından:\n\n$$|AC|^2 = |AB|^2 + |BC|^2$$\n\n$|AC| = 20$ bulunur."}
-                />
-              </Field>
-              <div className={PREVIEW_BOX}>
-                <p className={PREVIEW_LABEL}>Önizleme</p>
-                <ContentPreview markup={solution} placeholder="Çözüm yazılmadı." />
-              </div>
+          <ComponentCard
+            title="Çözüm"
+            desc={
+              <>
+                İsteğe bağlı ama <strong className="font-semibold text-gray-700">en çok işe yarayan alan</strong>:
+                öğrenci test bitince yanlışının nasıl çözüldüğünü burada görüyor.
+              </>
+            }
+          >
+            <Field label="Adım adım çözüm" error={state.fields?.solution}>
+              <TextArea
+                name="solution"
+                rows={6}
+                value={solution}
+                onChange={(e) => setSolution(e.target.value)}
+                className={cx(MONO, "leading-relaxed")}
+                placeholder={"Pisagor bağıntısından:\n\n$$|AC|^2 = |AB|^2 + |BC|^2$$\n\n$|AC| = 20$ bulunur."}
+              />
+            </Field>
+            <div className={PREVIEW_BOX}>
+              <p className={PREVIEW_LABEL}>Önizleme</p>
+              <ContentPreview markup={solution} placeholder="Çözüm yazılmadı." />
             </div>
-          </Card>
+          </ComponentCard>
         </div>
 
         {/* ── Sağ: sınıflandırma + kaydet ─────────────── */}
         <div className="space-y-4 xl:sticky xl:top-24">
-          <Card>
-            <CardHeader title="Sınıflandırma" />
-            <div className="space-y-4 p-5">
-              <Field label="Konu" htmlFor="soru-konu" error={state.fields?.topicId}>
-                <select
-                  id="soru-konu"
+          <ComponentCard title="Sınıflandırma">
+            <div className="space-y-5">
+              <Field label="Konu" required error={state.fields?.topicId}>
+                <Select
                   aria-label="Konu"
                   required
                   value={topicId}
@@ -559,7 +543,6 @@ export function QuestionForm({
                     const izinli = yeni ? (yeni.scopes?.length ? yeni.scopes : [yeni.scope]) : [];
                     setHedefSinavlar((prev) => prev.filter((s) => izinli.includes(s)));
                   }}
-                  className={SELECT_CLASS}
                 >
                   <option value="">Seç…</option>
                   {topics.map((t) => (
@@ -567,31 +550,27 @@ export function QuestionForm({
                       {(EXAM_LABEL[t.scope] ?? t.scope) + " · " + t.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <fieldset>
-                <legend className="mb-1.5 block text-caption font-medium text-ink">Hedef sınav</legend>
+                <legend className={cx(labelClass, "mb-1.5")}>Hedef sınav</legend>
                 {sinavSecenekleri.length === 0 ? (
-                  <p className="text-micro text-ink-faint">Önce konu seç.</p>
+                  <p className="text-theme-xs text-gray-500">Önce konu seç.</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {sinavSecenekleri.map((s) => (
                       <label
                         key={s}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-micro text-ink-soft has-[:checked]:border-brand has-[:checked]:bg-brand-wash has-[:checked]:text-brand has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand"
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-theme-xs font-medium text-gray-700 transition hover:bg-gray-50 has-checked:border-brand-500 has-checked:bg-brand-50 has-checked:text-brand-500"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           data-hedef-sinav
                           value={s}
                           checked={hedefSinavlar.includes(s)}
                           onChange={(e) =>
-                            setHedefSinavlar((prev) =>
-                              e.target.checked ? [...prev, s] : prev.filter((x) => x !== s)
-                            )
+                            setHedefSinavlar((prev) => (e.target.checked ? [...prev, s] : prev.filter((x) => x !== s)))
                           }
-                          className="size-3 accent-brand"
                         />
                         {EXAM_LABEL[s] ?? s}
                       </label>
@@ -599,63 +578,44 @@ export function QuestionForm({
                   </div>
                 )}
                 {state.fields?.examScopes ? (
-                  <p role="alert" data-alan-hatasi className="mt-1.5 text-micro text-bad">
-                    {state.fields.examScopes}
-                  </p>
+                  <div role="alert" data-alan-hatasi>
+                    <FieldError>{state.fields.examScopes}</FieldError>
+                  </div>
                 ) : (
-                  <p className="mt-1.5 text-micro text-ink-faint">
+                  <FieldHint>
                     {hedefSinavlar.length
                       ? "Yalnızca seçilen sınavların testlerine girer."
                       : "Boş: konunun geçtiği her sınavda sorulabilir — normal durum. Yalnızca kısıtlama gerekiyorsa seç."}
-                  </p>
+                  </FieldHint>
                 )}
               </fieldset>
 
-              <Field
-                label="Durum"
-                htmlFor="soru-durum"
-                error={state.fields?.status}
-                hint="Yalnızca “Yayında” olan sorular teste seçilir."
-              >
-                <select
-                  id="soru-durum"
-                  aria-label="Durum"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className={SELECT_CLASS}
-                >
+              <Field label="Durum" error={state.fields?.status} hint="Yalnızca “Yayında” olan sorular teste seçilir.">
+                <Select aria-label="Durum" value={status} onChange={(e) => setStatus(e.target.value)}>
                   <option value="DRAFT">Taslak</option>
                   <option value="REVIEW">İncelemede</option>
                   <option value="PUBLISHED">Yayında</option>
                   <option value="ARCHIVED">Arşiv</option>
-                </select>
+                </Select>
               </Field>
 
               <Field
                 label="Seviye"
-                htmlFor="soru-seviye"
                 error={state.fields?.level}
                 hint="Seviyeli check-up için. Boş bırakılırsa yalnızca klasik paketlerde çıkar."
               >
-                <select
-                  id="soru-seviye"
-                  aria-label="Seviye"
-                  value={level}
-                  onChange={(e) => setLevel(e.target.value)}
-                  className={SELECT_CLASS}
-                >
+                <Select aria-label="Seviye" value={level} onChange={(e) => setLevel(e.target.value)}>
                   <option value="">Seviyesiz</option>
                   {QUESTION_LEVELS.map((l) => (
                     <option key={l} value={l}>
                       {QUESTION_LEVEL_LABEL[l]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <Field
                 label="Kazanım"
-                htmlFor="soru-kazanim"
                 error={state.fields?.objectiveId}
                 hint={
                   !topicId
@@ -664,16 +624,14 @@ export function QuestionForm({
                       ? "Bu kazanım arşivde: seviye 1 onu seçmez. Başka kazanım seç ya da kazanımı yayına al."
                       : konununKazanimlari.length === 0
                         ? "Bu konuda kazanım yok — Kazanımlar sayfasından ekle."
-                        : "Seviye 1 her kazanımdan bir soru sorar; seviyeli soruda zorunlu."
+                        : "Seviye 1'de zorunlu: seviye 1 her kazanımdan bir soru sorar. Seviye 2-3 kazanımsız olabilir."
                 }
               >
-                <select
-                  id="soru-kazanim"
+                <Select
                   aria-label="Kazanım"
                   value={objectiveId}
                   onChange={(e) => setObjectiveId(e.target.value)}
                   disabled={!topicId || konununKazanimlari.length === 0}
-                  className={SELECT_CLASS}
                 >
                   <option value="">Kazanımsız</option>
                   {konununKazanimlari.map((o) => (
@@ -682,106 +640,73 @@ export function QuestionForm({
                       {o.archived ? " (arşivde)" : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
 
               <Field
                 label="Zorluk"
-                htmlFor="soru-zorluk"
                 error={state.fields?.difficulty}
                 hint="Seçimde kolay/orta/zor bant dağılımı için kullanılır."
               >
-                <select
-                  id="soru-zorluk"
-                  aria-label="Zorluk"
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(e.target.value)}
-                  className={SELECT_CLASS}
-                >
+                <Select aria-label="Zorluk" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
                   <option value="1">1 — çok kolay</option>
                   <option value="2">2 — kolay</option>
                   <option value="3">3 — orta</option>
                   <option value="4">4 — zor</option>
                   <option value="5">5 — çok zor</option>
-                </select>
+                </Select>
               </Field>
 
               <Field
                 label="Hedef süre (saniye)"
-                htmlFor="targetTimeSeconds"
                 error={state.fields?.targetTimeSeconds}
                 hint="Bunun üstü öğrenciye “yavaş” olarak geri bildirilir."
               >
-                <input
-                  id="targetTimeSeconds"
+                <Input
                   name="targetTimeSeconds"
                   type="number"
                   min={10}
                   max={600}
                   value={targetTime}
                   onChange={(e) => setTargetTime(e.target.value)}
-                  className={INPUT_CLASS}
                 />
               </Field>
 
-              <Field
-                label="Kaynak"
-                htmlFor="sourceRef"
-                error={state.fields?.sourceRef}
-                hint="İsteğe bağlı. Örn: 2023 TYT / 12"
-              >
-                <input
-                  id="sourceRef"
+              <Field label="Kaynak" optional error={state.fields?.sourceRef} hint="Örn: 2023 TYT / 12">
+                <Input
                   name="sourceRef"
                   value={sourceRef}
                   onChange={(e) => setSourceRef(e.target.value)}
                   maxLength={200}
-                  className={INPUT_CLASS}
                   placeholder="2023 TYT / 12"
                 />
               </Field>
             </div>
-          </Card>
+          </ComponentCard>
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="submit"
-                disabled={pending || !canEdit}
-                className={clsx(buttonClass("primary", "md"), "flex-1")}
-              >
+              <Button type="submit" loading={pending} disabled={!canEdit} startIcon={<Save />} className="flex-1">
                 {pending ? "Kaydediliyor…" : duzenleme ? "Değişiklikleri kaydet" : "Soruyu kaydet"}
-              </button>
-              <Link href={geriAdres} className={buttonClass("outline", "md")}>
+              </Button>
+              <ButtonLink href={geriAdres} variant="outline">
                 Vazgeç
-              </Link>
+              </ButtonLink>
             </div>
             {!duzenleme && canEdit ? (
-              <button
-                type="submit"
-                name="sonra"
-                value="yeni"
-                disabled={pending}
-                className={clsx(buttonClass("outline", "md"), "w-full")}
-              >
+              <Button type="submit" name="sonra" value="yeni" variant="outline" block disabled={pending}>
                 Kaydet ve yenisini ekle
-              </button>
+              </Button>
             ) : null}
             {duzenleme && canEdit && sonrakiId ? (
               // İnceleme turu: listedeki sıradaki soruya kaydedip geçer (sıra, kaydetmeden
               // ÖNCEKİ listeye göre — kaydedilen soru listenin başına zıplasa da zincir kopmaz).
-              <button
-                type="submit"
-                name="sonra"
-                value="sonraki"
-                disabled={pending}
-                className={clsx(buttonClass("outline", "md"), "w-full")}
-              >
+              <Button type="submit" name="sonra" value="sonraki" variant="outline" block disabled={pending}>
                 Kaydet ve sonrakine geç
-              </button>
+              </Button>
             ) : null}
             {canEdit ? (
-              <p className="text-micro text-ink-faint" aria-live="polite">
+              <p className="text-theme-xs text-gray-500" aria-live="polite">
                 {kirli ? "Kaydedilmemiş değişiklik var · " : ""}
                 <kbd className={CODE}>Ctrl</kbd>/<kbd className={CODE}>⌘</kbd> + <kbd className={CODE}>S</kbd> kaydeder
               </p>

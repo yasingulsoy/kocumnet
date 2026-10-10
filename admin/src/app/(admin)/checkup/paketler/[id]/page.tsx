@@ -6,7 +6,9 @@ import { paketHavuzu, paketKonulari } from "@/lib/checkup/pool";
 import { PACKAGE_KIND_LABEL, examLabel, trNumber } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { PackageEditor } from "@/components/checkup/PackageEditor";
-import { LinkButton, Notice, PageHeader } from "@/components/checkup/ui";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 
 export const metadata: Metadata = { title: "Check-up · Paketi düzenle" };
 
@@ -59,16 +61,19 @@ export default async function EditPackagePage({ params }: PageProps<"/checkup/pa
   if (paket.kind !== "STANDARD") {
     return (
       <>
-        <PageHeader crumbs={CRUMBS} title={paket.name} description={aciklama} />
-        <Notice tone="info" title={(PACKAGE_KIND_LABEL[paket.kind] ?? paket.kind) + " paketi panelden düzenlenmez"}>
+        <PageBreadcrumb crumbs={CRUMBS} pageTitle={paket.name} description={aciklama} />
+        <Alert
+          variant="info"
+          title={(PACKAGE_KIND_LABEL[paket.kind] ?? paket.kind) + " paketi panelden düzenlenmez"}
+          action={
+            <ButtonLink href="/checkup/paketler" variant="outline" size="xs">
+              Paketlere dön
+            </ButtonLink>
+          }
+        >
           Bu bir sistem paketi: içeriği tohumdan gelir (tanışma ve konu tekrar testleri app/prisma/seed.ts,
           seviyeli check-up app/prisma/seed-levels.ts). Yayın durumu ve erişim ayarı Paketler listesinden değişir.
-        </Notice>
-        <div className="mt-4">
-          <LinkButton href="/checkup/paketler" variant="outline" size="sm">
-            Paketlere dön
-          </LinkButton>
-        </div>
+        </Alert>
       </>
     );
   }
@@ -77,7 +82,7 @@ export default async function EditPackagePage({ params }: PageProps<"/checkup/pa
 
   return (
     <>
-      <PageHeader crumbs={CRUMBS} title={paket.name} description={aciklama} />
+      <PageBreadcrumb crumbs={CRUMBS} pageTitle={paket.name} description={aciklama} />
       <PackageEditor
         // Başka bir paketin düzenleyicisine geçince durum taşınmasın.
         key={paket.id}

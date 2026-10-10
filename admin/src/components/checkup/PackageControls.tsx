@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import clsx from "clsx";
 import toast from "react-hot-toast";
 import { setPackageFreeAction, setPackageStatusAction } from "@/lib/checkup/actions/packages";
 import { QUESTION_STATUS_LABEL, QUESTION_STATUSES } from "@/lib/checkup/format";
-import { SMALL_SELECT_CLASS } from "./ui";
+import { Select } from "@/components/tailadmin/form/Select";
+import { Switch } from "@/components/tailadmin/form/Switch";
+import { useOnay } from "./Onay";
 
 /**
  * Gizli sistem paketleri yayından kalkınca ne bozulur — onaydan önce söylenir.
@@ -32,24 +33,28 @@ export function PackageStatusSelect({
 }) {
   const [value, setValue] = useState(status);
   const [pending, start] = useTransition();
+  const onayla = useOnay();
 
   return (
-    <select
+    <Select
       aria-label={name + " yayın durumu"}
+      compact
+      wrapperClassName="w-36"
       value={value}
       disabled={pending}
-      onChange={(e) => {
+      onChange={async (e) => {
         const onceki = value;
         const sonraki = e.target.value;
         const uyari = YAYINDAN_KALKINCA[kind];
-        if (
-          onceki === "PUBLISHED" &&
-          sonraki !== "PUBLISHED" &&
-          uyari &&
-          !window.confirm(`"${name}" yayından kaldırılsın mı?\n\n${uyari}`)
-        ) {
-          // Denetimli select: değer değişmediği için ekranda eskisi kalır.
-          return;
+        if (onceki === "PUBLISHED" && sonraki !== "PUBLISHED" && uyari) {
+          // Denetimli select: değer değişmediği sürece ekranda eskisi kalır.
+          const evet = await onayla({
+            title: `"${name}" yayından kaldırılsın mı?`,
+            description: uyari,
+            confirmLabel: "Yayından kaldır",
+            tone: "warning",
+          });
+          if (!evet) return;
         }
         setValue(sonraki);
         start(async () => {
@@ -62,29 +67,27 @@ export function PackageStatusSelect({
           }
         });
       }}
-      className={SMALL_SELECT_CLASS}
-    >
-      {QUESTION_STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {QUESTION_STATUS_LABEL[s]}
-        </option>
-      ))}
-    </select>
+      options={QUESTION_STATUSES.map((s) => ({ value: s, label: QUESTION_STATUS_LABEL[s] }))}
+    />
   );
 }
 
-/** Ücretsiz / ücretli anahtarı. */
+/** Ücretsiz / ücretli anahtarı (kitin Switch'i; açık = ücretli). */
 export function PackageFreeToggle({ id, isFree, name }: { id: string; isFree: boolean; name: string }) {
   const [value, setValue] = useState(isFree);
   const [pending, start] = useTransition();
+  const onayla = useOnay();
 
-  const degistir = () => {
+  const degistir = async () => {
     const sonraki = !value;
     if (
       !sonraki &&
-      !window.confirm(
-        `"${name}" ücretli yapılsın mı?\n\nErişim hakkı olmayan öğrenciler bu paketle yeni test başlatamaz. Tamamlanmış sonuçları durur.`
-      )
+      !(await onayla({
+        title: `"${name}" ücretli yapılsın mı?`,
+        description: "Erişim hakkı olmayan öğrenciler bu paketle yeni test başlatamaz. Tamamlanmış sonuçları durur.",
+        confirmLabel: "Ücretli yap",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -101,32 +104,13 @@ export function PackageFreeToggle({ id, isFree, name }: { id: string; isFree: bo
   };
 
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={!value}
-      aria-label={name + " ücretli"}
+    <Switch
+      checked={!value}
+      onChange={() => void degistir()}
       disabled={pending}
-      onClick={degistir}
-      className="group inline-flex items-center gap-2 disabled:opacity-50"
-    >
-      <span
-        className={clsx(
-          "relative h-5 w-9 rounded-full transition",
-          // Kapalı hâlde de zeminden ayırt edilsin (WCAG 1.4.11: denetim ≥ 3:1).
-          value ? "bg-ink-muted" : "bg-brand"
-        )}
-      >
-        <span
-          className={clsx(
-            "absolute top-0.5 left-0.5 size-4 rounded-full bg-surface shadow-card transition-transform",
-            !value && "translate-x-4"
-          )}
-        />
-      </span>
-      <span className="text-micro font-medium text-ink-soft">
-        {value ? "Ücretsiz" : "Ücretli"}
-      </span>
-    </button>
+      aria-label={name + " ücretli"}
+      label={<span className="text-theme-xs">{value ? "Ücretsiz" : "Ücretli"}</span>}
+      wrapperClassName="whitespace-nowrap"
+    />
   );
 }

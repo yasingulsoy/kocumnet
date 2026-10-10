@@ -1,30 +1,31 @@
-import Link from "next/link";
 import { Compass } from "lucide-react";
-import { Card, buttonClass } from "@/components/checkup/ui";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
+import { Card } from "@/components/tailadmin/ui/Card";
 
 /**
- * Silinmiş ya da yanlış kimlikli soru/öğrenci. Panel çerçevesi içinde
- * çizilir; kök 404 sayfası kenar çubuğunu da götürüyordu.
+ * Silinmiş ya da yanlış kimlikli soru/öğrenci (`notFound()`). Panel
+ * çerçevesi içinde çizilir; tam ekran 404 (kitin ErrorPage'i) çerçevenin
+ * dışındaki bilinmeyen adresler için: app/not-found.tsx.
  */
 export default function CheckupNotFound() {
   return (
     <Card className="mx-auto mt-6 max-w-xl p-6 sm:p-8">
-      <span className="flex size-12 items-center justify-center rounded-xl bg-brand-wash text-brand">
+      <span className="flex size-12 items-center justify-center rounded-xl bg-brand-50 text-brand-500">
         <Compass className="size-6" aria-hidden />
       </span>
-      <h1 className="font-display mt-4 text-h2 font-semibold text-ink">Kayıt bulunamadı</h1>
-      <p className="mt-2 text-body text-ink-soft">
+      <h1 className="mt-4 font-display text-xl font-semibold text-gray-800">Kayıt bulunamadı</h1>
+      <p className="mt-2 text-sm leading-relaxed text-gray-500">
         Aradığın soru, öğrenci ya da sayfa yok. Bağlantı eskimiş ya da kimlik yanlış kopyalanmış
-        olabilir — soruları listede <span className="font-medium text-ink">#kimlik</span> ile
+        olabilir — soruları listede <span className="font-medium text-gray-700">#kimlik</span> ile
         arayabilirsin.
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
-        <Link href="/checkup/sorular" className={buttonClass("primary", "sm")}>
+        <ButtonLink href="/checkup/sorular" size="xs">
           Sorular
-        </Link>
-        <Link href="/checkup" className={buttonClass("outline", "sm")}>
+        </ButtonLink>
+        <ButtonLink href="/checkup" variant="outline" size="xs">
           Genel bakış
-        </Link>
+        </ButtonLink>
       </div>
     </Card>
   );

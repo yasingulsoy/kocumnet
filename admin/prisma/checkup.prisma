@@ -134,6 +134,7 @@ model Topic {
   packageTopics  PackageTopic[]
   retestSessions CheckupSession[] @relation("RetestTopic")
   planItems      PlanItem[]
+  notebookItems  NotebookItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -160,6 +161,10 @@ enum PackageKind {
   /// erişim hakkı, ad ve ücretlendirme buradan. Aşama süreleri ve soru
   /// sayıları pakette DEĞİL, lib/levels.ts'te — tek doğruluk kaynağı.
   LEVEL
+  /// Alıştırma oturumlarının bağlandığı gizli paket, sınav başına bir tane.
+  /// Uygulama ilk kullanımda kendisi açar (lib/practice.ts); katalogda
+  /// görünmez, panelden düzenlenmez.
+  PRACTICE
 }
 
 /// Check-up paketi = kapsamı ve soru dağılımı tanımlı bir test.
@@ -274,9 +279,10 @@ model Question {
   shownCount   Int @default(0)
   correctCount Int @default(0)
 
-  choices   Choice[]
-  items     SessionItem[]
-  exposures QuestionExposure[]
+  choices       Choice[]
+  items         SessionItem[]
+  exposures     QuestionExposure[]
+  notebookItems NotebookItem[]
 
   /// Eski: yönetim bu uygulamanın içindeyken kullanılıyordu. Yeni kayıtlar
   /// aşağıdaki personel damgalarını kullanır.
@@ -435,7 +441,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  levelRuns LevelRun[]
+  levelRuns     LevelRun[]
+  notebookItems NotebookItem[]
 
   @@index([role])
 }
@@ -527,6 +534,22 @@ enum SessionKind {
   TOPIC_RETEST
   /// Seviyeli check-up'ın bir aşaması (lib/levels.ts).
   LEVEL_STAGE
+  /// Alıştırma: süre tutulmaz, her cevaptan hemen sonra doğrusu, hata tipi
+  /// ve çözüm gösterilir. ÖLÇÜM DEĞİL: sonuç (CheckupResult) üretmez;
+  /// gelişime, eğilime, plana, haftalık postaya, risk listelerine, madde
+  /// analizine ve soru/şık sayaçlarına girmez (lib/practice.ts).
+  PRACTICE
+}
+
+/// Alıştırma hangi yoldan açıldı — ekrandaki başlık ve dönüş yolu buna göre.
+enum PracticeMode {
+  /// "Benzerini çöz": sonuç ekranındaki bir yanlışın benzeri.
+  SIMILAR
+  /// "Bu konuda çalış": tek konudan birkaç soru.
+  TOPIC
+  /// "Bugünkü tekrar": yanlış defterinde vadesi gelen maddelerin benzerleri.
+  /// Cevaplar defteri ilerletir (NotebookItem).
+  REVIEW
 }
 
 /// Soru hangi seviyede sorulabilir (seviyeli check-up).
@@ -563,9 +586,15 @@ model CheckupSession {
 
   kind SessionKind @default(PACKAGE)
 
-  /// TOPIC_RETEST ise hangi konu ölçülüyor.
+  /// TOPIC_RETEST ise hangi konu ölçülüyor; alıştırmada çalışılan konu.
   focusTopicId String?
   focusTopic   Topic?  @relation("RetestTopic", fields: [focusTopicId], references: [id], onDelete: Restrict)
+
+  /// PRACTICE ise hangi yoldan açıldı.
+  practiceMode    PracticeMode?
+  /// Alıştırma hangi sonuçtan açıldı ("sonuca dön" ve benzer seçimi için).
+  /// StudyPlan.sourceSessionId gibi düz alan: kaynak silinse de alıştırma kalsın.
+  sourceSessionId String?
 
   /// LEVEL_STAGE ise hangi denemenin hangi aşaması.
   /// Aşamalar BİLEREK ayrı oturum: her birinin kendi süresi var ve öğrenci
@@ -620,6 +649,10 @@ model SessionItem {
   sortOrder       Int
   /// Sorunun oturum anındaki sürümü (PLAN §4).
   questionVersion Int
+
+  /// Alıştırmada: bu soru hangi sorunun benzeri (öğrencinin yanlış yaptığı
+  /// asıl soru). Sınav oturumlarında boş.
+  sourceQuestionId String?
 
   answer Answer?
 
@@ -705,7 +738,8 @@ model Objective {
   sortOrder Int           @default(0)
   status    PublishStatus @default(DRAFT)
 
-  questions Question[]
+  questions     Question[]
+  notebookItems NotebookItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -845,4 +879,59 @@ model QuestionExposure {
 
   @@unique([userId, questionId])
   @@index([userId, lastShownAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Yanlış defteri
+// ─────────────────────────────────────────────────────────────
+
+/// Yanlış defteri maddesi: öğrencinin bir ÖLÇÜMDE (paket, kontrol testi,
+/// seviyeli aşama) yanlış yaptığı ya da boş bıraktığı soru.
+///
+/// Aralıklı tekrarla geri gelir ve her tekrarda bu sorunun BENZERİ sorulur,
+/// kendisi değil (çözümünü sonuç ekranında gördü). Kurallar ve aralıklar
+/// lib/review.ts'te, veritabanı tarafı lib/notebook.ts'te. Alıştırma cevabı
+/// madde AÇMAZ; maddeyi yalnızca "Bugünkü tekrar" ilerletir.
+model NotebookItem {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  /// Sorunun konusu ve kazanımı: gruplamak için kopya, her yeni yanlışta
+  /// sorudan tazelenir. Benzer seçimi sorunun GÜNCEL alanlarına bakar.
+  topicId     String
+  topic       Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  objectiveId String?
+  objective   Objective? @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  /// Sorunun sorulduğu sınav: benzer soru bu sınavın kapsamından seçilir.
+  examScope   ExamScope
+
+  /// Kaçıncı tekrarı bekliyor: 0, 1, 2 (lib/review.ts TEKRAR_ARALIKLARI_GUN).
+  stage          Int       @default(0)
+  /// Tekrar ne zaman gelir (Türkiye saatiyle gün başı).
+  dueAt          DateTime
+  lastReviewedAt DateTime?
+  /// Defterden çıktı: son aşamayı da doğru geçti. Yeni bir yanlışta yeniden açılır.
+  resolvedAt     DateTime?
+
+  /// Ölçümlerde kaç kez yanlış/boş (bilgi).
+  wrongCount    Int      @default(1)
+  /// Maddeyi en son hangi ölçüm yazdı ve o ölçüm ne zaman bitti. Aynı ölçüm
+  /// yeniden puanlanırsa ya da daha eski bir ölçüm geç puanlanırsa (cron)
+  /// ilerleme sıfırlanmasın diye.
+  lastSessionId String
+  lastWrongAt   DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Bir öğrencide aynı soru tek madde: yeniden yanlış yapılırsa madde sıfırlanır.
+  @@unique([userId, questionId])
+  /// Bugünkü tekrar: öğrencinin açık ve vadesi gelmiş maddeleri.
+  @@index([userId, resolvedAt, dueAt])
+  @@index([questionId])
+  @@index([topicId])
+  @@index([objectiveId])
 }

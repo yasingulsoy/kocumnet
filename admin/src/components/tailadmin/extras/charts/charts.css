@@ -1,0 +1,59 @@
+/*
+ * Uyarlama: TailAdmin Free (MIT) — src/app/globals.css'teki ApexCharts kuralları
+ *
+ * Düz CSS (bileşenden içe aktarılır, Tailwind teması burada görünmez);
+ * renkler kitin değerleri. Koyu tema ve TailAdmin'in sayfaya özel
+ * (#chartTwo, #mapTwo…) kuralları alınmadı.
+ */
+.apexcharts-legend-text {
+  padding-inline-start: 1.25rem !important;
+  color: #344054 !important;
+}
+
+.apexcharts-text {
+  fill: #344054 !important;
+}
+
+.apexcharts-tooltip.apexcharts-theme-light {
+  gap: 0.25rem;
+  border-radius: 0.5rem !important;
+  border-color: #e4e7ec !important;
+  padding: 0.75rem;
+  box-shadow:
+    0 1px 3px 0 rgb(16 24 40 / 0.1),
+    0 1px 2px 0 rgb(16 24 40 / 0.06) !important;
+}
+
+.apexcharts-tooltip-marker {
+  margin-inline-end: 6px;
+  height: 6px;
+  width: 6px;
+}
+
+.apexcharts-tooltip-series-group,
+.apexcharts-tooltip-y-group {
+  padding: 0 !important;
+}
+
+.apexcharts-tooltip-title {
+  margin-bottom: 0 !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 10px !important;
+  line-height: 1rem !important;
+  color: #1d2939 !important;
+}
+
+.apexcharts-tooltip-text {
+  font-size: 0.75rem !important;
+  color: #344054 !important;
+}
+
+.apexcharts-tooltip-text-y-value {
+  font-weight: 500 !important;
+}
+
+.apexcharts-gridline {
+  stroke: #f2f4f7 !important;
+}

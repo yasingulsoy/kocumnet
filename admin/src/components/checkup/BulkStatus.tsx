@@ -3,10 +3,15 @@
 import { createContext, useContext, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { setQuestionsStatusAction } from "@/lib/checkup/actions/questions";
 import { QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
-import { buttonClass } from "./ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Checkbox } from "@/components/tailadmin/form/Checkbox";
+import { useSidebar } from "@/components/tailadmin/layout/SidebarContext";
+import { Button, type ButtonVariant } from "@/components/tailadmin/ui/Button";
+import type { ConfirmOptions } from "@/components/tailadmin/ui/Dialogs";
+import { useOnay } from "./Onay";
 
 /**
  * Soru listesinde toplu durum değiştirme. Liste sunucuda çiziliyor; seçim
@@ -32,25 +37,41 @@ function useBulk(): Ctx {
   return c;
 }
 
-const EYLEMLER: { status: string; etiket: string; onay?: (n: number) => string }[] = [
+const EYLEMLER: { status: string; etiket: string; variant: ButtonVariant; onay?: (n: number) => ConfirmOptions }[] = [
   {
     status: "PUBLISHED",
     etiket: "Yayına al",
-    onay: (n) => n + " soru yayına alınsın mı? Öğrenci testlerine seçilmeye başlar.",
+    variant: "primary",
+    onay: (n) => ({
+      title: n + " soru yayına alınsın mı?",
+      description: "Öğrenci testlerine seçilmeye başlar.",
+      confirmLabel: "Yayına al",
+    }),
   },
-  { status: "REVIEW", etiket: "İncelemeye gönder" },
-  { status: "DRAFT", etiket: "Taslağa çek" },
+  { status: "REVIEW", etiket: "İncelemeye gönder", variant: "outline" },
+  { status: "DRAFT", etiket: "Taslağa çek", variant: "outline" },
   {
     status: "ARCHIVED",
     etiket: "Arşivle",
-    onay: (n) => n + " soru arşivlensin mi? Yeni testlere seçilmez; geçmiş sonuçlarda durur.",
+    variant: "danger-outline",
+    onay: (n) => ({
+      title: n + " soru arşivlensin mi?",
+      description: "Yeni testlere seçilmez; geçmiş sonuçlarda durur.",
+      confirmLabel: "Arşivle",
+      tone: "warning",
+    }),
   },
 ];
 
 export function BulkProvider({ ids, children }: { ids: string[]; children: ReactNode }) {
   const [ham, setHam] = useState<Set<string>>(() => new Set());
   const [pending, start] = useTransition();
+  /** Hangi düğme çalışıyor: dönen halka yalnızca onda. */
+  const [calisan, setCalisan] = useState<string | null>(null);
   const router = useRouter();
+  const onayla = useOnay();
+  // Sabit çubuk kenar çubuğunun yanından başlasın (geniş 290, dar 90 px).
+  const { isExpanded } = useSidebar();
 
   // Listede artık olmayan kimlikler seçimden düşer.
   const secili = useMemo(() => new Set(ids.filter((id) => ham.has(id))), [ids, ham]);
@@ -68,10 +89,11 @@ export function BulkProvider({ ids, children }: { ids: string[]; children: React
     hepsi: (acik) => setHam(acik ? new Set(ids) : new Set()),
   };
 
-  const uygula = (status: string, onay?: (n: number) => string) => {
+  const uygula = async (status: string, onay?: (n: number) => ConfirmOptions) => {
     const liste = [...secili];
     if (liste.length === 0) return;
-    if (onay && !window.confirm(onay(liste.length))) return;
+    if (onay && !(await onayla(onay(liste.length)))) return;
+    setCalisan(status);
     start(async () => {
       const res = await setQuestionsStatusAction(liste, status);
       if (!res.ok) {
@@ -94,39 +116,36 @@ export function BulkProvider({ ids, children }: { ids: string[]; children: React
       {children}
 
       {/* Sabit çubuk sayfa sonunu (sayfalama) örtmesin. */}
-      {secili.size > 0 ? <div aria-hidden className="h-20" /> : null}
+      {secili.size > 0 ? <div aria-hidden className="h-24" /> : null}
 
       {secili.size > 0 ? (
         <div
           role="region"
           aria-label="Toplu işlem"
-          className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 shadow-pop backdrop-blur lg:start-[264px]"
+          className={cx(
+            "pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 shadow-theme-xl backdrop-blur",
+            isExpanded ? "lg:start-72.5" : "lg:start-22.5"
+          )}
         >
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 pt-3 sm:px-6 lg:px-10">
-            <p className="me-auto text-caption font-semibold text-ink" aria-live="polite">
+          <div className="mx-auto flex max-w-(--breakpoint-2xl) flex-wrap items-center gap-2 px-4 pt-3 md:px-6">
+            <p className="me-auto text-theme-sm font-semibold text-gray-800" aria-live="polite">
               {secili.size} soru seçildi
             </p>
             {EYLEMLER.map((e) => (
-              <button
+              <Button
                 key={e.status}
-                type="button"
+                variant={e.variant}
+                size="xs"
                 disabled={pending}
-                onClick={() => uygula(e.status, e.onay)}
-                className={buttonClass(e.status === "PUBLISHED" ? "primary" : e.status === "ARCHIVED" ? "danger" : "outline", "sm")}
+                loading={pending && calisan === e.status}
+                onClick={() => void uygula(e.status, e.onay)}
               >
-                {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
                 {e.etiket}
-              </button>
+              </Button>
             ))}
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => setHam(new Set())}
-              className={buttonClass("ghost", "sm")}
-              aria-label="Seçimi kaldır"
-            >
+            <Button variant="ghost" size="xs" disabled={pending} onClick={() => setHam(new Set())} aria-label="Seçimi kaldır">
               <X aria-hidden />
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -138,13 +157,9 @@ export function BulkProvider({ ids, children }: { ids: string[]; children: React
 export function BulkCheckbox({ id, label }: { id: string; label: string }) {
   const { secili, degistir } = useBulk();
   return (
-    <input
-      type="checkbox"
-      checked={secili.has(id)}
-      onChange={(e) => degistir(id, e.target.checked)}
-      aria-label={label}
-      className="mt-1 size-4 shrink-0 cursor-pointer accent-brand"
-    />
+    <span className="mt-0.5 flex shrink-0">
+      <Checkbox checked={secili.has(id)} onChange={(e) => degistir(id, e.target.checked)} aria-label={label} />
+    </span>
   );
 }
 
@@ -154,17 +169,11 @@ export function BulkSelectAll() {
   const tum = ids.length > 0 && secili.size === ids.length;
   const kismi = secili.size > 0 && !tum;
   return (
-    <label className="inline-flex cursor-pointer items-center gap-2 text-micro font-medium text-ink-soft">
-      <input
-        type="checkbox"
-        checked={tum}
-        ref={(el) => {
-          if (el) el.indeterminate = kismi;
-        }}
-        onChange={(e) => hepsi(e.target.checked)}
-        className="size-4 cursor-pointer accent-brand"
-      />
-      {secili.size > 0 ? secili.size + " / " + ids.length + " seçili" : "Bu sayfadakileri seç"}
-    </label>
+    <Checkbox
+      checked={tum}
+      indeterminate={kismi}
+      onChange={(e) => hepsi(e.target.checked)}
+      label={secili.size > 0 ? secili.size + " / " + ids.length + " seçili" : "Bu sayfadakileri seç"}
+    />
   );
 }

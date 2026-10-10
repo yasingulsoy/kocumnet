@@ -28,6 +28,8 @@ export interface ListeSuzgeci {
   durum: QuestionStatus | "";
   eksik: EksikKey | "";
   kazanim: string;
+  /** Toplu içe aktarma (ImportBatch) kimliği: yalnızca o dosyadan gelen sorular. */
+  parti: string;
   sayfa: number;
 }
 
@@ -46,6 +48,8 @@ export function listeSuzgeci(sp: Params): ListeSuzgeci {
     // hasOwn: `in` "toString" gibi prototip adlarını da kabul ederdi.
     eksik: Object.hasOwn(EKSIK, tek(sp.eksik)) ? (tek(sp.eksik) as EksikKey) : "",
     kazanim: tek(sp.kazanim).trim().slice(0, 40),
+    // Kimlik biçimi dışındaki değer süzgeç sayılmaz (sorgu yine parametreli).
+    parti: /^[a-z0-9]{1,64}$/i.test(tek(sp.parti)) ? tek(sp.parti) : "",
     sayfa: Math.max(1, Math.floor(Number(tek(sp.sayfa) || 1)) || 1),
   };
 }
@@ -73,6 +77,7 @@ export function listeKosulu(s: ListeSuzgeci): Prisma.QuestionWhereInput {
     ...(s.konu ? { topic: { slug: s.konu } } : {}),
     ...(s.durum ? { status: s.durum } : {}),
     ...(s.kazanim ? { objective: { code: s.kazanim.toUpperCase() } } : {}),
+    ...(s.parti ? { importBatchId: s.parti } : {}),
     ...(s.eksik ? EKSIK[s.eksik].where : {}),
     ...(arama ? { AND: [arama] } : {}),
   };

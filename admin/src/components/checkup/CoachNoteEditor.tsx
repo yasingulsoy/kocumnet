@@ -1,11 +1,15 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import clsx from "clsx";
+import { useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import { setCoachNoteAction } from "@/lib/checkup/actions/plans";
 import { KOC_NOTU_SINIR, kocNotunuTemizle } from "@/lib/checkup/coach-note";
-import { Notice, TEXTAREA_CLASS, buttonClass } from "./ui";
+import { cx } from "@/components/tailadmin/cx";
+import { Field } from "@/components/tailadmin/form/Field";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Button } from "@/components/tailadmin/ui/Button";
+import { useOnay } from "./Onay";
 
 /**
  * Bu haftanın planına koç notu. Öğrenci notu plan kartında ve pazartesi
@@ -17,7 +21,7 @@ export function CoachNoteEditor({ planId, note }: { planId: string; note: string
   const [kayitli, setKayitli] = useState(note ?? "");
   const [hata, setHata] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const id = useId();
+  const onayla = useOnay();
 
   const temiz = kocNotunuTemizle(metin);
   const degisti = temiz !== kocNotunuTemizle(kayitli);
@@ -42,47 +46,56 @@ export function CoachNoteEditor({ planId, note }: { planId: string; note: string
         e.preventDefault();
         if (!pending && degisti && !fazla) kaydet(metin);
       }}
-      className="space-y-2"
+      className="space-y-3"
     >
-      <label htmlFor={id} className="block text-caption font-medium text-ink">
-        Koç notu
-      </label>
-      <textarea
-        id={id}
-        rows={3}
-        value={metin}
-        onChange={(e) => setMetin(e.target.value)}
-        aria-describedby={id + "-yardim"}
-        aria-invalid={fazla || undefined}
-        className={clsx(TEXTAREA_CLASS, "leading-relaxed")}
-        placeholder="Örn. Bu hafta yalnızca üçgenler: önce konu tekrarı, sonra 40 soru. Cuma kontrol testi."
-      />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p id={id + "-yardim"} className={clsx("text-micro", fazla ? "text-bad" : "text-ink-faint")}>
-          <span className="tabular">
-            {temiz.length}/{KOC_NOTU_SINIR}
-          </span>{" "}
-          · Öğrenci plan kartında ve pazartesi postasında görür. Tek paragraf; satır sonları boşluğa döner.
-        </p>
-        <div className="flex gap-2">
-          {kayitli ? (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                if (window.confirm("Koç notu kaldırılsın mı? Pazartesi postasında genel bir cümle gider.")) kaydet("");
-              }}
-              className={buttonClass("ghost", "sm")}
-            >
-              Notu kaldır
-            </button>
-          ) : null}
-          <button type="submit" disabled={pending || !degisti || fazla} className={buttonClass("primary", "sm")}>
-            {pending ? "Kaydediliyor…" : "Kaydet"}
-          </button>
-        </div>
+      <Field
+        label="Koç notu"
+        error={fazla ? "Not " + KOC_NOTU_SINIR + " karakteri aşıyor (" + temiz.length + ")." : undefined}
+        hint={
+          <>
+            <span className="tabular">
+              {temiz.length}/{KOC_NOTU_SINIR}
+            </span>{" "}
+            · Öğrenci plan kartında ve pazartesi postasında görür. Tek paragraf; satır sonları boşluğa döner.
+          </>
+        }
+      >
+        <TextArea
+          rows={3}
+          value={metin}
+          onChange={(e) => setMetin(e.target.value)}
+          className="leading-relaxed"
+          placeholder="Örn. Bu hafta yalnızca üçgenler: önce konu tekrarı, sonra 40 soru. Cuma kontrol testi."
+        />
+      </Field>
+      <div className={cx("flex flex-wrap items-center justify-end gap-2")}>
+        {kayitli ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={pending}
+            onClick={async () => {
+              const evet = await onayla({
+                title: "Koç notu kaldırılsın mı?",
+                description: "Pazartesi postasında genel bir cümle gider.",
+                confirmLabel: "Notu kaldır",
+                tone: "warning",
+              });
+              if (evet) kaydet("");
+            }}
+          >
+            Notu kaldır
+          </Button>
+        ) : null}
+        <Button type="submit" size="xs" loading={pending} disabled={!degisti || fazla}>
+          {pending ? "Kaydediliyor…" : "Kaydet"}
+        </Button>
       </div>
-      {hata ? <Notice>{hata}</Notice> : null}
+      {hata ? (
+        <Alert variant="error" compact>
+          {hata}
+        </Alert>
+      ) : null}
     </form>
   );
 }
