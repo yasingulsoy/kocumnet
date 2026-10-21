@@ -376,6 +376,133 @@ birden çok kazanımı birleştirdiği için bu alan orada boş kalabiliyor. Uyg
 
 > Cevap:
 
+## 12. Deneme, kâğıt, ipucu ve koçluk (yeni, 21 Ekim)
+
+Bu turda şunlar eklendi:
+- Deneme sınavı ve kâğıtta çözülen testler (optik form).
+- Alıştırmada ipucu ve adım adım açılan çözüm; video çözüm.
+- Kazanım özet kartları ve öğrencinin hata bildirimi.
+- Koça soru, grup ve ödev; seri ve günlük hedef.
+
+Hepsi çalışıyor. Aşağıdakiler içerik ve işleyiş kararı.
+
+**Soru 12.1** — Deneme sürelerini, matematik ayrı oturum olmadığı için sınavın resmî süresini
+soru sayısına oranlayarak koyduk. Panelde her deneme için değiştirilebiliyor. Doğru mu,
+öğrenciye matematik için kaç dakika önerirsiniz?
+
+| Sınav | Soru | Önerilen süre |
+| --- | --- | --- |
+| LGS | 20 | 40 dk |
+| TYT | 40 | 55 dk |
+| AYT | 40 | 45 dk |
+| KPSS | 30 | 35 dk |
+| DGS | 60 | 90 dk |
+| ALES | 50 | 75 dk |
+
+> Cevap:
+
+**Soru 12.2** — Deneme, soruları gerçek sınavın konu dağılımına göre seçiyor ("gerçek sınavda
+bu konudan ortalama kaç soru çıkıyor"). Bu sayılar sizden gelmeli. Pilot sınavı için konu
+başına ortalama soru sayısını yazabilir misiniz?
+
+> Cevap:
+
+**Soru 12.3** — Deneme sıklığı ve kuralları:
+- Ayda kaç deneme olsun?
+- Aynı deneme ikinci kez çözülebiliyor; karşılaştırmaya (yüzdelik dilim) yalnızca ilk
+  deneme giriyor. Uygun mu?
+- Denemeler ücretsiz mi, ücretli mi?
+- Karşılaştırma ("netin, çözenlerin %Y'sinden yüksek") en az 10 kişi çözünce açılıyor. Eşik uygun mu?
+- Denemenin soruları şu an genel havuzda da duruyor: paket testlerinde, alıştırmada ve "Benzerini
+  çöz"de çıkabiliyor. Denemeyi çözmemiş bir öğrenci soruyu önceden görebilir ve karşılaştırma
+  bozulur. Deneme soruları genel havuzdan ayrılsın mı? Önerimiz ayrılması; o zaman denemeler için
+  ayrıca soru yazmak gerekiyor.
+- Deneme doldurulurken zorluk 1-5'e eşit dağıtılıyor. Gerçek sınav gibi orta zorluk ağırlıklı mı
+  olsun?
+
+> Cevap:
+
+**Soru 12.4** — Kâğıtta çözülen testlerde:
+- Öğrenci cevaplarını 48 saat içinde optik forma işlemeli.
+- Süre denetlenemediği için kâğıt denemeleri karşılaştırma havuzuna girmiyor; öğrenci yine
+  de kendi yerini görüyor.
+
+İkisi de uygun mu? Kitapçığın kurallar kutusuna "hesap makinesi kullanılmaz" gibi bir sınav kuralı
+eklensin mi?
+
+> Cevap:
+
+**Soru 12.5** — İpucu yazım standardı. Önerimiz: soru başına en fazla 3 ipucu.
+- 1. ipucu yön gösterir (hangi kavram, hangi formül).
+- 2. ipucu ilk adımı kurar.
+- 3. ipucu sonuca bir adım kala bırakır.
+
+İpucuyla doğru yapılan soru, yanlış defterinde tam doğru sayılmıyor; ertesi gün yeniden
+geliyor (aşaması korunuyor). Uygun mu? İpucu her soruya mı yazılacak, yoksa yalnızca Seviye 1-2'ye mi?
+Bir ipucu en fazla 600 karakter; yeterli mi?
+
+> Cevap:
+
+**Soru 12.6** — Adım adım çözüm: çözümdeki adımlar tek başına bir `---` satırıyla ayrılıyor;
+öğrenci adımları tek tek açıyor. Ekip için önerilen adım sayısı 2-5. Uygun mu?
+
+> Cevap:
+
+**Soru 12.7** — Video çözüm: soruya YouTube ("liste dışı") ya da Vimeo bağlantısı eklenebiliyor.
+- Videoları kim çekecek?
+- Hangi sorular için: zor sorular mı, her kazanımdan bir örnek mi?
+- Kanal hesabı kimde olacak?
+
+> Cevap:
+
+**Soru 12.8** — Kazanım özet kartı: her kazanım için 3-5 satırlık özet ve formüller; öğrenci
+o kazanımda yanlış yaptığında görüyor. Kartları kim yazacak? Kazanım listesiyle (Bölüm 4)
+birlikte hazırlanabilir mi? Kart en fazla 1200 karakter; önerdiğimiz düzen: kural, formül, kısa
+örnek. Uygun mu?
+
+> Cevap:
+
+**Soru 12.9** — Öğrenciler sorularda "bu soruda hata var" diyebiliyor (yanlış anahtar, hatalı
+çözüm, yazım, görsel). Bildirimler panelde ayrı bir listede. Kim bakacak ve en geç kaç gün
+içinde?
+
+> Cevap:
+
+**Soru 12.10** — "Koça sor": öğrenci bir soru hakkında ya da genel bir konuda koça yazabiliyor
+(günde en fazla 5; aynı anda en fazla 3 cevapsız soru).
+- Cevapları kim verecek?
+- Hedef cevap süresi ne olsun (ör. 24 saat)?
+
+> Cevap:
+
+**Soru 12.11** — Grup ve ödev: koç panelde grup kurup ödev veriyor (bir paket/deneme çözmek ya
+da bir konudan en az N soru alıştırma). Tamamlanma sistemden okunuyor, öğrencinin "yaptım"
+demesi yetmiyor.
+- Pilot grubunda haftada kaç ödev planlıyorsunuz?
+- Başka bir ödev türü lazım mı (ör. yanlış defteri tekrarı, seviyeli check-up)?
+- Konu ödevinde öğrencinin "Bilmiyorum" deyip geçtiği soru da ödeve sayılıyor (saymasak rastgele
+  işaretleyen ödüllenir). Son tarihten sonra bitirilen ödev "geç tamamlandı" diye işaretleniyor ama
+  tamamlanmış sayılıyor. İkisi de uygun mu?
+
+> Cevap:
+
+**Soru 12.12** — Seri ve günlük hedef:
+- En az bir soru çözülen her gün seriyi sürdürüyor.
+- Günlük hedef varsayılan 10 soru; öğrenci profilden değiştirebiliyor.
+
+Uygun mu?
+
+> Cevap:
+
+**Soru 12.13** — Süreli testlerin sonucunda artık "Süre ve strateji" kartı var:
+- Hedef sürenin 2 katından uzun kalınan sorular "takıldığın sorular" sayılıyor.
+- Son 10 dakikada kaç soru işaretlendiği ve turlama yapılıp yapılmadığı gösteriliyor.
+- Bunlardan 1-3 kısa tavsiye çıkıyor.
+
+Eşikler ve tavsiye dili uygun mu? Öğrencilere önerdiğiniz bir turlama tekniği varsa onu yazalım.
+
+> Cevap:
+
 ---
 
 Teşekkürler. Cevaplar geldikçe `app/lib/exams.ts` (sınav sabitleri), `app/lib/levels.ts`

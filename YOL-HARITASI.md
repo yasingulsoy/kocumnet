@@ -85,7 +85,7 @@ Tek sınavla başlamak en doğrusu. Önerim TYT ya da ALES/DGS.
 | ✅ **Panelden toplu içe aktarma** (10 Ekim): dosya yükle, hata raporunu gör, onayla | Küçük-orta | Şu an yalnızca komut satırından; içerik ekibi geliştiriciye bağımlı kalmaz |
 | Word (.docx) dosyasından içe aktarma | Orta | Hoca Word'de yazıyorsa dönüştürme adımı kalkar |
 | Parametrik soru şablonu (panelde tanım, örnek üretme, onay) | Orta-büyük | Seviye 1 havuzu hızla dolar, telafi tükenmez |
-| İnceleme notları (soruya yorum bırakma) | Küçük | Hoca ile ekip panel içinde yazışır |
+| ✅ **İnceleme notları** (10 Ekim; 21 Ekim'den beri öğrencinin hata bildirimleri de) | Küçük | Hoca ile ekip panel içinde yazışır |
 
 ---
 
@@ -103,25 +103,37 @@ kontrol testi; seviyeli check-up; gelişim grafiği.
    1, 3 ve 7 gün sonra aynı kazanımdan benzer bir soru sorulur; doğru yapılınca defterden
    çıkar. Pedagojik değeri en yüksek ekleme bu.
 3. ✅ **"Benzerini çöz"** (10 Ekim). Sonuç ekranında her yanlışın yanında, aynı kazanımdan yeni soru.
-4. **Çözüm sunumu:** adım adım açılan çözüm; isteğe bağlı video bağlantısı (soruya yeni
-   bir alan gerekir).
-5. **Veliye rapor bağlantısı:** salt okunur, süreli bağlantı; WhatsApp'tan paylaşılır.
-   Bugün yalnızca PDF var.
-6. **Okuma kolaylığı:** yazı boyutu ayarı, görselde yakınlaştırma.
+4. ✅ **Çözüm sunumu** (21 Ekim): adım adım açılan çözüm, isteğe bağlı video, alıştırmada
+   kademeli ipucu, yanlış yapılan kazanımın özet kartı.
+5. ✅ **Veliye rapor bağlantısı** (10 Ekim): salt okunur, süreli bağlantı; WhatsApp'tan paylaşılır.
+6. ✅ **Okuma kolaylığı** (10 Ekim): yazı boyutu ayarı, görselde yakınlaştırma.
+
+**21 Ekim'de eklenenler (sınav ve koçluk):**
+
+- **Deneme sınavı:** gerçek sınavın soru sayısı, süresi ve yanlış götürme kuralıyla; sorular
+  sabit, sonuçta çözenler arasındaki yer (en az 10 kişiden sonra). Panelde dağılıma göre doldurma.
+- **Kâğıtta çöz:** yazdırılabilir kitapçık ve cevap kâğıdı; cevaplar optik forma işlenir.
+- **Karalama alanı:** sorunun üstüne parmakla ya da kalemle yazma (sınav ve alıştırma).
+- **Süre ve strateji:** takılınan sorular, çözüm sırası, turlama, son dakikalar.
+- **Hata bildirimi ve koça soru:** öğrenci bir soruda hata bildirir ya da koça yazar; panelde
+  ayrı listeler.
+- **Grup ve ödev:** koç grup kurar, paket ya da konu alıştırması ödevi verir; tamamlanma
+  sistemden okunur, "Bugün" kartında ve ödevler sayfasında görünür; grup ısı haritası.
+- **Seri ve günlük hedef:** ana sayfada seri kartı, profilde günlük soru hedefi.
 
 ---
 
 ## 4. Kullanıcı kolaylığı
 
 **Öğrenci:**
-- **Tek "bugün" kartı:** açınca o gün yapılacak tek iş görünsün: bir test, plandaki bir
-  iş ya da yanlış tekrarı.
+- ✅ **Tek "bugün" kartı** (10 Ekim; 21 Ekim'den beri koçun ödevi de).
 - **Kısa oturumlar:** telefonda 10-15 dakikalık işler.
 - **Parolasız giriş:** e-postaya gelen bağlantıyla giriş (e-posta altyapısı gerekir).
-- **Hatırlatma:** haftalık posta hazır; tarayıcı bildirimi eklenebilir.
+- **Hatırlatma:** haftalık posta, seri ve günlük hedef hazır (21 Ekim); tarayıcı bildirimi eklenebilir.
 
 **Koç ve içerik ekibi:**
-- Yapıldı: panelden içe aktarma (10 Ekim). Yapılacak: inceleme notları.
+- Yapıldı: panelden içe aktarma ve inceleme notları (10 Ekim); grup ve ödev, öğrenci soruları,
+  hata bildirimleri, deneme oluşturucu (21 Ekim).
 - Hazır: paket düzenleyici, riskli öğrenciler, koç notu ve madde analizi. Tohum betiği
   panelde düzenlenen paketleri artık ezmiyor; yalnızca `--guncelle` ile yazıyor.
 
