@@ -52,6 +52,8 @@ function check(label: string, ok: boolean, detail = "") {
 
 const EMAIL = "practice-test@kocum.local";
 const OTHER_EMAIL = "practice-test-other@kocum.local";
+/** Teyit turu denetimi için yardımcı öğrenci (aşağıda, 11. bölüm). */
+const TEYIT_EMAIL = "practice-test-teyit@kocum.local";
 const PAKET = "tyt-ilk-15";
 
 /** Öğrenciye giden veride cevap anahtarının izi. */
@@ -171,6 +173,12 @@ async function main() {
   const user = await kullanici(EMAIL);
   const other = await kullanici(OTHER_EMAIL);
   await temizle([user.id, other.id]);
+  // Yarıda kalmış eski bir koşunun yardımcı öğrencisi (11. bölüm) kalmasın.
+  const eskiYardimci = await prisma.user.findUnique({ where: { email: TEYIT_EMAIL }, select: { id: true } });
+  if (eskiYardimci) {
+    await temizle([eskiYardimci.id]);
+    await prisma.user.delete({ where: { id: eskiYardimci.id } });
+  }
 
   // ── 1. Ölçüm: yanlışı ve boşu olan bir test ────────────────
   console.log("\nKaynak test:");
@@ -471,24 +479,53 @@ async function main() {
   // ── 11. Teyit turu bekleyen kazanım korunuyor ──────────────
   console.log("\nSeviyeli check-up teyit turu:");
   // Kazanımı olan ve ŞU AN benzeri bulunan bir yanlış: koruma devreye girince "yok" olmalı.
-  const simdiki = await benzerDurumlari(user.id, examId);
-  const kazanimlilar = await prisma.question.findMany({
-    where: { id: { in: yanlisVeBos }, objectiveId: { not: null } },
-    select: { id: true, objectiveId: true },
-  });
-  const kazanimliKaynak = kazanimlilar.find((q) => simdiki.get(q.id) === true);
-  if (kazanimliKaynak?.objectiveId) {
+  //
+  // Paketin soruları rastgele geliyor ve önceki bölümler benzerlerin bir kısmını
+  // tüketiyor: ana öğrencinin 10 yanlışında böyle bir soru her koşuda çıkmıyor
+  // (CI'da 1 kazanımlı yanlışla düştü). Çıkmazsa hiç soru görmemiş bir yardımcı
+  // öğrenci paketi boş bırakıp bitirir; onun 15 boşunda kazanımlı ve benzeri
+  // olan bir soru demo havuzda hep bulunuyor.
+  async function kazanimliYanlis(userId: string, sessionId: string, sorular: string[]) {
+    const durum = await benzerDurumlari(userId, sessionId);
+    const kazanimlilar = await prisma.question.findMany({
+      where: { id: { in: sorular }, objectiveId: { not: null } },
+      select: { id: true, objectiveId: true },
+    });
+    return kazanimlilar.find((q) => durum.get(q.id) === true) ?? null;
+  }
+  let teyit: { userId: string; sessionId: string; soru: { id: string; objectiveId: string | null } } | null = null;
+  // Yardımcının sınavı soru sayaçlarını artırır; aşağıdaki sayaç denetimi bunu düşer.
+  let yardimciGosterim = 0;
+  const anaKaynak = await kazanimliYanlis(user.id, examId, yanlisVeBos);
+  if (anaKaynak) teyit = { userId: user.id, sessionId: examId, soru: anaKaynak };
+  for (let deneme = 0; !teyit && deneme < 3; deneme++) {
+    const yardimci = await kullanici(TEYIT_EMAIL);
+    const oturum = await startCheckup(yardimci.id, PAKET);
+    const sorular = (await getStudentSession(oturum, yardimci.id)).questions.map((q) => q.id);
+    const sayacOncesi = await sayaclar();
+    await submitCheckup(oturum, yardimci.id);
+    yardimciGosterim += (await sayaclar()).shown - sayacOncesi.shown;
+    const kaynak = await kazanimliYanlis(yardimci.id, oturum, sorular);
+    if (kaynak) teyit = { userId: yardimci.id, sessionId: oturum, soru: kaynak };
+  }
+  if (teyit?.soru.objectiveId) {
     const kosu = await prisma.levelRun.create({
-      data: { userId: user.id, examScope: "TYT", pendingRemedialIds: [kazanimliKaynak.objectiveId] },
+      data: { userId: teyit.userId, examScope: "TYT", pendingRemedialIds: [teyit.soru.objectiveId] },
       select: { id: true },
     });
-    const korunmus = await benzerDurumlari(user.id, examId);
-    check("teyit turu bekleyen kazanımdan benzer soru verilmiyor", korunmus.get(kazanimliKaynak.id) === false);
+    const korunmus = await benzerDurumlari(teyit.userId, teyit.sessionId);
+    check("teyit turu bekleyen kazanımdan benzer soru verilmiyor", korunmus.get(teyit.soru.id) === false);
     await prisma.levelRun.delete({ where: { id: kosu.id } });
-    const sonra = await benzerDurumlari(user.id, examId);
-    check("teyit turu bitince benzer yine var", sonra.get(kazanimliKaynak.id) === true);
+    const sonra = await benzerDurumlari(teyit.userId, teyit.sessionId);
+    check("teyit turu bitince benzer yine var", sonra.get(teyit.soru.id) === true);
   } else {
-    check("benzeri olan kazanımlı yanlış bulundu (teyit turu denetimi için)", false, `${kazanimlilar.length} kazanımlı`);
+    check("benzeri olan kazanımlı yanlış bulundu (teyit turu denetimi için)", false, "yardımcı öğrenciyle de bulunamadı");
+  }
+  // Yardımcı öğrencinin izleri sonraki bölümlerin sayımlarına karışmasın.
+  const yardimciKayit = await prisma.user.findUnique({ where: { email: TEYIT_EMAIL }, select: { id: true } });
+  if (yardimciKayit) {
+    await temizle([yardimciKayit.id]);
+    await prisma.user.delete({ where: { id: yardimciKayit.id } });
   }
 
   // ── 12. Günlük sınır ───────────────────────────────────────
@@ -529,7 +566,8 @@ async function main() {
     acikPuan.correctCount + acikPuan.wrongCount + acikPuan.blankCount === acik.questions.length
   );
   const sayacSinav = await sayaclar();
-  check("sayaçlar yalnızca sınavla arttı", sayacSinav.shown - sayacOnce.shown === acik.questions.length, `+${sayacSinav.shown - sayacOnce.shown}`);
+  const sinavArtisi = sayacSinav.shown - sayacOnce.shown - yardimciGosterim;
+  check("sayaçlar yalnızca sınavla arttı", sinavArtisi === acik.questions.length, `+${sinavArtisi}`);
 
   // ══ YANLIŞ DEFTERİ ══════════════════════════════════════════
   const simdi = () => new Date();
