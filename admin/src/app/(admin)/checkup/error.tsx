@@ -12,8 +12,8 @@ import { MONO } from "@/components/checkup/ui";
  * kayıt…). Panel çerçevesi yerinde kalır; eskiden Next'in çıplak hata
  * sayfası çıkıyordu ve kenar çubuğu da gidiyordu.
  *
- * Kurtarma fonksiyonunun adı sürüme göre değişiyor: bu projedeki Next 16.0
- * `reset` veriyor, 16.3+ `retry`. İkisini de kabul ediyoruz; önce sunucu
+ * Kurtarma fonksiyonu: Next 16.3'ten beri `retry` (segmenti yeniden çekip
+ * çizer); eski `reset` de hâlâ geliyor. İkisini de kabul ediyoruz; önce sunucu
  * verisini tazeliyoruz, yoksa `reset` aynı hatalı veriyle yeniden çizer.
  */
 export default function CheckupError({
