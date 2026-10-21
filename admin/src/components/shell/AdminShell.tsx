@@ -7,15 +7,18 @@ import {
   ChartColumn,
   Database,
   FileUp,
+  Flag,
   Layers,
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MessageCircleQuestion,
   Package,
   Search,
   Target,
   UserRoundX,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { logoutRequest } from "@/lib/api";
 import { CONTENT_ROLES, MANAGE_ROLES, ROLE_LABEL, type Staff, type StaffRole } from "@/lib/checkup/roles";
@@ -55,8 +58,20 @@ function menu(role: StaffRole): NavSection[] {
         ...(yazar ? [{ href: "/checkup/sorular/ice-aktar", label: "Toplu içe aktar", icon: <FileUp /> }] : []),
         { href: "/checkup/kazanimlar", label: "Kazanımlar", icon: <Target /> },
         { href: "/checkup/havuz", label: "Havuz durumu", icon: <Database /> },
+        // Öğrencilerin "bu soruda hata var" bildirimleri (QuestionNote, STUDENT_REPORT).
+        { href: "/checkup/bildirimler", label: "Hata bildirimleri", icon: <Flag /> },
       ],
     },
+    // Koça sorular: soru içeriğini yazabilen herkes cevaplayabilir; öğrencinin
+    // kimliğini (e-posta) yalnızca öğrenci verisi yetkisi olan görür.
+    ...(yazar
+      ? [
+          {
+            title: "Koçluk",
+            items: [{ href: "/checkup/koca-sorular", label: "Öğrenci soruları", icon: <MessageCircleQuestion /> }],
+          },
+        ]
+      : []),
     {
       title: "Testler",
       items: [
@@ -73,6 +88,7 @@ function menu(role: StaffRole): NavSection[] {
             items: [
               { href: "/checkup/ogrenciler", label: "Tüm öğrenciler", icon: <Users /> },
               { href: "/checkup/ogrenciler/riskli", label: "Riskli öğrenciler", icon: <UserRoundX /> },
+              { href: "/checkup/gruplar", label: "Gruplar ve ödevler", icon: <UsersRound /> },
             ],
           },
         ]

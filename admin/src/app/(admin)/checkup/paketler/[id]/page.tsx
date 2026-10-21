@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { paketHavuzu, paketKonulari } from "@/lib/checkup/pool";
+import { denemeHedefleri, denemeListesi, konuSirasi, sinavVarsayilanlari } from "@/lib/checkup/mock";
+import { MockEditor } from "@/components/checkup/MockEditor";
 import { PACKAGE_KIND_LABEL, examLabel, trNumber } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { PackageEditor } from "@/components/checkup/PackageEditor";
@@ -40,7 +42,10 @@ export default async function EditPackagePage({ params }: PageProps<"/checkup/pa
         name: true,
         summary: true,
         durationMinutes: true,
+        questionCount: true,
+        penaltyRatio: true,
         status: true,
+        _count: { select: { sessions: true } },
         topics: { orderBy: { sortOrder: "asc" }, select: { topicId: true, questionCount: true } },
       },
     }),
@@ -57,6 +62,37 @@ export default async function EditPackagePage({ params }: PageProps<"/checkup/pa
     trNumber(biten) +
     " tamamlanmış test" +
     (suren ? " · şu an " + trNumber(suren) + " test sürüyor" : "");
+
+  // Deneme: sabit soru listesi düzenleyicisi (PackageTopic satırı yok).
+  if (paket.kind === "MOCK") {
+    const [liste, hedefler, sira] = await Promise.all([denemeListesi(paket.id, paket.examScope), denemeHedefleri(), konuSirasi()]);
+    return (
+      <>
+        <PageBreadcrumb crumbs={CRUMBS} pageTitle={paket.name} description={"Deneme · " + aciklama} />
+        <MockEditor
+          // Başka bir denemeye geçince durum taşınmasın.
+          key={paket.id}
+          deneme={{
+            id: paket.id,
+            slug: paket.slug,
+            examScope: paket.examScope,
+            name: paket.name,
+            summary: paket.summary ?? "",
+            questionCount: paket.questionCount,
+            durationMinutes: paket.durationMinutes,
+            penaltyRatio: Number(paket.penaltyRatio),
+            status: paket.status,
+            // Alıştırma bu pakete bağlanmaz; her oturum (süren, biten, bırakılan) sayılır.
+            oturum: paket._count.sessions,
+          }}
+          sorular={liste}
+          hedefler={hedefler}
+          konuSirasi={sira}
+          varsayilanlar={sinavVarsayilanlari()}
+        />
+      </>
+    );
+  }
 
   if (paket.kind !== "STANDARD") {
     return (

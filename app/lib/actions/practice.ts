@@ -5,7 +5,15 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthError, requireUser } from "@/lib/auth";
 import { CheckupError } from "@/lib/checkup";
-import { answerPractice, benzeriniCozBaslat, konuCalismasiBaslat, tekrarBaslat } from "@/lib/practice";
+import {
+  answerPractice,
+  benzeriniCozBaslat,
+  ipucuAc,
+  konuCalismasiBaslat,
+  odevKonuCalismasiBaslat,
+  tekrarBaslat,
+} from "@/lib/practice";
+import { MAX_HINTS } from "@/lib/question-content";
 
 /**
  * Alıştırma eylemleri. Kurallar lib/practice.ts'te; burası yalnızca oturum,
@@ -52,6 +60,28 @@ export async function konuCalisAction(
   let yeni: string;
   try {
     yeni = await konuCalismasiBaslat(user.id, topicId.data, sessionId.data);
+  } catch (e) {
+    if (e instanceof CheckupError) return { error: e.message };
+    throw e;
+  }
+  redirect(`/alistirma/${yeni}`);
+}
+
+/**
+ * Koçun konu ödevinden alıştırma açar (yarım kaldıysa ona döner). Kaynak
+ * test istemez; ödevin ve üyeliğin denetimi lib/practice.ts'te.
+ */
+export async function odevKonuCalisAction(
+  _prev: AlistirmaBaslatDurumu,
+  formData: FormData
+): Promise<AlistirmaBaslatDurumu> {
+  const user = await requireUser();
+  const assignmentId = kimlik.safeParse(formData.get("assignmentId"));
+  if (!assignmentId.success) return { error: "Geçersiz istek. Sayfayı yenileyip tekrar dene." };
+
+  let yeni: string;
+  try {
+    yeni = await odevKonuCalismasiBaslat(user.id, assignmentId.data);
   } catch (e) {
     if (e instanceof CheckupError) return { error: e.message };
     throw e;
@@ -108,6 +138,47 @@ export async function alistirmaCevaplaAction(
   } catch (e) {
     if (e instanceof CheckupError) {
       // Kapanmış alıştırmada da sayfayı tazele: ekran son durumu göstersin.
+      if (e.code === "KAPANDI") refresh();
+      return { ok: false, error: e.message };
+    }
+    throw e;
+  }
+  refresh();
+  return { ok: true };
+}
+
+const ipucuSemasi = z.object({
+  sessionId: kimlik,
+  questionId: kimlik,
+  sira: z.number().int().min(1).max(MAX_HINTS),
+});
+
+export type IpucuIstegi = z.infer<typeof ipucuSemasi>;
+
+/**
+ * Kademeli ipucu. İçerik bu eylemin dönüşünde YOK: eylem yalnızca sayacı
+ * artırır ve sayfayı yeniden çizdirir (refresh); açılan ipucu, cevaptaki
+ * geri bildirim gibi sunucuda çizilip gelir. Kurallar lib/practice.ts ipucuAc.
+ */
+export async function ipucuAlAction(
+  input: IpucuIstegi
+): Promise<{ ok: boolean; error?: string; oturumYok?: boolean }> {
+  let userId: string;
+  try {
+    userId = (await requireUser()).id;
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return { ok: false, oturumYok: true, error: "Oturumun kapanmış. Tekrar giriş yap." };
+    }
+    throw e;
+  }
+  const parsed = ipucuSemasi.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Geçersiz istek." };
+
+  try {
+    await ipucuAc({ ...parsed.data, userId });
+  } catch (e) {
+    if (e instanceof CheckupError) {
       if (e.code === "KAPANDI") refresh();
       return { ok: false, error: e.message };
     }

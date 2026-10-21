@@ -52,6 +52,11 @@ const MODULLER = [
   // satırı betiği (app/scripts/import-questions.mts) ile panelin "Toplu içe
   // aktar" ekranı aynı kuralla reddetsin. Yukarıdaki modüllerden içe aktarıyor.
   "question-import.ts",
+  // Grup ödevinin tamamlanma kuralı (tamamladı / geç / başladı) ve son tarih
+  // hesabı. Koçun ilerleme tablosu öğrencinin ödev ekranıyla aynı sonucu
+  // versin: tamamlanma saklanmıyor, iki tarafta da kayıtlardan türetiliyor.
+  // Hiçbir şey içe aktarmıyor.
+  "odev.ts",
 ];
 
 /**

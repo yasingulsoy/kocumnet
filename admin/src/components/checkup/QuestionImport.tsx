@@ -21,6 +21,7 @@ import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
 import { SegmentedTabs } from "@/components/tailadmin/ui/SegmentedTabs";
 import { ContentPreview } from "./ContentPreview";
+import { CozumOnizleme, IpucuOnizleme, VideoBaglantisi } from "./SolutionPreview";
 import { useOnay } from "./Onay";
 import { CODE, MONO, Meter } from "./ui";
 
@@ -474,7 +475,12 @@ function Rapor({
     >
       <div className="space-y-4 border-b border-gray-100 p-4 sm:p-6">
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Sayac etiket="Geçerli" deger={s.gecerli} ton="success" />
+          <Sayac
+            etiket="Geçerli"
+            deger={s.gecerli}
+            ton="success"
+            alt={[s.ipuclu ? s.ipuclu + " ipuçlu" : "", s.videolu ? s.videolu + " videolu" : ""].filter(Boolean).join(" · ") || undefined}
+          />
           <Sayac etiket="Reddedilen" deger={s.reddedilen} ton={s.reddedilen ? "error" : "gray"} />
           <Sayac etiket="Uyarılı" deger={s.uyarili} ton={s.uyarili ? "warning" : "gray"} />
           <Sayac etiket="Yeni kazanım" deger={s.yeniKazanim} ton="gray" alt={s.gorsel + " görsel"} />
@@ -581,6 +587,9 @@ function SoruSatiri({ q, gorselAdresi }: { q: RaporSorusu; gorselAdresi: (ad: st
           ) : null}
           {o.sinavlar.length ? <span className="text-brand-700">yalnızca {o.sinavlar.join(", ")}</span> : null}
           {o.gorselSayisi ? <span>{o.gorselSayisi} görsel</span> : null}
+          {o.ipucuSayisi ? <span>{o.ipucuSayisi} ipucu</span> : null}
+          {o.video ? <span>video çözüm</span> : null}
+          {o.adimSayisi > 1 ? <span>{o.adimSayisi} adımlı çözüm</span> : null}
         </p>
       ) : null}
 
@@ -655,7 +664,18 @@ function SoruSatiri({ q, gorselAdresi }: { q: RaporSorusu; gorselAdresi: (ad: st
           {q.onizleme.cozum ? (
             <div className="mt-3 border-t border-gray-200 pt-3">
               <p className="mb-1 text-theme-xs font-semibold tracking-wide text-gray-500 uppercase">Çözüm</p>
-              <ContentPreview markup={q.onizleme.cozum} gorselAdresi={gorselAdresi} />
+              <CozumOnizleme markup={q.onizleme.cozum} gorselAdresi={gorselAdresi} />
+            </div>
+          ) : null}
+          {q.onizleme.ipuclari.length ? (
+            <div className="mt-3 border-t border-gray-200 pt-3">
+              <p className="mb-1 text-theme-xs font-semibold tracking-wide text-gray-500 uppercase">İpuçları</p>
+              <IpucuOnizleme ipuclari={q.onizleme.ipuclari} gorselAdresi={gorselAdresi} />
+            </div>
+          ) : null}
+          {o?.video ? (
+            <div className="mt-3 border-t border-gray-200 pt-3">
+              <VideoBaglantisi url={o.video} />
             </div>
           ) : null}
         </div>

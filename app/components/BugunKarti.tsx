@@ -4,16 +4,24 @@ import {
   CalendarCheck,
   ChartLine,
   CircleCheck,
+  ClipboardCheck,
   ClipboardList,
+  ClipboardPen,
   Hourglass,
   Layers,
   NotebookPen,
   Play,
+  Printer,
+  ScanLine,
   Sparkles,
 } from "lucide-react";
 import type { BugunIsi } from "@/lib/bugun";
 import { konuTekrarBaslat } from "@/lib/actions/plan";
 import { examShort } from "@/lib/exams";
+import { sonGunMetni } from "@/lib/deneme";
+import { kalanGun, kalanGunMetni } from "@/lib/odev";
+import type { OgrenciOdevi } from "@/lib/odev-sorgu";
+import { KonuOdevButonu } from "@/app/(panel)/odevler/KonuOdevButonu";
 import { TekrarBaslatButonu } from "@/components/AlistirmaButonlari";
 import { PlanIsiBitirButonu } from "@/components/PlanIsiBitirButonu";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -32,6 +40,8 @@ import { GridShape } from "@/components/tailadmin/ui/GridShape";
 export interface BugunAcikTest {
   id: string;
   kind: string;
+  /** ONLINE | PAPER. Kâğıtta sayaç yok; expiresAt = cevapları optik forma işleme son anı. */
+  mode: string;
   stageLevel: number | null;
   stageKind: string | null;
   expiresAt: Date;
@@ -66,7 +76,13 @@ export interface BugunOneri {
   topicCount: number;
 }
 
-export type BugunKartIsi = BugunIsi<BugunAcikTest, BugunSeviyeli, BugunPlanIsi, BugunOneri>;
+/** Son tarihi yakın ödev (lib/odev-sorgu.ts bugunkuOdev). */
+export type BugunOdev = Pick<
+  OgrenciOdevi,
+  "id" | "kind" | "title" | "grupAdi" | "dueAt" | "paket" | "konu" | "ilerleme" | "acikOturumId"
+>;
+
+export type BugunKartIsi = BugunIsi<BugunAcikTest, BugunSeviyeli, BugunPlanIsi, BugunOneri, BugunOdev>;
 
 const BASLIK_ID = "bugun-baslik";
 
@@ -135,6 +151,31 @@ export function BugunKarti({ is, yeni }: { is: BugunKartIsi; yeni: boolean }) {
           : t.kind === "LEVEL_STAGE"
             ? `${t.stageKind === "REMEDIAL" ? "Teyit turu" : `Seviye ${t.stageLevel ?? 1}`} · ${t.package.name}`
             : t.package.name;
+      /*
+       * Kâğıt oturumu: öğrenci kitapçıkta çözüyor, işleyen bir süre yok.
+       * Kartın işi cevapları optik forma işletmek (son an expiresAt,
+       * lib/deneme.ts KAGIT_ISLEME_SURESI_SAAT); kitapçık da yeniden açılabilsin.
+       */
+      if (t.mode === "PAPER") {
+        return (
+          <Kabuk
+            ikon={<ClipboardPen aria-hidden />}
+            ust="Bugün · kâğıtta çözdüğün test"
+            baslik={ad}
+            metin={`Cevaplarını optik forma işle · son gün ${sonGunMetni(t.expiresAt)}`}
+            eylem={
+              <div className="flex flex-col gap-2">
+                <ButtonLink href={`/checkup/${t.id}`} block startIcon={<ScanLine />}>
+                  Optik forma işle
+                </ButtonLink>
+                <ButtonLink href={`/kitapcik/${t.id}`} variant="outline" block startIcon={<Printer />}>
+                  Kitapçığı aç
+                </ButtonLink>
+              </div>
+            }
+          />
+        );
+      }
       const bitis = t.expiresAt.toLocaleTimeString("tr-TR", {
         hour: "2-digit",
         minute: "2-digit",
@@ -152,6 +193,46 @@ export function BugunKarti({ is, yeni }: { is: BugunKartIsi; yeni: boolean }) {
               Teste dön
             </ButtonLink>
           }
+        />
+      );
+    }
+
+    case "ODEV": {
+      const o = is.odev;
+      const simdi = new Date();
+      const saat = o.dueAt.toLocaleString("tr-TR", {
+        timeZone: "Europe/Istanbul",
+        weekday: "long",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const konuIlerlemesi = o.kind === "TOPIC_PRACTICE" ? ` · ${o.ilerleme.cozulen}/${o.ilerleme.hedef} soru` : "";
+      // Kart başlatamıyorsa (paket yayında değil) nedeni ödevler sayfasında yazıyor.
+      // Konu ödevi kaynak test istemez (lib/practice.ts odevKonuCalismasiBaslat).
+      const eylem =
+        o.kind === "PACKAGE" && o.paket?.yayinda ? (
+          <ButtonLink href={`/paketler/${o.paket.slug}`} block startIcon={<Play />}>
+            {o.acikOturumId ? "Teste dön" : "Teste başla"}
+          </ButtonLink>
+        ) : o.kind === "TOPIC_PRACTICE" && o.konu ? (
+          <KonuOdevButonu
+            assignmentId={o.id}
+            topicName={o.konu.name}
+            etiket={o.ilerleme.durum === "BASLADI" ? "Devam et" : "Alıştırmaya başla"}
+            block
+          />
+        ) : (
+          <ButtonLink href="/odevler" variant="outline" block endIcon={ileri}>
+            Ödeve bak
+          </ButtonLink>
+        );
+      return (
+        <Kabuk
+          ikon={<ClipboardCheck aria-hidden />}
+          ust={kalanGun(o.dueAt, simdi) <= 0 ? "Bugün · ödevin son günü" : "Bugün · koçunun ödevi"}
+          baslik={o.title}
+          metin={`${o.grupAdi} · son tarih ${saat}, ${kalanGunMetni(o.dueAt, simdi)}${konuIlerlemesi}`}
+          eylem={eylem}
         />
       );
     }

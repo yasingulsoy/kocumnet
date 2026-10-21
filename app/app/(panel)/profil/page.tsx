@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LogOut, Mail, ShieldCheck, Target, Ticket, User, UsersRound } from "lucide-react";
+import { Flame, LogOut, Mail, ShieldCheck, Target, Ticket, User, UsersRound } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { etkinVeliBaglantilari } from "@/lib/veli-raporu";
@@ -12,7 +12,8 @@ import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { ProfileCard, type ProfileDetail } from "@/components/tailadmin/profile/ProfileCard";
 import { SettingRow, SettingsCard } from "@/components/tailadmin/profile/SettingsCard";
-import { DeleteAccount, HedefForm, MailTercihForm, PasswordDialogButton, ProfileForm } from "./forms";
+import { GUNLUK_HEDEF_SECENEKLERI } from "@/lib/seri";
+import { DeleteAccount, GunlukHedefForm, HedefForm, MailTercihForm, PasswordDialogButton, ProfileForm } from "./forms";
 import { SessionsCard } from "./SessionsCard";
 import { VeliBaglantisi } from "./VeliBaglantisi";
 
@@ -32,6 +33,7 @@ export default async function ProfilePage() {
         targetExam: true,
         targetNet: true,
         weeklyTestGoal: true,
+        dailyQuestionGoal: true,
         mailOptOut: true,
         createdAt: true,
       },
@@ -95,6 +97,15 @@ export default async function ProfilePage() {
             targetNet={user.targetNet === null ? null : Number(user.targetNet)}
             weeklyTestGoal={user.weeklyTestGoal}
           />
+        </ComponentCard>
+
+        <ComponentCard
+          id="gunluk-hedef"
+          icon={<Flame aria-hidden />}
+          title="Günlük hedef"
+          desc="Ana sayfadaki seri kartı bugünkü ilerlemeni buna göre gösterir"
+        >
+          <GunlukHedefForm hedef={user.dailyQuestionGoal} secenekler={GUNLUK_HEDEF_SECENEKLERI} />
         </ComponentCard>
 
         <ComponentCard

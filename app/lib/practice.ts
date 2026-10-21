@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/lib/generated/prisma/client";
 import type { ExamScope, PracticeMode, QuestionLevel } from "@/lib/generated/prisma/client";
-import { parseQuestionContent, type QuestionContent } from "@/lib/question-content";
+import {
+  MAX_HINTS,
+  parseHints,
+  parseQuestionContent,
+  parseVideoUrl,
+  safeParseQuestionContent,
+  type QuestionContent,
+} from "@/lib/question-content";
 import { EXPOSURE_WINDOW_DAYS, selectQuestionsForTopic } from "@/lib/question-selection";
 import { konuSinavdaMi, soruSinavdaKosulu } from "@/lib/exam-scope";
 import { CheckupError, KAYIT_TOLERANSI_MS, type StudentChoice } from "@/lib/checkup";
@@ -18,12 +26,17 @@ import {
   benzerAta,
   benzeriVar,
   gunBasi,
+  odevAlistirmaAdedi,
   vade,
   vadeMetni,
   type BenzerAday,
   type BenzerSoru,
 } from "@/lib/review";
 import { tekrarIsle, vadesiGelenler } from "@/lib/notebook";
+import { odevBolumu, odevIlerlemesi, ogrenciGorur, tamamlandiMi } from "@/lib/odev";
+import { raporDurumlari } from "@/lib/hata-bildirimi";
+import { kocaSoruDurumlari } from "@/lib/koca-soru";
+import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
 
 /**
  * Alıştırma — ölçümün yanındaki öğrenme döngüsü.
@@ -41,6 +54,10 @@ import { tekrarIsle, vadesiGelenler } from "@/lib/notebook";
  * okunur ve öğrenciye gider. Cevaplanmamış sorunun anahtarı veritabanından
  * hiç çekilmez. Açık bir sınavda da bulunan soru için anahtar açılmaz.
  * scripts/practice-test.mts bunu denetliyor.
+ *
+ * İPUCU: cevaplanmamış soruda yalnızca ipucu SAYISI gider; içerik, öğrenci
+ * istedikçe tek tek açılır (ipucuAc) ve yalnızca açılanlar sayfaya girer.
+ * Çözüm, video ve kazanım özeti cevaptan sonra (scripts/ogrenme-test.mts).
  */
 
 const SAAT = 3600_000;
@@ -473,6 +490,26 @@ export async function konuCalismasiBaslat(
   }
 
   // Aynı konuda yarım kalan alıştırma varsa ona dön.
+  const acik = await acikKonuAlistirmasi(userId, topicId, now);
+  if (acik) return acik;
+
+  const adet = Math.min(KONU_CALISMA_SORU, await alistirmaHakki(userId, now));
+  if (adet < 1) throw new CheckupError(HAK_DOLDU);
+
+  return konuAlistirmasiAc({
+    userId,
+    konu,
+    sinav: s.sinav,
+    adet,
+    sourceSessionId,
+    // Sonuç ekranında çözümüyle görülen sorular aday değil.
+    haricEk: s.items.map((i) => i.questionId),
+    now,
+  });
+}
+
+/** Aynı konuda yarım kalan (cevaplanmamış sorusu olan) konu alıştırması. */
+async function acikKonuAlistirmasi(userId: string, topicId: string, now: Date): Promise<string | null> {
   const acik = await prisma.checkupSession.findFirst({
     where: {
       userId,
@@ -485,11 +522,24 @@ export async function konuCalismasiBaslat(
     },
     select: { id: true },
   });
-  if (acik) return acik.id;
+  return acik?.id ?? null;
+}
 
-  const adet = Math.min(KONU_CALISMA_SORU, await alistirmaHakki(userId, now));
-  if (adet < 1) throw new CheckupError(HAK_DOLDU);
-
+/**
+ * Konu alıştırmasının ortak gövdesi ("Bu konuda çalış" ve koçun konu
+ * ödevi): korunan sorular dışlanır, seçim kontrol testinin merdiveni.
+ */
+async function konuAlistirmasiAc(args: {
+  userId: string;
+  konu: { id: string; name: string };
+  sinav: Sinav;
+  adet: number;
+  sourceSessionId: string | null;
+  haricEk: string[];
+  now: Date;
+}): Promise<string> {
+  const { userId, konu, sinav, adet, sourceSessionId, haricEk, now } = args;
+  const topicId = konu.id;
   const { sorular: korunan, kazanimlar } = await korunanlar(userId);
   const [bekleyenKazanimSorulari, azOnce] = await Promise.all([
     kazanimlar.length > 0
@@ -501,22 +551,17 @@ export async function konuCalismasiBaslat(
     azOnceGosterilenler(userId, now),
   ]);
   const haric = [
-    ...new Set([
-      ...korunan,
-      ...s.items.map((i) => i.questionId),
-      ...bekleyenKazanimSorulari.map((q) => q.id),
-      ...azOnce,
-    ]),
+    ...new Set([...korunan, ...haricEk, ...bekleyenKazanimSorulari.map((q) => q.id), ...azOnce]),
   ];
 
-  const secim = await selectQuestionsForTopic(topicId, adet, userId, s.sinav, haric);
+  const secim = await selectQuestionsForTopic(topicId, adet, userId, sinav, haric);
   if (secim.questions.length === 0) {
     throw new CheckupError(`${konu.name} konusunda şu an alıştırmalık soru kalmadı.`);
   }
 
   return alistirmaAc({
     userId,
-    examScope: s.sinav,
+    examScope: sinav,
     mode: "TOPIC",
     focusTopicId: topicId,
     sourceSessionId,
@@ -524,6 +569,92 @@ export async function konuCalismasiBaslat(
     relaxedExposureCount: secim.relaxedExposureCount,
     now,
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Koçun konu ödevi
+// ─────────────────────────────────────────────────────────────
+
+/** Ödev bulunamadı ile "grubun üyesi değilsin" aynı ileti: ödev kimliği yoklanamasın. */
+const ODEV_YOK = "Bu ödev bulunamadı. Sayfayı yenileyip tekrar dene.";
+
+/**
+ * Koçun verdiği konu ödevinden alıştırma (Assignment, TOPIC_PRACTICE).
+ *
+ * "Bu konuda çalış"tan farkı: kaynak test İSTEMEZ. Konuyu koç seçti; konuyu
+ * hiç testte görmemiş öğrenci de ödevini yapabilmeli. Oturum aynı konu
+ * alıştırması (focusTopicId, TOPIC): ödev ilerlemesi bu oturumların
+ * cevaplarından türüyor (lib/odev.ts), yarım kalan alıştırmaya dönülüyor.
+ *
+ * Denetimler: ödev konu ödevi, iptal edilmemiş, başlamış; öğrenci grubun
+ * üyesi, grup arşivlenmemiş; ödev öğrencinin açık listesinde (lib/odev.ts
+ * ogrenciGorur ve odevBolumu, ödevler ekranıyla aynı kural). Sınav: grubun
+ * sınavı, yoksa öğrencinin hedef sınavı, o da konuyu kapsamıyorsa konunun
+ * kendi sınavı. Soru sayısı: odevAlistirmaAdedi (lib/review.ts).
+ */
+export async function odevKonuCalismasiBaslat(userId: string, assignmentId: string, now = new Date()): Promise<string> {
+  const odev = await prisma.assignment.findUnique({
+    where: { id: assignmentId },
+    select: {
+      kind: true,
+      packageId: true,
+      topicId: true,
+      questionCount: true,
+      startsAt: true,
+      dueAt: true,
+      cancelledAt: true,
+      group: {
+        select: {
+          archivedAt: true,
+          examScope: true,
+          members: { where: { userId }, select: { id: true } },
+        },
+      },
+      topic: { select: { id: true, name: true, examScope: true, examScopes: true } },
+    },
+  });
+  if (!odev || odev.group.members.length === 0) throw new CheckupError(ODEV_YOK);
+  if (!ogrenciGorur(odev, odev.group)) {
+    throw new CheckupError("Bu ödev artık açık değil; koçun kaldırmış olabilir.");
+  }
+  if (odev.kind !== "TOPIC_PRACTICE" || !odev.topic) throw new CheckupError("Bu ödev bir konu alıştırması değil.");
+  if (odev.startsAt.getTime() > now.getTime()) throw new CheckupError("Bu ödev henüz başlamadı.");
+  const konu = odev.topic;
+
+  // Ödevin ilerlemesi ve görünürlüğü: ödevler ekranıyla aynı kural, aynı kayıtlar.
+  const cevaplar = await prisma.answer.findMany({
+    where: {
+      answeredAt: { gte: odev.startsAt },
+      sessionItem: { session: { userId, kind: "PRACTICE", focusTopicId: konu.id } },
+    },
+    select: { answeredAt: true },
+  });
+  const ilerleme = odevIlerlemesi(odev, {
+    oturumlar: [],
+    cevaplar: cevaplar.map((c) => ({ topicId: konu.id, answeredAt: c.answeredAt })),
+  });
+  if (tamamlandiMi(ilerleme.durum)) throw new CheckupError("Bu ödevi tamamladın, tebrikler!");
+  if (odevBolumu(odev, ilerleme, now) !== "ACIK") throw new CheckupError("Bu ödevin süresi kapandı.");
+
+  const sinav = [odev.group.examScope, await hedefSinav(userId), konu.examScope].find(
+    (s): s is Sinav => sinavGecerli(s) && konuSinavdaMi(konu, s)
+  );
+  if (!sinav) throw new CheckupError(`${konu.name} için sınav belirlenemedi; koçuna haber ver.`);
+
+  const acik = await acikKonuAlistirmasi(userId, konu.id, now);
+  if (acik) return acik;
+
+  const adet = odevAlistirmaAdedi(ilerleme.hedef - ilerleme.cozulen, await alistirmaHakki(userId, now));
+  return konuAlistirmasiAc({ userId, konu, sinav, adet, sourceSessionId: null, haricEk: [], now }).catch((e) => {
+    // Seçimin kendi iletisi ("soru kalmadı") ödevde koça yönlendirsin.
+    if (e instanceof CheckupError) throw new CheckupError(`${e.message} Koçuna haber ver.`);
+    throw e;
+  });
+}
+
+async function hedefSinav(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { targetExam: true } });
+  return u?.targetExam ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -713,6 +844,22 @@ export interface PracticeFeedback {
   solution: QuestionContent | null;
   /** Bugünkü tekrarda: maddenin şimdiki durumu ("Sıradaki tekrar 3 gün sonra"). */
   defterNotu: string | null;
+  /** Cevaptan önce kaç ipucu açılmıştı. */
+  ipucuSayisi: number;
+  /** Video çözüm (gömülü oynatıcı adresi). */
+  video: { embedUrl: string; provider: "youtube" | "vimeo" } | null;
+  /** Yanlış ya da boş cevapta: sorunun kazanımı ve özeti (özeti olmayan kazanımda null). */
+  kazanim: { id: string; ad: string; ozet: QuestionContent } | null;
+  /** Öğrencinin bu sorudaki hata bildirimi ve koça sorusu (yoksa null). */
+  rapor: RaporDurumu | null;
+  kocaSoru: KocaSoruDurumu | null;
+}
+
+export interface PracticeHints {
+  /** Sorudaki ipucu sayısı (en fazla MAX_HINTS). */
+  toplam: number;
+  /** YALNIZCA açılmış ipuçları, sırayla. Açılmamışın içeriği burada yok. */
+  acilan: QuestionContent[];
 }
 
 export interface PracticeQuestion {
@@ -721,6 +868,7 @@ export interface PracticeQuestion {
   topicName: string;
   stem: QuestionContent;
   choices: StudentChoice[];
+  ipucu: PracticeHints;
   feedback: PracticeFeedback | null;
 }
 
@@ -734,6 +882,36 @@ export interface PracticeSessionView {
   /** Tek soruluk benzer alıştırmada asıl soru ("bir benzerini daha" için). */
   sourceQuestionId: string | null;
   questions: PracticeQuestion[];
+}
+
+/**
+ * Soruların ipucu SAYISI — sayı sorguda hesaplanır, içerik veritabanından
+ * çıkmaz. Cevaplanmamış sorunun ipucu metni bu modülün belleğine bile girmez
+ * (anahtardaki ilkeyle aynı); yalnızca öğrencinin açtıkları okunur.
+ */
+async function ipucuSayilari(questionIds: string[]): Promise<Map<string, number>> {
+  if (questionIds.length === 0) return new Map();
+  const satirlar = await prisma.$queryRaw<{ id: string; n: number }[]>`
+    SELECT q.id,
+           (CASE WHEN jsonb_typeof(q.hints) = 'array'
+                 THEN LEAST(jsonb_array_length(q.hints), ${MAX_HINTS}::int)
+                 ELSE 0 END)::int AS n
+    FROM "Question" q
+    WHERE q.id IN (${Prisma.join(questionIds)})
+  `;
+  return new Map(satirlar.map((r) => [r.id, Number(r.n)]));
+}
+
+/** Açılmış ipuçlarının içeriği: yalnızca hintsUsed > 0 olan sorular, ilk hintsUsed tanesi. */
+async function acilanIpuclari(acilan: { questionId: string; adet: number }[]): Promise<Map<string, QuestionContent[]>> {
+  const istenen = acilan.filter((a) => a.adet > 0);
+  if (istenen.length === 0) return new Map();
+  const satirlar = await prisma.question.findMany({
+    where: { id: { in: istenen.map((a) => a.questionId) } },
+    select: { id: true, hints: true },
+  });
+  const adet = new Map(istenen.map((a) => [a.questionId, a.adet]));
+  return new Map(satirlar.map((q) => [q.id, parseHints(q.hints).slice(0, adet.get(q.id) ?? 0)]));
 }
 
 /**
@@ -760,6 +938,7 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
         select: {
           sortOrder: true,
           sourceQuestionId: true,
+          hintsUsed: true,
           question: {
             select: {
               id: true,
@@ -770,6 +949,7 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
                 // ⚠️ isCorrect ve errorType BİLİNÇLİ OLARAK YOK.
                 select: { id: true, label: true, content: true },
               },
+              // ⚠️ solution, hints ve videoUrl BİLİNÇLİ OLARAK YOK.
             },
           },
           answer: { select: { choiceId: true, isCorrect: true } },
@@ -784,17 +964,25 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
   }
 
   const cevaplananlar = session.items.filter((i) => i.answer).map((i) => i.question.id);
-  const anahtarlar =
+  const [anahtarlar, ipucuSayisi, ipuclari, raporlar, kocaSorulari] = await Promise.all([
     cevaplananlar.length > 0
-      ? await prisma.question.findMany({
+      ? prisma.question.findMany({
           where: { id: { in: cevaplananlar } },
           select: {
             id: true,
             solution: true,
+            videoUrl: true,
+            objective: { select: { id: true, name: true, summary: true } },
             choices: { select: { id: true, isCorrect: true, errorType: true } },
           },
         })
-      : [];
+      : Promise.resolve([]),
+    ipucuSayilari(session.items.map((i) => i.question.id)),
+    acilanIpuclari(session.items.map((i) => ({ questionId: i.question.id, adet: i.hintsUsed }))),
+    // Bildirim ve koça soru düğmeleri yalnızca cevaptan sonra; durumları da öyle.
+    raporDurumlari(userId, cevaplananlar),
+    kocaSoruDurumlari(userId, cevaplananlar),
+  ]);
   const anahtar = new Map(anahtarlar.map((a) => [a.id, a]));
 
   // Bugünkü tekrar: cevaplanan sorunun kaynağı olan maddenin şimdiki hâli.
@@ -811,11 +999,16 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
       : [];
   const madde = new Map(maddeler.map((m) => [m.questionId, m]));
   const simdi = new Date();
-  const defterNotu = (kaynak: string | null): string | null => {
+  const defterNotu = (kaynak: string | null, ipucuylaDogru: boolean): string | null => {
     const m = kaynak ? madde.get(kaynak) : undefined;
     if (!m) return null;
     if (m.resolvedAt) {
       return `Bu yanlış defterden çıktı: aralıklarla ${TEKRAR_ARALIKLARI_GUN.length} kez doğru yaptın.`;
+    }
+    // Öğrenciye açıkça: ipucuyla gelen doğru maddeyi ilerletmedi (lib/review.ts).
+    if (ipucuylaDogru) {
+      const ne = vadeMetni(m.dueAt, simdi);
+      return `İpucuyla doğru: tam doğru sayılmaz, ${ne === "yarın" ? "yarın bir daha soracağız" : `sıradaki tekrar ${ne}`}.`;
     }
     return `Yanlış defteri: sıradaki tekrar ${vadeMetni(m.dueAt, simdi)}.`;
   };
@@ -838,6 +1031,12 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
           secilen && !secilen.isCorrect && secilen.errorType && secilen.errorType !== "DIGER"
             ? secilen.errorType
             : null;
+        const video = parseVideoUrl(a.videoUrl);
+        // Kazanım özeti yanlış ya da boş cevapta; özeti olmayan (ya da bozuk) kazanımda kart yok.
+        const ozet =
+          item.answer.isCorrect !== true && a.objective?.summary
+            ? safeParseQuestionContent(a.objective.summary)
+            : null;
         feedback = {
           selectedChoiceId: item.answer.choiceId,
           isCorrect: item.answer.isCorrect,
@@ -845,7 +1044,16 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
           errorLabel: yanlisTipi ? (ERROR_TYPE_LABELS[yanlisTipi] ?? yanlisTipi) : null,
           errorAdvice: hataTipiTavsiyesi(yanlisTipi),
           solution: a.solution ? parseQuestionContent(a.solution) : null,
-          defterNotu: session.practiceMode === "REVIEW" ? defterNotu(item.sourceQuestionId) : null,
+          defterNotu:
+            session.practiceMode === "REVIEW"
+              ? defterNotu(item.sourceQuestionId, item.answer.isCorrect === true && item.hintsUsed > 0)
+              : null,
+          ipucuSayisi: item.hintsUsed,
+          video: video ? { embedUrl: video.embedUrl, provider: video.provider } : null,
+          kazanim:
+            a.objective && ozet?.success ? { id: a.objective.id, ad: a.objective.name, ozet: ozet.data } : null,
+          rapor: raporlar.get(item.question.id) ?? null,
+          kocaSoru: kocaSorulari.get(item.question.id) ?? null,
         };
       }
       return {
@@ -858,6 +1066,10 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
           label: c.label,
           content: parseQuestionContent(c.content),
         })),
+        ipucu: {
+          toplam: ipucuSayisi.get(item.question.id) ?? 0,
+          acilan: ipuclari.get(item.question.id) ?? [],
+        },
         feedback,
       };
     }),
@@ -867,6 +1079,89 @@ export async function getPracticeSession(sessionId: string, userId: string): Pro
 // ─────────────────────────────────────────────────────────────
 // Cevapla
 // ─────────────────────────────────────────────────────────────
+
+/** Soru öğrencinin açık (süren) bir sınavında da var mı — anahtar, çözüm ve ipucu kilidi. */
+async function acikSinavdaMi(userId: string, questionId: string, now: Date): Promise<boolean> {
+  const item = await prisma.sessionItem.findFirst({
+    where: {
+      questionId,
+      session: {
+        userId,
+        kind: { not: "PRACTICE" },
+        status: "IN_PROGRESS",
+        expiresAt: { gt: new Date(now.getTime() - KAYIT_TOLERANSI_MS) },
+      },
+    },
+    select: { id: true },
+  });
+  return item !== null;
+}
+
+/**
+ * Kademeli ipucu: `sira`ncı ipucunu açar (1'den başlar). Sunucu sayar
+ * (SessionItem.hintsUsed); sayfayı yenilemek sayacı sıfırlamaz, açılmış
+ * ipuçları yeniden gelir. Koşullar:
+ *
+ *  - oturum öğrencinin, alıştırma ve açık (süresi dolmamış);
+ *  - madde henüz CEVAPLANMAMIŞ (cevaptan sonra ipucu anlamsız; defter
+ *    kuralı da cevap anındaki sayıya bakıyor);
+ *  - ipuçları SIRAYLA: istenen ≤ açılan + 1 (üçüncüyü doğrudan açmak yok);
+ *  - soru açık bir sınavda da varsa açılmaz (ipucu çözümün parçası).
+ *
+ * Açılmış bir ipucunu yeniden istemek hiçbir şeyi değiştirmez. Sayaç tek
+ * koşullu UPDATE ile artar: çift dokunuş iki ipucu açmaz, cevapla yarışan
+ * istek cevaplanmış maddeyi artırmaz.
+ */
+export async function ipucuAc(args: {
+  sessionId: string;
+  userId: string;
+  questionId: string;
+  sira: number;
+}): Promise<{ acilan: number }> {
+  const { sessionId, userId, questionId, sira } = args;
+  const now = new Date();
+  if (!Number.isInteger(sira) || sira < 1 || sira > MAX_HINTS) throw new CheckupError("Geçersiz ipucu.");
+
+  const item = await prisma.sessionItem.findFirst({
+    where: { sessionId, questionId, session: { userId } },
+    select: {
+      id: true,
+      hintsUsed: true,
+      answer: { select: { id: true } },
+      session: { select: { kind: true, status: true, expiresAt: true } },
+    },
+  });
+  if (!item) throw new CheckupError("Soru bu oturuma ait değil.");
+  // Sınav oturumunda ipucu yok: süren testte çözümün bir parçası açılırdı.
+  if (item.session.kind !== "PRACTICE") throw new CheckupError("İpucu yalnızca alıştırmada açılır.");
+  if (item.answer) throw new CheckupError("Bu soruyu cevapladın; çözümü aşağıda.");
+  if (item.session.status !== "IN_PROGRESS" || item.session.expiresAt.getTime() < now.getTime()) {
+    throw new CheckupError("Bu alıştırma kapandı. Yenisini açabilirsin.", "KAPANDI");
+  }
+  if (sira <= item.hintsUsed) return { acilan: item.hintsUsed };
+  if (sira > item.hintsUsed + 1) throw new CheckupError("İpuçları sırayla açılır.");
+  if (await acikSinavdaMi(userId, questionId, now)) {
+    throw new CheckupError("Bu soru açık bir testinde de var. Önce o testi bitir.");
+  }
+
+  const soru = await prisma.question.findUnique({ where: { id: questionId }, select: { hints: true } });
+  if (sira > parseHints(soru?.hints).length) throw new CheckupError("Bu soruda başka ipucu yok.");
+
+  const r = await prisma.sessionItem.updateMany({
+    where: { id: item.id, hintsUsed: sira - 1, answer: { is: null } },
+    data: { hintsUsed: sira },
+  });
+  if (r.count === 0) {
+    // Yarış: ya aynı ipucu az önce açıldı (sorun yok) ya da madde cevaplandı.
+    const simdi = await prisma.sessionItem.findUnique({
+      where: { id: item.id },
+      select: { hintsUsed: true, answer: { select: { id: true } } },
+    });
+    if (simdi && !simdi.answer && simdi.hintsUsed >= sira) return { acilan: simdi.hintsUsed };
+    throw new CheckupError(simdi?.answer ? "Bu soruyu cevapladın; çözümü aşağıda." : "İpucu açılamadı, tekrar dene.");
+  }
+  return { acilan: sira };
+}
 
 /**
  * Alıştırma cevabı. İlk kayıt KİLİTLİDİR: ikinci gönderim hiçbir şeyi
@@ -906,19 +1201,7 @@ export async function answerPractice(args: {
    * Seçim bu soruları zaten dışlıyor; bu ikinci kilit: alıştırma açıldıktan
    * sonra başlayan bir sınav (havuz darken) aynı soruyu seçmiş olabilir.
    */
-  const acikSinavda = await prisma.sessionItem.findFirst({
-    where: {
-      questionId,
-      session: {
-        userId,
-        kind: { not: "PRACTICE" },
-        status: "IN_PROGRESS",
-        expiresAt: { gt: new Date(now.getTime() - KAYIT_TOLERANSI_MS) },
-      },
-    },
-    select: { id: true },
-  });
-  if (acikSinavda) {
+  if (await acikSinavdaMi(userId, questionId, now)) {
     throw new CheckupError("Bu soru açık bir testinde de var. Önce o testi bitir; çözümünü sonra burada görürsün.");
   }
 
@@ -934,7 +1217,7 @@ export async function answerPractice(args: {
 
   try {
     await prisma.answer.create({
-      data: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs, answeredAt: now },
+      data: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs, answeredAt: now, firstAnsweredAt: now },
     });
   } catch (e) {
     // Hızlı çift dokunuş: ilk kayıt kazandı, kilit onda.
@@ -952,10 +1235,17 @@ export async function answerPractice(args: {
    */
   if (item.session.practiceMode === "REVIEW" && item.sourceQuestionId) {
     try {
+      /*
+       * İpucu sayısı cevap YAZILDIKTAN SONRA okunuyor: ipucuAc cevaplanmış
+       * maddenin sayacını artırmaz, yani bu okuma kesin son değer. Önceden
+       * okunsaydı cevapla aynı anda açılan bir ipucu gözden kaçabilirdi.
+       */
+      const son = await prisma.sessionItem.findUnique({ where: { id: item.id }, select: { hintsUsed: true } });
       await tekrarIsle({
         userId,
         questionId: item.sourceQuestionId,
         dogru: isCorrect === true,
+        ipucuyla: (son?.hintsUsed ?? 0) > 0,
         oturumBasi: item.session.startedAt,
         now,
       });

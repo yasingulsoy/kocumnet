@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getStudentSession, CheckupError } from "@/lib/checkup";
+import { sonGunMetni } from "@/lib/deneme";
 import { MathContent } from "@/components/MathContent";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card } from "@/components/tailadmin/ui/Card";
 import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
 import { CircleAlert } from "lucide-react";
 import { CheckupRunner } from "./CheckupRunner";
+import { OptikForm } from "./OptikForm";
 
 export const metadata: Metadata = { title: "Check-up" };
 
@@ -49,6 +51,30 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
             action={<ButtonLink href="/paketler">Testlere dön</ButtonLink>}
           />
         </Card>
+      </main>
+    );
+  }
+
+  /*
+   * Kâğıt oturumu: sayaçlı ekran yerine optik form. Sorular kitapçıkta
+   * (/kitapcik/[id]); buraya yalnızca numara ve şık harfleri gelir — soru
+   * metni ekranda yok, öğrenci kâğıttan çözüyor.
+   */
+  if (session.mode === "PAPER") {
+    return (
+      <main className="min-h-screen">
+        <OptikForm
+          sessionId={session.id}
+          packageName={session.packageName}
+          durationMinutes={session.durationMinutes}
+          remainingMs={session.remainingMs}
+          deadlineLabel={sonGunMetni(session.expiresAt)}
+          questions={session.questions.map((q) => ({
+            id: q.id,
+            choices: q.choices.map((c) => ({ id: c.id, label: c.label })),
+            selectedChoiceId: q.selectedChoiceId,
+          }))}
+        />
       </main>
     );
   }

@@ -19,6 +19,7 @@ import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/
 import { aktifPlan } from "@/lib/plan";
 import { aktifKosu } from "@/lib/level-run";
 import { bugunkuIs } from "@/lib/bugun";
+import { bugunkuOdev } from "@/lib/odev-sorgu";
 import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
 import { daysUntilExam, examShort } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
@@ -32,6 +33,10 @@ import { SeviyeRozeti } from "@/components/KonuHaritasi";
 import { SonTestlerGrafigi } from "@/components/BasariGrafikleri";
 import { grafikTarihleri } from "@/components/grafik-tarihleri";
 import { bugunkuTekrarDurumu } from "@/lib/practice";
+import { seriDurumu } from "@/lib/seri";
+import { okunmamisCevapSayisi } from "@/lib/koca-soru";
+import { SeriKarti } from "@/components/SeriKarti";
+import { KocCevabiSatiri } from "@/components/KocCevabiSatiri";
 import { Progress, trDate, trNumber } from "@/components/ui";
 import { ChartCard } from "@/components/tailadmin/charts/ChartCard";
 import { RadialGauge } from "@/components/tailadmin/charts/RadialGauge";
@@ -74,7 +79,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const hata = typeof sp.hata === "string" ? sp.hata : null;
   const yeniTanisma = sp.tanisma === "1";
 
-  const [acik, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu, defter] = await Promise.all([
+  const [acik, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu, defter, odev] = await Promise.all([
     // Alıştırma "yarım kalan test" değil: süresi yok, kendi kartı var.
     prisma.checkupSession.findFirst({
       where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now }, kind: { not: "PRACTICE" } },
@@ -83,6 +88,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         id: true,
         expiresAt: true,
         kind: true,
+        // Kâğıt oturumu (PAPER): "Bugün" kartı süre yerine optik form son gününü yazar.
+        mode: true,
         stageLevel: true,
         stageKind: true,
         package: { select: { name: true, questionCount: true } },
@@ -141,7 +148,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     aktifKosu(user.id),
     /* Yanlış defteri: bugün kaç soru (aralıklı tekrar). */
     bugunkuTekrarDurumu(user.id, now),
+    /* Koçun ödevi: son tarihi 3 gün içinde, bitmemiş (lib/odev.ts bugunOdevi). */
+    bugunkuOdev(user.id, now),
   ]);
+  /* Seri ve günlük hedef (lib/seri.ts); koçun henüz okunmamış cevapları. */
+  const [seri, kocCevabi] = await Promise.all([seriDurumu(user.id, now), okunmamisCevapSayisi(user.id)]);
 
   const sonuclar: (ResultLike & { sessionId: string; packageName: string; kontrol: boolean })[] =
     sonuclarHam.map((r) => ({
@@ -178,13 +189,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const yeni = sonuclar.length === 0;
 
   /*
-   * "Bugün": yarım test → seviyeli devam → bugünkü tekrar → planın sıradaki
-   * işi → önerilen test (lib/bugun.ts). Veri yukarıda zaten yüklendi; kartın
+   * "Bugün": yarım test → koçun ödevi → seviyeli devam → bugünkü tekrar →
+   * planın sıradaki işi → önerilen test (lib/bugun.ts). Veri yukarıda zaten yüklendi; kartın
    * gösterdiği iş aşağıda ikinci kez yazılmaz.
    */
   const seviyeliBekliyor = seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? seviyeliKosu : null;
   const bugun = bugunkuIs({
     acikTest: acik,
+    odev,
     seviyeli: seviyeliBekliyor,
     tekrar: defter,
     planIsleri: plan?.items ?? null,
@@ -260,6 +272,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         {/* ── 1. Bugün: tek iş, tek düğme ─────────────────── */}
         {/* Hiç testi olmayan öğrencide iş yoksa (katalog boş) alttaki boş durum konuşur. */}
         {bugun.tur !== "YOK" || !yeni ? <BugunKarti is={bugun} yeni={yeni} /> : null}
+
+        {/* ── Koçun cevabı (okunmamış varsa) ve seri ──────── */}
+        <KocCevabiSatiri adet={kocCevabi} />
+        {/* Hiç soru çözmemiş yeni öğrenciye yok: boş panoda tek çağrı ilk test. */}
+        {!yeni || seri.enUzun > 0 ? <SeriKarti ozet={seri} /> : null}
 
         {/* ── 2. Bu hafta ─────────────────────────────────── */}
         {plan ? <PlanCard plan={plan} haftaEtiketi={haftaEtiketi(plan.weekStart)} /> : !yeni ? <PlanOlusturKarti /> : null}

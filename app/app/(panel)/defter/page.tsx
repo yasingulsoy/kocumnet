@@ -6,9 +6,10 @@ import { requirePageUser } from "@/lib/auth";
 import { defterListesi } from "@/lib/notebook";
 import { bugunkuTekrarDurumu, defterBenzerDurumu } from "@/lib/practice";
 import { TEKRAR_ARALIKLARI_GUN, vadeMetni } from "@/lib/review";
-import { parseQuestionContent } from "@/lib/question-content";
+import { parseQuestionContent, safeParseQuestionContent, type QuestionContent } from "@/lib/question-content";
 import { MathContent } from "@/components/MathContent";
 import { DefterKarti } from "@/components/DefterKarti";
+import { KazanimKarti } from "@/components/KazanimKarti";
 import { cx } from "@/components/tailadmin/cx";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
@@ -16,6 +17,11 @@ import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 
 export const metadata: Metadata = { title: "Yanlış defteri" };
+
+interface KazanimOzeti {
+  ad: string;
+  ozet: QuestionContent;
+}
 
 /** Maddenin kaç tekrarı geçtiği: her aralık için bir çizgi. */
 function Asama({ stage }: { stage: number }) {
@@ -62,10 +68,16 @@ export default async function DefterPage() {
   );
 
   // Maddeler vadeye göre sıralı geliyor: konunun ilk görüldüğü yer en erken vadesi.
-  const gruplar = new Map<string, { ad: string; maddeler: typeof acik }>();
+  type Grup = { ad: string; maddeler: typeof acik; kazanimlar: Map<string, KazanimOzeti> };
+  const gruplar = new Map<string, Grup>();
   for (const m of acik) {
-    const g = gruplar.get(m.topic.id) ?? { ad: m.topic.name, maddeler: [] };
+    const g: Grup = gruplar.get(m.topic.id) ?? { ad: m.topic.name, maddeler: [], kazanimlar: new Map() };
     g.maddeler.push(m);
+    // Kazanım özet kartı: grubun maddelerinin kazanımları, tekrarsız; özeti olmayan (ya da bozuk) yok.
+    if (m.objective?.summary && !g.kazanimlar.has(m.objective.id)) {
+      const ozet = safeParseQuestionContent(m.objective.summary);
+      if (ozet.success) g.kazanimlar.set(m.objective.id, { ad: m.objective.name, ozet: ozet.data });
+    }
     gruplar.set(m.topic.id, g);
   }
 
@@ -95,6 +107,14 @@ export default async function DefterPage() {
         ) : (
           [...gruplar].map(([topicId, g]) => (
             <ComponentCard key={topicId} title={g.ad} desc={`${g.maddeler.length} madde`} flush>
+              {/* Kazanım özetleri kapalı gelir: defter bir hatırlatma listesi, ders notu değil. */}
+              {g.kazanimlar.size > 0 ? (
+                <div className="space-y-2 border-b border-gray-100 px-5 py-4 sm:px-6">
+                  {[...g.kazanimlar].map(([id, k]) => (
+                    <KazanimKarti key={id} ad={k.ad} ozet={k.ozet} acilir />
+                  ))}
+                </div>
+              ) : null}
               <ul className="divide-y divide-gray-100">
                 {g.maddeler.map((m) => {
                   const vadesiGeldi = m.dueAt.getTime() <= now.getTime();

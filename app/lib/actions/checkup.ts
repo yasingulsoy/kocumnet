@@ -20,8 +20,14 @@ export interface StartState {
   error?: string;
 }
 
+const startSchema = z.object({
+  packageSlug: z.string().min(1).max(120),
+  // Bilinmeyen değer ekran sayılır: kâğıt ancak bilerek seçilir.
+  mode: z.enum(["ONLINE", "PAPER"]).catch("ONLINE"),
+});
+
 /**
- * Test başlatır ve test ekranına yönlendirir.
+ * Test başlatır ve test ekranına yönlendirir; kâğıtta çözülecekse kitapçığa.
  * Havuz yetersizse hata mesajı geri döner — yarım test başlatmayız.
  */
 export async function startCheckupAction(
@@ -29,19 +35,30 @@ export async function startCheckupAction(
   formData: FormData
 ): Promise<StartState> {
   const user = await requireUser();
-  const slug = String(formData.get("packageSlug") ?? "");
+  const parsed = startSchema.safeParse({
+    packageSlug: formData.get("packageSlug"),
+    mode: formData.get("mode") ?? "ONLINE",
+  });
+  if (!parsed.success) return { error: "Geçersiz istek." };
 
   let sessionId: string;
   try {
-    sessionId = await startCheckup(user.id, slug);
+    sessionId = await startCheckup(user.id, parsed.data.packageSlug, { mode: parsed.data.mode });
   } catch (e) {
     if (e instanceof CheckupError) return { error: e.message };
     throw e;
   }
 
+  // Açık bir oturum varsa o döner (biçimi ne seçildiyse değil, neyse o):
+  // yönlendirme oturumun kendi biçimine göre.
+  const acilan = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: { mode: true },
+  });
+
   // redirect() try/catch DIŞINDA: içeride olsaydı fırlattığı özel hata
   // yakalanır ve yönlendirme hiç gerçekleşmezdi.
-  redirect(`/checkup/${sessionId}`);
+  redirect(acilan?.mode === "PAPER" ? `/kitapcik/${sessionId}` : `/checkup/${sessionId}`);
 }
 
 const answerSchema = z.object({
@@ -128,6 +145,9 @@ export async function submitCheckupAction(
   } catch (e) {
     if (e instanceof AuthError) return { error: OTURUM_MESAJI, kod: "OTURUM" };
     throw e;
+  }
+  if (typeof sessionId !== "string" || sessionId.length === 0 || sessionId.length > 64) {
+    return { error: "Geçersiz istek.", kod: "GECERSIZ" };
   }
 
   // Süre haritası bozuksa testi bitirmeyi engellemez: yoksayıp devam ederiz.

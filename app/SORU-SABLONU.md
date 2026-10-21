@@ -13,6 +13,11 @@ Komut satırı karşılığı (aynı kurallar): `npm run import:questions -- dos
 
 Altı sınavın hepsi aynı şablonu kullanır: LGS · TYT · AYT · KPSS · DGS · ALES.
 
+> **Ekim 2026 — üç isteğe bağlı ekleme** (eski dosyalar aynen geçer):
+> `İpucu` (en fazla 3), `Video` (YouTube/Vimeo bağlantısı) ve çözümü
+> **adım adım** yazmak için çözümde tek başına `---` satırı. Ayrıntı Bölüm 2
+> ve Bölüm 4'te, tam örnek Bölüm 8'de.
+
 ---
 
 ## ⚠️ v2'den ne değişti
@@ -69,6 +74,8 @@ söylersen ona göre düzenlerim.
 | `Kazanım Adı` | Tek cümle, ölçülebilir fiil ile | Karnede "şu kazanım eksik" diye yazılır. Kazanım kodunu ilk kez kullandığın soruda yaz, sonrakilerde gerekmez. |
 | `Kaynak` | `özgün` · `uyarlama` · `2023 ALES / 14` | Telif takibi + kalibrasyon |
 | `Görsel` | Dosya adı | Bölüm 5 |
+| `İpucu` | Bölüm 4'teki yazım biçimi. **En fazla 3 kez** yazılır; yazdığın sıra açılış sırasıdır (`İpucu 1`, `İpucu 2` diye numaralamak da olur). | Alıştırmada öğrenci takılınca ipuçlarını tek tek açar; süreli testte görünmez. İlk ipucu yön göstersin, sonuncusu çözüme bir adım kalsın. |
+| `Video` | Tek bağlantı: YouTube (`youtube.com/watch?v=…`, `youtu.be/…`, `shorts/…`) ya da Vimeo (`vimeo.com/123…`). `?t=75` başlangıç saniyesi korunur. | Çözümün yanında video çözüm. Başka sitelerin bağlantısı reddedilir. |
 
 ### Yazılmayacaklar
 
@@ -154,6 +161,39 @@ yargılarından hangileri kesinlikle doğrudur?
 ```
 
 Metinde gerçek dolar işareti gerekiyorsa `\$` yaz.
+
+**Çözümü adım adım** yazmak için adımları tek başına bir `---` satırıyla ayır.
+Öğrenci çözümü adım adım açar ("Adım 1/3"):
+
+```
+$a$ en büyük olsun istiyorsak $b$ en küçük olmalı.
+
+---
+
+$b=1$ için $2a=39$, tam sayı değil.
+
+---
+
+$b=2$ için $2a=36$ ve $a=18$.
+```
+
+- Ayırıcı **yalnızca çözümde**. Soru metninde, şıkta ya da ipucunda `---`
+  yazılan soru reddedilir.
+- Sorunun sonundaki `---` (ardından yeni `### Soru …` başlığı ya da dosya sonu
+  geliyorsa) adım değil, sorunun bitişi sayılır — eskisi gibi yazmaya devam et.
+- Ayırıcısız çözüm tek adımdır; zorunlu değil.
+
+**İpucu** da aynı yazım biçimiyle yazılır, birden çok satır olabilir:
+
+```
+* **İpucu:** $a$'nın büyük olması için $b$ nasıl seçilmeli?
+* **İpucu:**
+$2a = 42 - 3b$ çift sayı olmalı.
+
+$3b$ hangi $b$ değerlerinde çifttir?
+```
+
+İpucunda görsel ve `---` kullanılmaz; her ipucu tek parça açılır.
 
 ---
 
@@ -256,6 +296,9 @@ karşılığı yoksa kullan.
 * **Kazanım Adı:** Pozitif tam sayı kısıtı altında en büyük/en küçük değer analizi yapar.
 * **İdeal Süre:** 60
 * **Kaynak:** özgün
+* **Video:** https://youtu.be/aqz-KE-bpKQ?t=75
+* **İpucu:** $a$'nın büyük olması için $b$ nasıl seçilmeli?
+* **İpucu:** $2a = 42 - 3b$ çift sayı olmalı. $3b$ hangi $b$ değerlerinde çifttir?
 * **Soru Metni:**
 $a$ ve $b$ birbirinden farklı pozitif tam sayılardır.
 
@@ -270,11 +313,21 @@ olduğuna göre, $a$'nın alabileceği en büyük değer kaçtır?
   * [ ] E) 16 (EKSIK_OKUMA: "birbirinden farklı" koşulu atlanmış)
 * **Doğru Şık:** B
 * **Çözüm Açıklaması:**
-$a$ en büyük olsun istiyorsak $b$ en küçük olmalı. $b=1$ için $2a=39$, tam sayı
-değil. $b=2$ için $2a=36$ ve $a=18$.
+$a$ en büyük olsun istiyorsak $b$ en küçük olmalı.
+
+---
+
+$b=1$ için $2a=39$, tam sayı değil.
+
+---
+
+$b=2$ için $2a=36$ ve $a=18$.
 
 ---
 ```
+
+`Video` ve `İpucu` isteğe bağlı; çözümdeki iki `---` onu üç adıma böler,
+en sondaki `---` ise sorunun bitişidir.
 
 ---
 
@@ -298,6 +351,10 @@ almaz ve satır numarasıyla rapor eder**:
 12. Şıkta ya da çözümde görsel var (görsel yalnızca Soru Metni'nde)
 13. `Hedef Sınav`, konunun geçtiği sınavlardan biri değil (soru o teste hiç
     seçilmezdi)
+14. Soru metninde ya da bir şıkta adım ayırıcı `---` var (ayırıcı yalnızca çözümde)
+15. Üçten fazla `İpucu` yazılmış
+16. Bir ipucunda `---` ya da görsel var
+17. `Video` bağlantısı YouTube ya da Vimeo değil (ya da video kimliği bozuk)
 
 İçe aktarma ayrıca **uyarı** verir (reddetmez). Komut satırı yalnızca ilkini
 yazar, panel hepsini gösterir:
@@ -305,6 +362,7 @@ yazar, panel hepsini gösterir:
 - bir kazanımın tek Seviye 1 sorusu varsa (telafi turunda boş kalır),
 - tanınmayan alan adı (ör. yazım hatası: `Hedef Sınavlar`) ya da v2'den kalan alan,
 - `Çözüm Açıklaması` boş,
+- boş bırakılmış `İpucu` alanı (yok sayılır),
 - formül çizilemiyor (öğrenci kırmızı hata metni görür),
 - şık sayısı sınava uymuyor (LGS 4, diğerleri 5 şık),
 - hiçbir soruda geçmeyen görsel seçilmiş (dosya adı eşleşmiyor olabilir).

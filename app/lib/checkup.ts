@@ -1,13 +1,32 @@
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { parseQuestionContent, type QuestionContent } from "@/lib/question-content";
-import { selectQuestionsForPackage, selectQuestionsForTopic } from "@/lib/question-selection";
+import {
+  selectQuestionsForMock,
+  selectQuestionsForPackage,
+  selectQuestionsForTopic,
+  type SelectionResult,
+} from "@/lib/question-selection";
 import { scoreCheckup, type ScoredAnswer, type CheckupScore } from "@/lib/scoring";
 import { checkPackageAccess } from "@/lib/entitlements";
 import { planOlustur, retestIsiniKapat } from "@/lib/plan";
 import { konuSinavdaMi } from "@/lib/exam-scope";
 import { examShort } from "@/lib/exams";
 import { defteriGuncelle } from "@/lib/notebook";
+// İnceleme (getCheckupReview) için: video, kazanım özeti, bildirim ve koça soru durumu.
+import { parseVideoUrl, safeParseQuestionContent, type VideoRef } from "@/lib/question-content";
+import { raporDurumlari } from "@/lib/hata-bildirimi";
+import { kocaSoruDurumlari } from "@/lib/koca-soru";
+import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
+import {
+  DENEME_HAZIRLANIYOR,
+  KAGIT_ISLEME_SURESI_SAAT,
+  kagittaCozulebilir,
+  karsilastir,
+  type HavuzKaydi,
+  type Karsilastirma,
+} from "@/lib/deneme";
+import { sureAnalizi, type SureAnaliziSonucu } from "@/lib/sure-analizi";
 
 /**
  * Check-up akışı: başlat → cevapla → bitir.
@@ -70,6 +89,8 @@ export interface StudentSession {
   id: string;
   /** Alıştırma (PRACTICE) sınav ekranında açılmaz, kendi ekranına gider. */
   kind: "PACKAGE" | "TOPIC_RETEST" | "LEVEL_STAGE" | "PRACTICE";
+  /** Kâğıt oturumu sayaçlı ekran yerine optik formu açar. */
+  mode: "ONLINE" | "PAPER";
   packageName: string;
   packageSlug: string;
   status: "IN_PROGRESS" | "SUBMITTED" | "EXPIRED" | "ABANDONED";
@@ -90,9 +111,18 @@ export interface StudentSession {
 /**
  * Yeni bir check-up başlatır. Aynı paket için devam eden bir oturum varsa
  * onu döndürür — öğrenci sekmeyi kapatıp geri geldiğinde testi baştan
- * başlatmak, hem soruları hem süreyi çöpe atmaktır.
+ * başlatmak, hem soruları hem süreyi çöpe atmaktır. Açık oturum hangi
+ * biçimdeyse (ekran / kâğıt) o döner; istenen biçim yalnızca yeni oturumda.
+ *
+ * `mode: "PAPER"`: kitapçık yazdırılır, sayaç çalışmaz; expiresAt cevapları
+ * optik forma işlemenin son anıdır (lib/deneme.ts KAGIT_ISLEME_SURESI_SAAT).
  */
-export async function startCheckup(userId: string, packageSlug: string): Promise<string> {
+export async function startCheckup(
+  userId: string,
+  packageSlug: string,
+  secenek: { mode?: "ONLINE" | "PAPER" } = {}
+): Promise<string> {
+  const mode = secenek.mode ?? "ONLINE";
   const pkg = await prisma.package.findUnique({
     where: { slug: packageSlug },
     select: {
@@ -122,6 +152,11 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
   }
   if (pkg.kind === "PRACTICE") {
     throw new CheckupError("Alıştırma sonuç ekranından ya da yanlış defterinden başlar.");
+  }
+  // Bugün yukarıdaki üç ret yüzünden ulaşılmıyor; yeni bir tür eklenirse
+  // kâğıt kendiliğinden açılmasın diye ayrı kapı.
+  if (mode === "PAPER" && !kagittaCozulebilir(pkg.kind)) {
+    throw new CheckupError("Bu test kâğıtta çözülemez.");
   }
 
   // Erişim denetimi SERVİS katmanında: arayüzde kilit rozeti göstermek yetmez,
@@ -157,7 +192,16 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
     });
   }
 
-  const selection = await selectQuestionsForPackage(pkg.id, userId);
+  let selection: SelectionResult;
+  if (pkg.kind === "MOCK") {
+    // Deneme: sabit liste, sırası korunur. Liste eksikse ya da içinde
+    // yayında olmayan soru varsa deneme açılmaz (lib/deneme.ts).
+    const deneme = await selectQuestionsForMock(pkg.id, pkg.questionCount);
+    if (!deneme.hazir) throw new CheckupError(DENEME_HAZIRLANIYOR);
+    selection = { questions: deneme.questions, shortfalls: [], relaxedExposureCount: 0 };
+  } else {
+    selection = await selectQuestionsForPackage(pkg.id, userId);
+  }
 
   // Eksik soruyla test başlatmak öğrenciye yanlış sonuç vermektir (PLAN §5).
   // Dağılımı boş bir paket de sessizce sıfır soruluk test açmasın.
@@ -173,13 +217,19 @@ export async function startCheckup(userId: string, packageSlug: string): Promise
     );
   }
 
-  const expiresAt = new Date(now.getTime() + pkg.durationMinutes * 60_000);
+  // Kâğıtta sayaç yok: son an, cevapları optik forma işleme süresi. Önerilen
+  // süre (durationMinutes) yine kopyalanır; kitapçıkta yazar.
+  const expiresAt = new Date(
+    now.getTime() +
+      (mode === "PAPER" ? KAGIT_ISLEME_SURESI_SAAT * 3_600_000 : pkg.durationMinutes * 60_000)
+  );
 
   return prisma.$transaction(async (tx) => {
     const session = await tx.checkupSession.create({
       data: {
         userId,
         packageId: pkg.id,
+        mode,
         status: "IN_PROGRESS",
         // Paket ayarlarının kopyası: admin test ortasında paketi düzenlerse
         // puanlama değişmesin.
@@ -394,6 +444,7 @@ export async function getStudentSession(
       id: true,
       userId: true,
       kind: true,
+      mode: true,
       status: true,
       durationMinutes: true,
       startedAt: true,
@@ -431,6 +482,7 @@ export async function getStudentSession(
   return {
     id: session.id,
     kind: session.kind,
+    mode: session.mode,
     packageName: session.package.name,
     packageSlug: session.package.slug,
     status: session.status,
@@ -451,6 +503,97 @@ export async function getStudentSession(
         content: parseQuestionContent(c.content),
       })),
       selectedChoiceId: item.answer?.choiceId ?? null,
+    })),
+  };
+}
+
+/**
+ * Kâğıt oturumunun yazdırılacak kitapçığı (/kitapcik/[sessionId]).
+ *
+ * ⚠️ getStudentSession'ın kuralları burada da: alanlar tek tek seçilir; cevap
+ * anahtarı (isCorrect), hata tipi, çözüm, ipucu ve video YOK — kitapçık
+ * yazdırılıp paylaşılabilen bir belge. Şık kimliği de yok: kâğıtta gerekmez,
+ * işaretleme optik formda harfle yapılır. leak-test denetler.
+ *
+ * Yalnızca KÂĞIT oturumu: ekranda çözülen süreli testin soruları yazdırılıp
+ * sayaç dışında çözülmesin. Başkasının oturumu ve ekran oturumu aynı
+ * "bulunamadı" hatasını alır (oturumun varlığını doğrulamayalım).
+ */
+export interface KitapcikSorusu {
+  order: number;
+  stem: QuestionContent;
+  choices: { label: string; content: QuestionContent }[];
+}
+
+export interface Kitapcik {
+  id: string;
+  packageName: string;
+  examScope: string;
+  studentName: string;
+  status: StudentSession["status"];
+  startedAt: Date;
+  /** Cevapları optik forma işlemenin son anı. */
+  expiresAt: Date;
+  /** Önerilen süre (dakika). */
+  durationMinutes: number;
+  penaltyRatio: number;
+  questions: KitapcikSorusu[];
+}
+
+export async function getKitapcik(sessionId: string, userId: string): Promise<Kitapcik> {
+  const session = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      userId: true,
+      mode: true,
+      status: true,
+      startedAt: true,
+      expiresAt: true,
+      durationMinutes: true,
+      penaltyRatio: true,
+      user: { select: { name: true } },
+      package: { select: { name: true, examScope: true } },
+      items: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          sortOrder: true,
+          question: {
+            select: {
+              stem: true,
+              choices: {
+                orderBy: { sortOrder: "asc" },
+                // ⚠️ isCorrect ve errorType BİLİNÇLİ OLARAK YOK.
+                select: { label: true, content: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!session || session.userId !== userId || session.mode !== "PAPER") {
+    throw new CheckupError("Kitapçık bulunamadı.");
+  }
+
+  return {
+    id: session.id,
+    packageName: session.package.name,
+    examScope: session.package.examScope,
+    studentName: session.user.name,
+    status: session.status,
+    startedAt: session.startedAt,
+    expiresAt: session.expiresAt,
+    durationMinutes: session.durationMinutes,
+    penaltyRatio: Number(session.penaltyRatio),
+    questions: session.items.map((item) => ({
+      order: item.sortOrder,
+      stem: parseQuestionContent(item.question.stem),
+      choices: item.question.choices.map((c) => ({
+        label: c.label,
+        content: parseQuestionContent(c.content),
+      })),
     })),
   };
 }
@@ -531,8 +674,8 @@ export async function saveAnswer(args: {
     where: { sessionId, questionId, session: { userId } },
     select: {
       id: true,
-      session: { select: { status: true, expiresAt: true, kind: true } },
-      answer: { select: { id: true } },
+      session: { select: { status: true, expiresAt: true, kind: true, mode: true } },
+      answer: { select: { id: true, firstAnsweredAt: true } },
     },
   });
 
@@ -561,6 +704,16 @@ export async function saveAnswer(args: {
   }
 
   /*
+   * Kâğıt oturumunda soru başına süre ve çözüm sırası YOK: optik form
+   * sonradan, istenen sırayla doldurulur. İstemci ne gönderirse göndersin
+   * süre 0 yazılır ve ilk işaret anı tutulmaz (süre analizi bunlara bakar).
+   */
+  const kagit = item.session.mode === "PAPER";
+  const sure = kagit ? 0 : timeSpentMs;
+  const simdi = new Date();
+  const ilkIsaret = !kagit && choiceId !== null ? simdi : null;
+
+  /*
    * Tek upsert: eskiden "cevap var mı" diye okuyup ona göre create/update
    * yapılıyordu. Hızlı iki dokunuşta iki istek de "yok" görüp create deniyor
    * ve ikincisi benzersizlik hatasıyla düşüyordu — öğrencinin işareti
@@ -568,15 +721,28 @@ export async function saveAnswer(args: {
    */
   await prisma.answer.upsert({
     where: { sessionItemId: item.id },
-    create: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs },
+    create: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs: sure, firstAnsweredAt: ilkIsaret, answeredAt: simdi },
     update: {
       choiceId,
       isCorrect,
-      timeSpentMs,
+      timeSpentMs: sure,
       changedCount: { increment: 1 },
-      answeredAt: new Date(),
+      answeredAt: simdi,
     },
   });
+
+  /*
+   * İlk işaret anı yalnızca BİR KEZ yazılır: sonraki değişiklikler onu
+   * oynatmaz (çözüm sırası analizi "ilk ne zaman işaretledi"ye bakıyor,
+   * answeredAt her değişiklikte ilerliyor). Satır işaretsiz açılmışsa ilk
+   * işarette doldurulur; koşul veritabanında, eşzamanlı iki istek de ilkini ezmez.
+   */
+  if (ilkIsaret && item.answer && !item.answer.firstAnsweredAt) {
+    await prisma.answer.updateMany({
+      where: { sessionItemId: item.id, firstAnsweredAt: null },
+      data: { firstAnsweredAt: ilkIsaret },
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -637,13 +803,15 @@ export async function submitCheckup(
   if (times && Object.keys(times).length > 0) {
     const oturum = await prisma.checkupSession.findUnique({
       where: { id: sessionId },
-      select: { userId: true, status: true, durationMinutes: true, kind: true },
+      select: { userId: true, status: true, durationMinutes: true, kind: true, mode: true },
     });
     // Alıştırmada süre birleştirme boş cevap satırı açardı; alıştırmada
     // cevap satırı "cevaplandı, çözümü aç" demek (lib/practice.ts).
     if (oturum?.kind === "PRACTICE") throw new CheckupError("Alıştırma bu yolla bitirilmez.");
     // Sessizce geçiyoruz: süre birleştirme başarısız olsa bile test bitmeli.
-    if (oturum?.userId === userId && oturum.status === "IN_PROGRESS") {
+    // Kâğıtta soru başına süre yok: optik formun ekranda kaldığı süre çözüm
+    // süresi değildir, "yavaş" uyarısı üretmesin.
+    if (oturum?.userId === userId && oturum.status === "IN_PROGRESS" && oturum.mode !== "PAPER") {
       await sureleriBirlestir(sessionId, oturum.durationMinutes * 60_000, times).catch(() => {});
     }
   }
@@ -881,6 +1049,17 @@ export interface ReviewItem {
   isCorrect: boolean | null;
   timeSpentMs: number;
   targetTimeSeconds: number;
+  /*
+   * Aşağıdakiler isteğe bağlı: saf testlerdeki elle kurulan örnekler (smoke,
+   * hata deseni) bunları vermiyor. getCheckupReview hepsini doldurur.
+   */
+  /** Video çözüm; yoksa null. */
+  video?: VideoRef | null;
+  /** Sorunun kazanımı; özet kartı yoksa ya da bozuksa summary null. */
+  objective?: { id: string; name: string; summary: QuestionContent | null } | null;
+  /** Öğrencinin bu sorudaki hata bildirimi ve koça sorusu. */
+  rapor?: RaporDurumu | null;
+  kocaSoru?: KocaSoruDurumu | null;
 }
 
 /**
@@ -912,8 +1091,10 @@ export async function getCheckupReview(
             select: {
               stem: true,
               solution: true,
+              videoUrl: true,
               targetTimeSeconds: true,
               topic: { select: { name: true } },
+              objective: { select: { id: true, name: true, summary: true } },
               choices: {
                 orderBy: { sortOrder: "asc" },
                 select: { id: true, label: true, content: true, isCorrect: true, errorType: true },
@@ -935,6 +1116,18 @@ export async function getCheckupReview(
   // hiç denenmemiş sorularının cevabı görünürdü.
   if (session.kind === "PRACTICE") throw new CheckupError("Alıştırmanın incelemesi kendi ekranında.");
 
+  const soruIdleri = session.items.map((i) => i.questionId);
+  const [raporlar, kocaSorulari] = await Promise.all([
+    raporDurumlari(userId, soruIdleri),
+    kocaSoruDurumlari(userId, soruIdleri),
+  ]);
+
+  // Bozuk özet sayfayı düşürmesin: kart çıkmaz, inceleme çalışır.
+  const ozet = (summary: unknown): QuestionContent | null => {
+    const r = summary ? safeParseQuestionContent(summary) : null;
+    return r?.success ? r.data : null;
+  };
+
   return session.items.map((item) => ({
     questionId: item.questionId,
     order: item.sortOrder,
@@ -952,6 +1145,16 @@ export async function getCheckupReview(
     selectedChoiceId: item.answer?.choiceId ?? null,
     isCorrect: item.answer?.isCorrect ?? null,
     timeSpentMs: item.answer?.timeSpentMs ?? 0,
+    video: parseVideoUrl(item.question.videoUrl),
+    objective: item.question.objective
+      ? {
+          id: item.question.objective.id,
+          name: item.question.objective.name,
+          summary: ozet(item.question.objective.summary),
+        }
+      : null,
+    rapor: raporlar.get(item.questionId) ?? null,
+    kocaSoru: kocaSorulari.get(item.questionId) ?? null,
   }));
 }
 
@@ -985,4 +1188,141 @@ export async function expireStaleSessions(): Promise<number> {
     }
   }
   return stale.length;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Deneme karşılaştırması ve süre analizi (sonuç ekranı)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Deneme havuzu: bu MOCK paketi çözenlerin kişi başına İLK oturumu; yalnızca
+ * o ilk oturum EKRANDA çözülüp puanlandıysa (SUBMITTED ya da EXPIRED ve
+ * sonucu var) sayılır.
+ *
+ * - "İlk": deneme sorularını herkes aynı görür; ikinci çözüşte öğrenci
+ *   cevapları biliyor. İlk oturumu kâğıtta olan da havuza girmez: soruları
+ *   kitapçıktan görmüş, sonraki ekran oturumu artık prova değil.
+ * - Kâğıt havuza girmez: süreyi öğrenci kendisi tutuyor, aynı koşul değil.
+ * - Hiç işaret konmadan gönderilen oturum havuza girmez: "cevaplara bakayım"
+ *   diye boş gönderilen deneme dağılımın dibine sahte bir sıfır ekliyordu.
+ *
+ * Satır başına yalnızca kullanıcı kimliği (kendi kaydını ayırmak için) ve net
+ * döner; ekrana hiçbir kimlik gitmez (lib/deneme.ts karsilastir).
+ */
+export async function denemeHavuzu(packageId: string): Promise<HavuzKaydi[]> {
+  const satirlar = await prisma.$queryRaw<{ userId: string; net: Prisma.Decimal }[]>`
+    SELECT ilk."userId", r."netScore" AS net
+    FROM (
+      SELECT DISTINCT ON (s."userId") s.id, s."userId", s.mode, s.status
+      FROM "CheckupSession" s
+      WHERE s."packageId" = ${packageId} AND s.kind = 'PACKAGE'
+      ORDER BY s."userId", s."startedAt" ASC, s.id ASC
+    ) ilk
+    JOIN "CheckupResult" r ON r."sessionId" = ilk.id
+    WHERE ilk.mode = 'ONLINE'
+      AND ilk.status IN ('SUBMITTED', 'EXPIRED')
+      AND r."correctCount" + r."wrongCount" > 0
+  `;
+  return satirlar.map((s) => ({ userId: s.userId, net: Number(s.net) }));
+}
+
+export type DenemeKarsilastirmasi = Karsilastirma & {
+  /** Bu oturum kâğıtta çözüldü: havuzda değil, yalnızca konumu gösteriliyor. */
+  kagit: boolean;
+  /** Bu oturum havuzdaki kaydı mı (ilk ekran denemesi). */
+  havuzda: boolean;
+  net: number;
+};
+
+/**
+ * Sonuç ekranındaki "denemeyi çözenler arasında" kartının verisi. Deneme
+ * olmayan, bitmemiş ya da başkasının oturumunda null.
+ */
+export async function denemeKarsilastirmasi(
+  sessionId: string,
+  userId: string
+): Promise<DenemeKarsilastirmasi | null> {
+  const s = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      userId: true,
+      mode: true,
+      packageId: true,
+      package: { select: { kind: true, questionCount: true } },
+      result: { select: { netScore: true } },
+    },
+  });
+  if (!s || s.userId !== userId || s.package.kind !== "MOCK" || !s.result) return null;
+
+  const havuz = await denemeHavuzu(s.packageId);
+  const net = Number(s.result.netScore);
+  // Havuz kişi başına tek kayıt; öğrencinin kaydı bu oturum mu, bilmek için
+  // ilk oturumuna bakıyoruz.
+  const ilk = await prisma.checkupSession.findFirst({
+    where: { userId, packageId: s.packageId, kind: "PACKAGE" },
+    orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  const havuzda = ilk?.id === sessionId && havuz.some((h) => h.userId === userId);
+
+  return {
+    ...karsilastir({ benimNet: net, benimUserId: userId, havuz, soruSayisi: s.package.questionCount }),
+    kagit: s.mode === "PAPER",
+    havuzda,
+    net,
+  };
+}
+
+/**
+ * Sonuç ekranındaki "Süre ve strateji" kartının verisi (lib/sure-analizi.ts).
+ *
+ * Yalnızca EKRANDA çözülmüş, puanlanmış ölçüm oturumu: kâğıtta soru başına
+ * süre yok, alıştırma ölçüm değil. Cevap anahtarı içermez; yalnızca doğru /
+ * yanlış / boş durumu (sonuç ekranı zaten gösteriyor).
+ */
+export async function sureAnaliziGetir(
+  sessionId: string,
+  userId: string
+): Promise<SureAnaliziSonucu | null> {
+  const s = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      userId: true,
+      kind: true,
+      mode: true,
+      status: true,
+      startedAt: true,
+      submittedAt: true,
+      durationMinutes: true,
+      items: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          sortOrder: true,
+          question: { select: { targetTimeSeconds: true } },
+          answer: {
+            select: { choiceId: true, isCorrect: true, timeSpentMs: true, firstAnsweredAt: true, answeredAt: true },
+          },
+        },
+      },
+    },
+  });
+  if (!s || s.userId !== userId) return null;
+  if (s.mode === "PAPER" || s.kind === "PRACTICE" || s.status === "IN_PROGRESS") return null;
+
+  return sureAnalizi({
+    baslangic: s.startedAt,
+    sureDk: s.durationMinutes,
+    bitis: s.submittedAt,
+    maddeler: s.items.map((i) => {
+      const isaretli = Boolean(i.answer?.choiceId);
+      return {
+        sira: i.sortOrder,
+        sureMs: i.answer?.timeSpentMs ?? 0,
+        hedefSn: i.question.targetTimeSeconds,
+        durum: !isaretli ? "bos" : i.answer?.isCorrect ? "dogru" : "yanlis",
+        ilkIsaret: i.answer?.firstAnsweredAt ?? null,
+        sonIsaret: isaretli ? (i.answer?.answeredAt ?? null) : null,
+      };
+    }),
+  });
 }

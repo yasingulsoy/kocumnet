@@ -70,7 +70,7 @@ Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-o
 | Proje | Komutlar |
 | --- | --- |
 | Hepsi | `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app | `npm run smoke` · `npm run test:markup` · `npm run test:import` · `npm run test:leak` · `npm run test:levels` · `npm run test:practice` · `npm run test:veli` |
+| app | `npm run smoke` · `npm run test:markup` · `npm run test:import` · `npm run test:leak` · `npm run test:levels` · `npm run test:practice` · `npm run test:veli` · `npm run test:deneme` · `npm run test:deneme-panel` · `npm run test:ogrenme` · `npm run test:odev` |
 | admin | `npm run checkup:check` (şema kopyası eşit mi) |
 | backend | `npm run smoke` (çalışan sunucuya istek atar) |
 | kök | `node design/sync.mjs --check` (tasarım ve marka kopyaları eşit mi) |

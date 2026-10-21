@@ -1,4 +1,12 @@
-import { ClipboardList, LayoutDashboard, NotebookPen, TrendingUp, UserRound } from "lucide-react";
+import {
+  ClipboardCheck,
+  ClipboardList,
+  LayoutDashboard,
+  MessageCircleQuestion,
+  NotebookPen,
+  TrendingUp,
+  UserRound,
+} from "lucide-react";
 import type { NavItem, NavSection } from "@/components/tailadmin/layout/nav";
 
 /*
@@ -21,6 +29,15 @@ export const menu: NavSection[] = [
       // Yanlış defteri: her gün dönülen yer (aralıklı tekrar), bu yüzden menüde.
       { href: "/defter", label: "Yanlış defteri", icon: <NotebookPen /> },
       { ...GELISIM, label: "Gelişim" },
+    ],
+  },
+  // Koçla olan işler. Telefonda alt çubukta yok (beş sekme sığıyor); ödev
+  // "Bugün" kartında, yeni cevap ana sayfadaki kartta çıkıyor.
+  {
+    title: "Koçum",
+    items: [
+      { href: "/odevler", label: "Ödevler", icon: <ClipboardCheck /> },
+      { href: "/sorularim", label: "Koça sorularım", icon: <MessageCircleQuestion /> },
     ],
   },
   { title: "Hesap", items: [{ href: "/profil", label: "Profil", icon: <UserRound /> }] },

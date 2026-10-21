@@ -99,6 +99,14 @@ export function markupToContent(markup: string): QuestionContent {
       continue;
     }
 
+    // Tek başına --- → çözüm adımı ayırıcısı (soru ve şıkta denetimde reddedilir)
+    if (/^-{3,}$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "step_break" });
+      continue;
+    }
+
     // Tek başına $$...$$ → blok formül
     const display = trimmed.match(/^\$\$(.+)\$\$$/);
     if (display) {
@@ -167,6 +175,9 @@ export function contentToMarkup(content: QuestionContent): string {
         parts.push("[tablo — bu biçimde düzenlenemez]");
         break;
       case "spacer":
+        break;
+      case "step_break":
+        parts.push("---");
         break;
     }
   }

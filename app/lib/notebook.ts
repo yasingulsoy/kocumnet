@@ -114,11 +114,13 @@ export async function defteriGuncelle(sessionId: string): Promise<{ yeni: number
   return { yeni, sifirlanan };
 }
 
-export type TekrarSonucu = "ILERLEDI" | "COZULDU" | "SIFIRLANDI" | "ATLANDI";
+/** BEKLETILDI: ipucuyla doğru; madde ilerlemedi, yarın yine gelir (lib/review.ts). */
+export type TekrarSonucu = "ILERLEDI" | "COZULDU" | "SIFIRLANDI" | "BEKLETILDI" | "ATLANDI";
 
 /**
  * "Bugünkü tekrar" cevabı maddeyi ilerletir (doğru) ya da başa döndürür
- * (yanlış / "Bilmiyorum").
+ * (yanlış / "Bilmiyorum"). İpucu açılarak gelen doğru maddeyi ilerletmez:
+ * aşaması aynı kalır, ertesi gün yeniden gelir (IPUCLU_DOGRU_ARA_GUN).
  *
  * Yalnızca oturum AÇILIRKEN vadesi gelmiş ve o zamandan beri tekrar
  * edilmemiş madde işlenir. Böylece aynı madde iki açık oturumda iki kez
@@ -130,17 +132,20 @@ export async function tekrarIsle(args: {
   /** Maddenin sorusu (alıştırmadaki sorunun kaynağı). */
   questionId: string;
   dogru: boolean;
+  /** Cevaptan önce en az bir ipucu açıldı (SessionItem.hintsUsed). */
+  ipucuyla?: boolean;
   oturumBasi: Date;
   now: Date;
 }): Promise<TekrarSonucu> {
   const { userId, questionId, dogru, oturumBasi, now } = args;
+  const ipucuyla = args.ipucuyla === true;
   const madde = await prisma.notebookItem.findUnique({
     where: { userId_questionId: { userId, questionId } },
     select: { id: true, stage: true },
   });
   if (!madde) return "ATLANDI";
 
-  const sonraki = tekrarSonrasi(madde.stage, dogru, now);
+  const sonraki = tekrarSonrasi(madde.stage, dogru, now, ipucuyla);
   const r = await prisma.notebookItem.updateMany({
     where: {
       id: madde.id,
@@ -157,7 +162,9 @@ export async function tekrarIsle(args: {
     },
   });
   if (r.count === 0) return "ATLANDI";
-  return sonraki.cozuldu ? "COZULDU" : dogru ? "ILERLEDI" : "SIFIRLANDI";
+  if (sonraki.cozuldu) return "COZULDU";
+  if (!dogru) return "SIFIRLANDI";
+  return ipucuyla ? "BEKLETILDI" : "ILERLEDI";
 }
 
 /** Vadesi gelmiş açık maddeler — en eski vadeli önce (bugünkü tekrarın kaynağı). */
@@ -192,6 +199,8 @@ export async function defterListesi(userId: string) {
         lastSessionId: true,
         lastWrongAt: true,
         topic: { select: { id: true, name: true, sortOrder: true } },
+        // Kazanım özet kartı (defterde konu grubunun yanında, açılır kapanır).
+        objective: { select: { id: true, name: true, summary: true } },
         question: {
           select: {
             id: true,

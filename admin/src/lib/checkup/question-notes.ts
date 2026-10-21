@@ -26,11 +26,13 @@ export const NOT_ALANLARI = {
   resolvedByStaff: true,
 } as const;
 
-/** Bir sorunun notları, eskiden yeniye (konuşma sırası). */
+/** Bir sorunun personel notları, eskiden yeniye (konuşma sırası). */
 export async function soruNotlari(questionId: string): Promise<SoruNotu[]> {
-  return db.questionNote.findMany({
-    where: { questionId },
+  const satirlar = await db.questionNote.findMany({
+    where: { questionId, kind: "STAFF" },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: NOT_ALANLARI,
   });
+  // Personel notunda yazar hep dolu; boş olan yalnızca öğrenci bildirimi.
+  return satirlar.map((n) => ({ ...n, authorStaff: n.authorStaff ?? "" }));
 }

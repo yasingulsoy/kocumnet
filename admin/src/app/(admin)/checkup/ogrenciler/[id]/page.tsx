@@ -19,6 +19,7 @@ import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { GrantForm, RevokeButton } from "@/components/checkup/EntitlementControls";
 import { CoachNoteEditor } from "@/components/checkup/CoachNoteEditor";
+import { OdevOgrenciKarti } from "@/components/checkup/OdevOgrenciKarti";
 import { PuanTrendi, type PuanNoktasi } from "@/components/checkup/Grafikler";
 import { Meter, levelColor, levelTone } from "@/components/checkup/ui";
 import { haftaBasi, haftaEtiketi } from "@/lib/checkup/shared/coaching";
@@ -468,6 +469,9 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
               </>
             )}
           </ComponentCard>
+
+          {/* ── Gruplar ve ödevler (kendi sorgusu: lib/checkup/gruplar.ts) ── */}
+          <OdevOgrenciKarti userId={ogrenci.id} now={now} />
 
           {/* ── Seviyeli koşular ──────────────── */}
           {ogrenci.levelRuns.length > 0 ? (

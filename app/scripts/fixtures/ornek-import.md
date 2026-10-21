@@ -2,7 +2,7 @@
 
 Bu dosya `scripts/import-questions.mts` için örnek ve aynı zamanda test
 verisidir. Biçim: SORU-SABLONU.md (v3). Üçüncü soru BİLEREK hatalı — betiğin
-reddetme raporunu göstermek için.
+reddetme raporunu göstermek için. İlk soruda ipucu, video ve adım adım çözüm var.
 
 ### Soru 01
 * **ID:** ORNEK-TK-01
@@ -13,6 +13,9 @@ reddetme raporunu göstermek için.
 * **Kazanım Adı:** Pozitif tam sayı kısıtı altında en büyük/en küçük değer analizi yapar.
 * **İdeal Süre:** 60
 * **Kaynak:** özgün
+* **Video:** https://youtu.be/aqz-KE-bpKQ?t=75
+* **İpucu:** $a$'nın büyük olması için $b$ nasıl seçilmeli?
+* **İpucu:** $2a = 42 - 3b$ çift sayı olmalı. $3b$ hangi $b$ değerlerinde çifttir?
 * **Soru Metni:**
 $a$ ve $b$ birbirinden farklı pozitif tam sayılardır.
 
@@ -27,8 +30,15 @@ olduğuna göre, $a$'nın alabileceği en büyük değer kaçtır?
   * [ ] E) 16 (EKSIK_OKUMA: "birbirinden farklı" koşulu atlanmış)
 * **Doğru Şık:** B
 * **Çözüm Açıklaması:**
-$a$ en büyük olsun istiyorsak $b$ en küçük olmalı. $b=1$ için $2a=39$, tam sayı
-değil. $b=2$ için $2a=36$ ve $a=18$.
+$a$ en büyük olsun istiyorsak $b$ en küçük olmalı.
+
+---
+
+$b=1$ için $2a=39$, tam sayı değil.
+
+---
+
+$b=2$ için $2a=36$ ve $a=18$.
 
 ---
 

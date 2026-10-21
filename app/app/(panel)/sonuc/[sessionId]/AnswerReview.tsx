@@ -6,12 +6,16 @@ import {
   CircleCheck,
   CircleMinus,
   CircleX,
-  Lightbulb,
   Timer,
   TriangleAlert,
 } from "lucide-react";
 import { ERROR_TYPE_LABELS } from "@/lib/error-types";
+import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
 import { BenzeriniCozButonu } from "@/components/AlistirmaButonlari";
+import { CozumAdimlari } from "@/components/CozumAdimlari";
+import { HataBildir } from "@/components/HataBildir";
+import { KocaSorDugmesi } from "@/components/KocaSor";
+import { VideoCozum } from "@/components/VideoCozum";
 import { cx } from "@/components/tailadmin/cx";
 import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
 import { SegmentedTabs } from "@/components/tailadmin/ui/SegmentedTabs";
@@ -41,12 +45,17 @@ export interface ReviewItemView {
   order: number;
   topicName: string;
   stem: ReactNode;
-  solution: ReactNode | null;
+  /** Çözümün adımları (sunucuda bölünüp çizildi); tek adımlı çözümde bir eleman. */
+  cozumAdimlari: ReactNode[] | null;
   choices: ReviewChoiceView[];
   selectedChoiceId: string | null;
   isCorrect: boolean | null;
   timeSpentMs: number;
   targetTimeSeconds: number;
+  video: { embedUrl: string; provider: "youtube" | "vimeo" } | null;
+  /** Öğrencinin bu sorudaki hata bildirimi ve koça sorusu. */
+  rapor: RaporDurumu | null;
+  kocaSoru: KocaSoruDurumu | null;
 }
 
 /**
@@ -270,16 +279,31 @@ export function AnswerReview({
                   </p>
                 ) : null}
 
-                {item.solution ? (
-                  <div className="mt-4 rounded-xl border border-brand-100 bg-brand-25 p-3.5 sm:mt-5 sm:p-5">
-                    <p className="flex items-center gap-2 text-theme-xs font-semibold tracking-wide text-brand-500 uppercase">
-                      <Lightbulb className="size-4" aria-hidden /> Çözüm
-                    </p>
-                    <div className="mt-2.5 text-body leading-relaxed text-gray-800">{item.solution}</div>
-                  </div>
+                {item.cozumAdimlari && item.cozumAdimlari.length > 0 ? (
+                  <CozumAdimlari adimlar={item.cozumAdimlari} className="mt-4 sm:mt-5" />
                 ) : (
                   <p className="mt-4 text-theme-xs text-gray-500">Bu soruya henüz çözüm eklenmemiş.</p>
                 )}
+
+                {item.video ? (
+                  <VideoCozum
+                    embedUrl={item.video.embedUrl}
+                    provider={item.video.provider}
+                    baslik={`${item.order + 1}. sorunun video çözümü`}
+                    className="mt-3"
+                  />
+                ) : null}
+
+                {/* Takıldıysa koçuna, soruda hata gördüyse içerik ekibine. */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 print:hidden">
+                  <KocaSorDugmesi questionId={item.questionId} sessionId={sessionId} durum={item.kocaSoru} />
+                  <HataBildir
+                    questionId={item.questionId}
+                    sessionId={sessionId}
+                    durum={item.rapor}
+                    className="ms-auto"
+                  />
+                </div>
 
                 {/* Öğrenme döngüsü: yanlışın hemen ardından aynı tipten bir soru.
                     Benzeri yoksa düğme değil açıklama — ölü düğme yok. */}

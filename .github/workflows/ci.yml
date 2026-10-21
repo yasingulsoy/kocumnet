@@ -104,10 +104,18 @@ jobs:
       - run: npm run test:markup
       # Soru içe aktarma (komut satırı ve panel ortak): veritabanı istemez.
       - run: npm run test:import
+      # Deneme oluşturucunun saf kuralları (panel modülü): veritabanı istemez.
+      - run: npm run test:deneme-panel
       - run: npm run test:leak
       - run: npm run test:levels
       - run: npm run test:practice
       - run: npm run test:veli
+      # Deneme (sabit liste, yüzdelik), kâğıt + optik form, süre analizi
+      - run: npm run test:deneme
+      # İpucu, adım adım çözüm, hata bildirimi, koça soru, seri
+      - run: npm run test:ogrenme
+      # Grup ve ödev: tamamlanma kuralı, öğrencinin ödev listesi
+      - run: npm run test:odev
 
   backend:
     name: backend

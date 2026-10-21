@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@/lib/checkup/generated/client";
 import { db } from "@/lib/checkup/db";
-import { CONTENT_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
+import { ANY_STAFF, CONTENT_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
 import { EXAM_LABEL, EXAM_SCOPES, isExamScope, isQuestionStatus } from "@/lib/checkup/format";
 import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
 import { onerilenZorluk } from "@/lib/checkup/item-flags";
@@ -15,13 +15,18 @@ import { konuSinavdaMi } from "@/lib/checkup/shared/exam-scope";
 import { ERROR_TYPES } from "@/lib/checkup/shared/error-types";
 import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import {
+  containsStepBreak,
   deriveQuestionFields,
+  hintsSchema,
+  parseVideoUrl,
   safeParseQuestionContent,
   validateChoices,
   CHOICE_LABELS,
+  MAX_HINTS,
   type ChoiceDraft,
   type QuestionContent,
 } from "@/lib/checkup/shared/question-content";
+import { IPUCU_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
 
 export interface QuestionFormState {
   error?: string;
@@ -52,6 +57,15 @@ const schema = z.object({
    * normal durum. Yalnızca kısıtlama gerekiyorsa dolu (SORU-SABLONU "Hedef Sınav").
    */
   examScopes: z.array(z.enum(EXAM_SCOPES, { message: "Geçersiz sınav." })).max(EXAM_SCOPES.length),
+  /**
+   * Kademeli ipuçları, açılış sırasıyla (yazım biçimi). Boşlar kayıtta atılır;
+   * hiç yoksa Question.hints null. Alıştırmada tek tek açılır.
+   */
+  hints: z
+    .array(z.string().trim().max(IPUCU_SINIRI, `Bir ipucu en fazla ${IPUCU_SINIRI} karakter: kısa tut, çözümü anlatma.`))
+    .max(MAX_HINTS, `En fazla ${MAX_HINTS} ipucu.`),
+  /** Video çözüm bağlantısı (YouTube/Vimeo); kayıtta canonicalUrl'e çevrilir. */
+  videoUrl: z.string().trim().max(VIDEO_ADRES_SINIRI, "Video adresi çok uzun.").default(""),
 });
 
 type QuestionInput = z.infer<typeof schema>;
@@ -85,8 +99,16 @@ function readForm(formData: FormData) {
     choices,
     errorTypes,
     examScopes: [...new Set(formData.getAll("examScopes").map(String))],
+    // Sıra formdaki sıra (yazar yukarı/aşağı taşıyabiliyor).
+    hints: formData.getAll("hint").map(String),
+    videoUrl: String(formData.get("videoUrl") ?? ""),
   };
 }
+
+/** Video bağlantısı tanınmadığında: hangi biçimlerin geçtiğini söyler. */
+const VIDEO_HATASI =
+  "Bu bağlantı tanınmadı. Yalnızca YouTube (youtube.com/watch?v=…, youtu.be/…, youtube.com/shorts/…) " +
+  "ya da Vimeo (vimeo.com/123…) bağlantısı eklenebilir.";
 
 /**
  * Dolu bir şıktan ÖNCE boş şık var mı (ör. C boş, D ve E dolu)?
@@ -119,6 +141,13 @@ function buildQuestion(input: QuestionInput) {
   const stemParsed = safeParseQuestionContent(stemContent);
   if (!stemParsed.success) {
     return { errors: { stem: "Soru metni çözümlenemedi." } as Record<string, string> };
+  }
+  // Adım ayırıcı yalnızca çözümde anlamlı; soru metninde öğrenci ekranı onu
+  // çizmez, metin ortadan bölünmüş görünür.
+  if (containsStepBreak(stemParsed.data)) {
+    return {
+      errors: { stem: "Soru metninde tek başına --- satırı (adım ayırıcı) olamaz; ayırıcı yalnızca çözümde adımları ayırır." },
+    };
   }
 
   if (input.correctIndex >= input.choices.length) {
@@ -153,12 +182,38 @@ function buildQuestion(input: QuestionInput) {
     solution = parsed.data;
   }
 
+  // İpuçları: boş kutular atılır; sıra korunur. Hata, yazarın gördüğü kutuya
+  // (formdaki sırasına) yazılır.
+  const hints: QuestionContent[] = [];
+  const ipucuHatalari: Record<string, string> = {};
+  input.hints.forEach((markup, i) => {
+    if (!markup) return;
+    const p = safeParseQuestionContent(markupToContent(markup));
+    if (!p.success) ipucuHatalari["hint_" + i] = "İpucu çözümlenemedi.";
+    else if (containsStepBreak(p.data)) {
+      ipucuHatalari["hint_" + i] = "İpucunda --- (adım ayırıcı) olamaz: ipucu tek parça açılır, adımlar yalnızca çözümde.";
+    } else hints.push(p.data);
+  });
+  if (Object.keys(ipucuHatalari).length) return { errors: ipucuHatalari };
+  // Şemanın kendi kuralı (sayı, ayırıcı) son güvence: öğrenci tarafı aynı şemayla okuyor.
+  if (hints.length && !hintsSchema.safeParse(hints).success) return { errors: { hints: "İpuçları geçersiz." } };
+
+  // Video: yalnızca YouTube/Vimeo; kayıtta tek biçim (canonicalUrl) saklanır.
+  let videoUrl: string | null = null;
+  if (input.videoUrl) {
+    const v = parseVideoUrl(input.videoUrl);
+    if (!v) return { errors: { videoUrl: VIDEO_HATASI } };
+    videoUrl = v.canonicalUrl;
+  }
+
   const derived = deriveQuestionFields(stemParsed.data);
 
   return {
     data: {
       stem: stemParsed.data,
       solution,
+      hints: hints.length ? hints : null,
+      videoUrl,
       stemText: derived.stemText,
       fingerprint: derived.fingerprint,
       drafts,
@@ -170,7 +225,9 @@ function buildQuestion(input: QuestionInput) {
 function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? "form");
+    // İpucu hatası kutusuna gitsin: ["hints", 1] → "hint_1".
+    const [alan, sira] = issue.path;
+    const key = alan === "hints" && typeof sira === "number" ? "hint_" + sira : String(alan ?? "form");
     out[key] ??= issue.message;
   }
   return out;
@@ -289,6 +346,8 @@ export async function createQuestionAction(
         stemText: built.data.stemText,
         fingerprint: built.data.fingerprint,
         solution: built.data.solution ?? Prisma.DbNull,
+        hints: built.data.hints ?? Prisma.DbNull,
+        videoUrl: built.data.videoUrl,
         difficulty: parsed.data.difficulty,
         targetTimeSeconds: parsed.data.targetTimeSeconds,
         status: parsed.data.status,
@@ -433,6 +492,10 @@ export async function updateQuestionAction(
           stemText: built.data.stemText,
           fingerprint: built.data.fingerprint,
           solution: built.data.solution ?? Prisma.DbNull,
+          // İpucu, video ve çözüm sürümü ARTIRMAZ: sürüm yalnızca cevap anahtarı
+          // değişince artar (aşağıda), öğrencinin eski sonucu onlara bağlı değil.
+          hints: built.data.hints ?? Prisma.DbNull,
+          videoUrl: built.data.videoUrl,
           difficulty: parsed.data.difficulty,
           targetTimeSeconds: parsed.data.targetTimeSeconds,
           status: parsed.data.status,
@@ -585,4 +648,19 @@ export async function applySuggestedDifficultyAction(
   revalidateQuestionScreens();
   revalidatePath("/checkup/sorular/analiz");
   return { ok: true, count };
+}
+
+/**
+ * Soru formundaki video alanının canlı denetimi (yazarken, gecikmeli).
+ * parseVideoUrl ortak modülde ve o modül istemciye alınamıyor (node:crypto);
+ * kayıt yine kendi denetimini yapar, bu yalnızca anında geri bildirim.
+ */
+export async function videoBaglantisiAction(
+  raw: unknown
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const auth = await staffForAction(ANY_STAFF);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof raw !== "string" || raw.length > VIDEO_ADRES_SINIRI) return { ok: false, error: "Video adresi çok uzun." };
+  const v = parseVideoUrl(raw.trim());
+  return v ? { ok: true, url: v.canonicalUrl } : { ok: false, error: VIDEO_HATASI };
 }

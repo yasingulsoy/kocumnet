@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { saveAnswerAction, sinavDurumuAction, submitCheckupAction } from "@/lib/actions/checkup";
 import { GorselBuyutec, useGorselBuyutec } from "@/components/GorselBuyutec";
+import { Karalama, eskiKaralamalariTemizle, karalamalariTemizle } from "@/components/Karalama";
 import { OkumaBetigi, OkumaBoyuDugmeleri, useOkumaBoyu } from "@/components/OkumaBoyu";
 import { Logo } from "@/components/ui/logo";
 import { Alert } from "@/components/tailadmin/ui/Alert";
@@ -465,6 +466,7 @@ export function CheckupRunner({
       // ekranı göstermeye devam etmek anlamsız.
       kilitliRef.current = true;
       depoSil(sessionId);
+      karalamalariTemizle(sessionId);
       router.replace(res.target);
       return;
     }
@@ -508,6 +510,7 @@ export function CheckupRunner({
   useEffect(() => {
     let iptal = false;
     eskiDepolariTemizle(sessionId);
+    eskiKaralamalariTemizle();
     const depo = depoOku(sessionId);
     // Durum güncellemeleri efekt gövdesinde değil, bir sonraki mikro görevde.
     void Promise.resolve().then(() => {
@@ -583,8 +586,14 @@ export function CheckupRunner({
           }
         } catch (e) {
           // Sunucu eylemi yönlendirince söz "redirect" hatasıyla reddediliyor;
-          // onu yutmak yönlendirmeyi durdurur.
-          unstable_rethrow(e);
+          // onu yutmak yönlendirmeyi durdurur. Yönlendirme = test bitti:
+          // bu testin karalamaları cihazda kalmasın.
+          try {
+            unstable_rethrow(e);
+          } catch (yonlendirme) {
+            karalamalariTemizle(sessionId);
+            throw yonlendirme;
+          }
           depoyuYaz();
           setBitirHatasi("Bağlantı koptu, test bitirilemedi. İnternetin gelince tekrar dene.");
         }
@@ -931,94 +940,98 @@ export function CheckupRunner({
             </Alert>
           ) : null}
 
-          {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
-          <article
-            key={current.id}
-            ref={soruRef}
-            aria-labelledby={baslikId}
-            onClick={gorselYakala}
-            className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
-          >
-            <div className="flex items-center gap-2">
-              <h2
-                id={baslikId}
-                ref={baslikRef}
-                tabIndex={-1}
-                className="tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-2 font-display text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
-              >
-                <span className="sr-only">Soru </span>
-                {index + 1}
-                <span className="sr-only"> / {questions.length}</span>
-              </h2>
-              <span className="min-w-0 truncate rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 sm:py-1 sm:text-theme-xs">
-                {current.topicName}
-              </span>
-              {/* Emin olmadığın soruyu işaretle, bitirmeden önce tek listede gör. */}
-              <button
-                type="button"
-                onClick={() => sonraDegistir(current.id)}
-                aria-pressed={sonraMi}
-                className={cn(
-                  "ms-auto flex min-h-10 shrink-0 cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold ring-1 ring-inset transition sm:text-[13px]",
-                  sonraMi
-                    ? "bg-warning-50 text-warning-700 ring-warning-200"
-                    : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 hover:text-gray-800"
-                )}
-              >
-                {sonraMi ? (
-                  <BookmarkCheck className="size-4" aria-hidden />
-                ) : (
-                  <Bookmark className="size-4" aria-hidden />
-                )}
-                Sonra bak
-              </button>
-            </div>
-
-            <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
-              <div className="okuma">{current.stem}</div>
-            </div>
-
-            <div
-              role="radiogroup"
-              aria-label={`Soru ${index + 1} şıkları`}
-              className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5"
+          {/* Karalama: soru kartının üstüne çizilen tuval (components/Karalama.tsx);
+              soru başına bu cihazda saklı, test bitince silinir. */}
+          <Karalama key={current.id} oturumId={sessionId} soruId={current.id}>
+            {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
+            <article
+              key={current.id}
+              ref={soruRef}
+              aria-labelledby={baslikId}
+              onClick={gorselYakala}
+              className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
             >
-              {current.choices.map((choice) => {
-                const secili = answers[current.id] === choice.id;
-                return (
-                  <button
-                    key={choice.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={secili}
-                    onClick={() => select(choice.id)}
-                    className={cn(
-                      "group flex w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
-                      "min-h-[var(--tap-comfort)]",
-                      secili
-                        ? "border-brand-500 bg-brand-25"
-                        : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:bg-gray-50"
-                    )}
-                  >
-                    <span
+              <div className="flex items-center gap-2">
+                <h2
+                  id={baslikId}
+                  ref={baslikRef}
+                  tabIndex={-1}
+                  className="tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-2 font-display text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
+                >
+                  <span className="sr-only">Soru </span>
+                  {index + 1}
+                  <span className="sr-only"> / {questions.length}</span>
+                </h2>
+                <span className="min-w-0 truncate rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 sm:py-1 sm:text-theme-xs">
+                  {current.topicName}
+                </span>
+                {/* Emin olmadığın soruyu işaretle, bitirmeden önce tek listede gör. */}
+                <button
+                  type="button"
+                  onClick={() => sonraDegistir(current.id)}
+                  aria-pressed={sonraMi}
+                  className={cn(
+                    "ms-auto flex min-h-10 shrink-0 cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold ring-1 ring-inset transition sm:text-[13px]",
+                    sonraMi
+                      ? "bg-warning-50 text-warning-700 ring-warning-200"
+                      : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50 hover:text-gray-800"
+                  )}
+                >
+                  {sonraMi ? (
+                    <BookmarkCheck className="size-4" aria-hidden />
+                  ) : (
+                    <Bookmark className="size-4" aria-hidden />
+                  )}
+                  Sonra bak
+                </button>
+              </div>
+
+              <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
+                <div className="okuma">{current.stem}</div>
+              </div>
+
+              <div
+                role="radiogroup"
+                aria-label={`Soru ${index + 1} şıkları`}
+                className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5"
+              >
+                {current.choices.map((choice) => {
+                  const secili = answers[current.id] === choice.id;
+                  return (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={secili}
+                      onClick={() => select(choice.id)}
                       className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition",
+                        "group flex w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
+                        "min-h-[var(--tap-comfort)]",
                         secili
-                          ? "bg-brand-500 text-white"
-                          : "bg-gray-100 text-gray-700 ring-1 ring-gray-300 ring-inset group-hover:ring-gray-400"
+                          ? "border-brand-500 bg-brand-25"
+                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:bg-gray-50"
                       )}
                     >
-                      {choice.label}
-                    </span>
-                    <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
-                      <span className="okuma block">{choice.content}</span>
-                    </span>
-                    {secili ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </article>
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition",
+                          secili
+                            ? "bg-brand-500 text-white"
+                            : "bg-gray-100 text-gray-700 ring-1 ring-gray-300 ring-inset group-hover:ring-gray-400"
+                        )}
+                      >
+                        {choice.label}
+                      </span>
+                      <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
+                        <span className="okuma block">{choice.content}</span>
+                      </span>
+                      {secili ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </article>
+          </Karalama>
 
           {/* Masaüstü gezinme */}
           <div className="mt-5 hidden items-center justify-between gap-4 lg:flex">

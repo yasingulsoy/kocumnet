@@ -7,7 +7,9 @@ import { CheckupError } from "@/lib/checkup";
 import { alistirmaHakki, benzerDurumlari, getPracticeSession } from "@/lib/practice";
 import { examShort } from "@/lib/exams";
 import { MathContent } from "@/components/MathContent";
+import { KazanimKarti } from "@/components/KazanimKarti";
 import { BenzeriniCozButonu } from "@/components/AlistirmaButonlari";
+import { splitSolutionSteps } from "@/lib/question-content";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card } from "@/components/tailadmin/ui/Card";
 import { vadeMetni } from "@/lib/review";
@@ -59,12 +61,15 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
       : view.mode === "REVIEW"
         ? `Yanlış defteri · ${view.questions.length} benzer soru`
         : `${examShort(view.examScope)} · ${view.questions.length} soru, süre yok`;
+  // Kaynağı olmayan konu alıştırması yalnızca koçun ödevinden açılır (odevKonuCalismasiBaslat).
   const cikis =
     view.mode === "REVIEW"
       ? { href: "/defter", label: "Deftere dön" }
       : view.sourceSessionId
         ? { href: `/sonuc/${view.sourceSessionId}`, label: "Sonuca dön" }
-        : { href: "/panel", label: "Ana sayfa" };
+        : view.mode === "TOPIC"
+          ? { href: "/odevler", label: "Ödevlere dön" }
+          : { href: "/panel", label: "Ana sayfa" };
 
   /*
    * Benzer alıştırma bittiyse "bir benzerini daha" — yalnızca havuzda gerçekten
@@ -137,6 +142,11 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
       label: c.label,
       content: <MathContent content={c.content} compact />,
     })),
+    // Yalnızca AÇILMIŞ ipuçları çizilir; açılmamışın içeriği view'da da yok.
+    ipucu: {
+      toplam: q.ipucu.toplam,
+      acilan: q.ipucu.acilan.map((h, i) => <MathContent key={i} content={h} buyutulebilir />),
+    },
     feedback: q.feedback
       ? {
           selectedChoiceId: q.feedback.selectedChoiceId,
@@ -144,8 +154,20 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
           correctChoiceId: q.feedback.correctChoiceId,
           errorLabel: q.feedback.errorLabel,
           errorAdvice: q.feedback.errorAdvice,
-          solution: q.feedback.solution ? <MathContent content={q.feedback.solution} buyutulebilir /> : null,
+          // Adımlar burada bölünür (ayırıcı: step_break); istemci yalnızca açıp kapatır.
+          cozumAdimlari: q.feedback.solution
+            ? splitSolutionSteps(q.feedback.solution).map((adim, i) => (
+                <MathContent key={i} content={adim} buyutulebilir />
+              ))
+            : null,
           note: q.feedback.defterNotu,
+          ipucuSayisi: q.feedback.ipucuSayisi,
+          video: q.feedback.video,
+          kazanim: q.feedback.kazanim ? (
+            <KazanimKarti ad={q.feedback.kazanim.ad} ozet={q.feedback.kazanim.ozet} />
+          ) : null,
+          rapor: q.feedback.rapor,
+          kocaSoru: q.feedback.kocaSoru,
         }
       : null,
   }));

@@ -43,8 +43,9 @@ export function ImportHistoryShell({ children }: { children: ReactNode }) {
             {sonuc.korunan ? (
               <>
                 {" "}
-                {sonuc.korunan} soru öğrencilere sorulduğu (testte ya da alıştırmada) için korundu: silinseydi
-                öğrencilerin cevapları, geçmiş sonuçları ve yanlış defterleri bozulurdu. İstersen arşivle (yeni
+                {sonuc.korunan} soru öğrencilere sorulduğu (testte ya da alıştırmada) ya da bir denemenin listesinde
+                olduğu için korundu: silinseydi öğrencilerin cevapları, geçmiş sonuçları ve yanlış defterleri bozulur,
+                deneme eksik kalırdı. İstersen arşivle (yeni
                 testlere seçilmez, geçmişte durur).{" "}
                 <Link
                   href={"/checkup/sorular?parti=" + encodeURIComponent(sonuc.partiId)}
@@ -99,7 +100,7 @@ export function ImportRollbackButton({
                 {silinecek} soru silinecek (henüz hiçbir öğrenciye sorulmamış olanlar; yayındakiler dahil).
                 {korunacak ? (
                   <span className="mt-2 block">
-                    {korunacak} soru öğrencilere sorulduğu (testte ya da alıştırmada) için korunacak.
+                    {korunacak} soru öğrencilere sorulduğu (testte ya da alıştırmada) ya da bir denemede olduğu için korunacak.
                   </span>
                 ) : null}
               </>

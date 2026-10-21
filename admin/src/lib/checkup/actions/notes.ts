@@ -18,8 +18,11 @@ const KIMLIK = /^[a-z0-9]{6,64}$/i;
 
 function tazele(questionId: string) {
   revalidatePath("/checkup/sorular/" + questionId);
-  // Listedeki "açık not" rozeti ve süzgeci.
+  // Listedeki "açık not" / "bildirim" rozetleri ve süzgeçleri.
   revalidatePath("/checkup/sorular");
+  // Öğrenci bildirimleri de bu tabloda: bildirim listesi ve genel bakıştaki sayı.
+  revalidatePath("/checkup/bildirimler");
+  revalidatePath("/checkup");
 }
 
 export async function notEkleAction(questionId: unknown, body: unknown): Promise<Yanit> {
@@ -46,7 +49,11 @@ export async function notEkleAction(questionId: unknown, body: unknown): Promise
   return { ok: true };
 }
 
-/** cozuldu=true: notu kapatır (çözen ve zaman yazılır); false: yeniden açar (ikisi de boşalır). */
+/**
+ * cozuldu=true: notu kapatır (çözen ve zaman yazılır); false: yeniden açar
+ * (ikisi de boşalır). Personel notu da öğrenci bildirimi de: öğrenci çözülen
+ * bildirimini "incelendi" diye görür (düzeltildi de hata yok da).
+ */
 export async function notDurumuAction(noteId: unknown, cozuldu: unknown): Promise<Yanit> {
   const auth = await staffForAction(CONTENT_ROLES);
   if (!auth.ok) return { ok: false, error: auth.error };
@@ -69,4 +76,25 @@ export async function notDurumuAction(noteId: unknown, cozuldu: unknown): Promis
 
   tazele(not.questionId);
   return { ok: true };
+}
+
+/**
+ * Bir sorunun AÇIK öğrenci bildirimlerinin hepsini çözüldü işaretler: soru
+ * düzeltilince aynı hatayı bildiren on öğrenciye tek tek basılmasın.
+ * Yalnızca bildirimler; personel notlarına dokunmaz.
+ */
+export async function bildirimleriCozAction(questionId: unknown): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof questionId !== "string" || !KIMLIK.test(questionId)) return { ok: false, error: "Geçersiz istek." };
+
+  const damga = staffStamp(auth.staff);
+  const r = await db.questionNote.updateMany({
+    where: { questionId, kind: "STUDENT_REPORT", resolvedAt: null },
+    data: { resolvedAt: new Date(), resolvedByStaff: damga },
+  });
+  if (r.count > 0) console.info("[checkup] " + r.count + " öğrenci bildirimi çözüldü — soru " + questionId + " · " + damga);
+
+  tazele(questionId);
+  return { ok: true, count: r.count };
 }

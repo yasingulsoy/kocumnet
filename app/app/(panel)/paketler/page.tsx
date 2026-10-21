@@ -30,7 +30,8 @@ export default async function CatalogPage({ searchParams }: PageProps<"/paketler
     secim === "TUMU" ? null : secim && isExamScope(secim) ? secim : (user.targetExam ?? null);
 
   const [hepsi, kapsamlar] = await Promise.all([
-    loadCatalog(user.id, new Date(), { scope: tur }),
+    // Denemeler yalnızca bu sayfada, kendi bölümünde (lib/catalog.ts DENEME_TURU).
+    loadCatalog(user.id, new Date(), { scope: tur, denemeler: true }),
     availableExamScopes(),
   ]);
 

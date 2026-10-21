@@ -21,7 +21,11 @@
     "test:practice": "tsx scripts/practice-test.mts",
     "import:questions": "tsx scripts/import-questions.mts",
     "test:import": "tsx scripts/import-test.mts",
-    "test:veli": "tsx scripts/veli-test.mts"
+    "test:veli": "tsx scripts/veli-test.mts",
+    "test:deneme": "tsx scripts/deneme-test.mts",
+    "test:ogrenme": "tsx scripts/ogrenme-test.mts",
+    "test:odev": "tsx scripts/odev-test.mts",
+    "test:deneme-panel": "tsx scripts/deneme-panel-test.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

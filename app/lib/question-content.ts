@@ -74,6 +74,13 @@ const listBlock = z.object({
 
 const spacerBlock = z.object({ type: z.literal("spacer") });
 
+/**
+ * Çözüm adımlarının ayırıcısı (yazım biçiminde tek başına `---` satırı).
+ * YALNIZCA çözümde anlamlı: öğrenci çözümü adım adım açar. Soru metninde ve
+ * şıkta yasak (containsStepBreak ile denetlenir).
+ */
+const stepBreakBlock = z.object({ type: z.literal("step_break") });
+
 const block = z.discriminatedUnion("type", [
   paragraphBlock,
   mathBlock,
@@ -81,6 +88,7 @@ const block = z.discriminatedUnion("type", [
   tableBlock,
   listBlock,
   spacerBlock,
+  stepBreakBlock,
 ]);
 
 export const questionContentSchema = z.object({
@@ -152,11 +160,137 @@ export function extractText(content: QuestionContent): string {
         for (const item of b.items) parts.push(inlineToText(item));
         break;
       case "spacer":
+      case "step_break":
         break;
     }
   }
 
   return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Çözüm adımları
+// ─────────────────────────────────────────────────────────────
+
+export function containsStepBreak(content: QuestionContent): boolean {
+  return content.blocks.some((b) => b.type === "step_break");
+}
+
+/**
+ * Çözümü adımlara böler. Ayırıcı yoksa tek adım döner; boş adımlar (art arda
+ * iki ayırıcı, baştaki/sondaki ayırıcı) atılır.
+ */
+export function splitSolutionSteps(content: QuestionContent): QuestionContent[] {
+  const steps: QuestionContent[] = [];
+  let current: ContentBlock[] = [];
+  const flush = () => {
+    if (current.some((b) => b.type !== "spacer")) steps.push({ version: 1, blocks: current });
+    current = [];
+  };
+  for (const b of content.blocks) {
+    if (b.type === "step_break") flush();
+    else current.push(b);
+  }
+  flush();
+  return steps;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Kademeli ipuçları
+// ─────────────────────────────────────────────────────────────
+
+/** Bir soruda en fazla kaç ipucu. Daha fazlası çözümün kendisi olur. */
+export const MAX_HINTS = 3;
+
+/**
+ * Question.hints: blok dizilerinden oluşan liste. İpucunda adım ayırıcı
+ * olamaz; her ipucu tek parça açılır.
+ */
+export const hintsSchema = z
+  .array(questionContentSchema)
+  .max(MAX_HINTS, `En fazla ${MAX_HINTS} ipucu olabilir`)
+  .refine((list) => list.every((h) => !containsStepBreak(h)), "İpucunda adım ayırıcı (---) olamaz");
+
+/**
+ * Veritabanındaki ipuçlarını okur. Bozuk satır sayfayı düşürmesin diye hata
+ * fırlatmaz, boş liste döner; kaydetme yolları hintsSchema.parse kullanır.
+ */
+export function parseHints(value: unknown): QuestionContent[] {
+  if (value == null) return [];
+  const r = hintsSchema.safeParse(value);
+  return r.success ? r.data : [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Video çözüm bağlantısı
+// ─────────────────────────────────────────────────────────────
+
+export interface VideoRef {
+  provider: "youtube" | "vimeo";
+  id: string;
+  /** Gömülü oynatıcı adresi: YouTube çerezsiz alan adı, Vimeo dnt=1. */
+  embedUrl: string;
+  /** Kayıtta saklanan biçim. */
+  canonicalUrl: string;
+}
+
+/**
+ * Yalnızca YouTube ve Vimeo kabul edilir: başka bir adresi iframe'e koymak,
+ * sınav ekranına herhangi bir siteyi gömmek demek. Desteklenen biçimler:
+ * youtube.com/watch?v=…, youtu.be/…, youtube.com/shorts/…, youtube.com/embed/…,
+ * vimeo.com/123, player.vimeo.com/video/123. Başlangıç saniyesi (t=) korunur.
+ */
+export function parseVideoUrl(raw: string | null | undefined): VideoRef | null {
+  if (!raw) return null;
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+
+  const baslangic = (() => {
+    const t = u.searchParams.get("t") ?? u.searchParams.get("start");
+    if (!t) return 0;
+    const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t);
+    if (!m) return 0;
+    return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+  })();
+
+  let ytId: string | null = null;
+  if (host === "youtu.be") ytId = u.pathname.slice(1).split("/")[0] || null;
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    if (u.pathname === "/watch") ytId = u.searchParams.get("v");
+    else {
+      const m = /^\/(?:shorts|embed|live)\/([^/?#]+)/.exec(u.pathname);
+      ytId = m?.[1] ?? null;
+    }
+  }
+  if (ytId) {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(ytId)) return null;
+    const s = baslangic > 0 ? `?start=${baslangic}` : "";
+    return {
+      provider: "youtube",
+      id: ytId,
+      embedUrl: `https://www.youtube-nocookie.com/embed/${ytId}${s}`,
+      canonicalUrl: `https://www.youtube.com/watch?v=${ytId}${baslangic > 0 ? `&t=${baslangic}` : ""}`,
+    };
+  }
+
+  let vimeoId: string | null = null;
+  if (host === "vimeo.com") vimeoId = /^\/(\d+)/.exec(u.pathname)?.[1] ?? null;
+  else if (host === "player.vimeo.com") vimeoId = /^\/video\/(\d+)/.exec(u.pathname)?.[1] ?? null;
+  if (vimeoId) {
+    return {
+      provider: "vimeo",
+      id: vimeoId,
+      embedUrl: `https://player.vimeo.com/video/${vimeoId}?dnt=1`,
+      canonicalUrl: `https://vimeo.com/${vimeoId}`,
+    };
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -223,6 +357,10 @@ export function validateChoices(choices: ChoiceDraft[]): string[] {
   if (correct.length === 0) errors.push("Doğru şık işaretlenmemiş.");
   if (correct.length > 1) {
     errors.push(`Birden fazla doğru şık var (${correct.map((c) => c.label).join(", ")}).`);
+  }
+
+  for (const c of choices) {
+    if (containsStepBreak(c.content)) errors.push(`${c.label} şıkkında adım ayırıcı (---) olamaz.`);
   }
 
   const labels = choices.map((c) => c.label);

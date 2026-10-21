@@ -6,6 +6,7 @@ import { MANAGE_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
 import { isQuestionStatus } from "@/lib/checkup/format";
 import { loadPackageHealth } from "@/lib/checkup/pool";
 import { paketiKaydet, type PaketKayitSonucu } from "@/lib/checkup/package-save";
+import { denemeYayinEngelleri } from "@/lib/checkup/mock";
 
 type Result = { ok: boolean; error?: string };
 
@@ -35,6 +36,9 @@ export async function setPackageStatusAction(id: string, status: string): Promis
   }
 
   if (status === "PUBLISHED") {
+    // Deneme: liste = soru sayısı ve hepsi yayında; her neden ayrı söylenir.
+    const engeller = await denemeYayinEngelleri(id);
+    if (engeller?.length) return { ok: false, error: "Deneme yayına alınamaz: " + engeller.join(" ") };
     const paket = (await loadPackageHealth()).find((p) => p.id === id);
     if (!paket) return { ok: false, error: "Paket bulunamadı." };
     if (paket.state === "blocked") {

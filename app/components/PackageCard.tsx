@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ChevronRight, Clock, Layers, ListChecks, Lock, Play, Sparkles } from "lucide-react";
+import { ChevronRight, Clock, FileText, Hourglass, Layers, ListChecks, Lock, Play, Scale, Sparkles, Trophy } from "lucide-react";
 import { Badge } from "@/components/tailadmin/ui/Badge";
 import { Card } from "@/components/tailadmin/ui/Card";
 import { examShort } from "@/lib/exams";
+import { cezaKurali } from "@/lib/deneme";
 
 export interface PackageCardData {
   slug: string;
@@ -17,8 +18,16 @@ export interface PackageCardData {
   isIntro?: boolean;
   /** Bu pakette süresi dolmamış, yarım bir test var mı. */
   inProgress: boolean;
+  /** Yarım test kâğıtta mı (kitapçık yazdırıldı, cevaplar optik forma bekliyor). */
+  inProgressPaper?: boolean;
   /** Bu paketi daha önce kaç kez bitirdi. */
   timesTaken?: number;
+  /** Deneme sınavı (MOCK): sabit sorular, gerçek sınav biçimi. */
+  isMock?: boolean;
+  /** Denemede kartta yazan yanlış kuralı (paketten). */
+  penaltyRatio?: number;
+  /** Denemenin soru listesi tam ve yayında mı; değilse "hazırlanıyor". */
+  hazir?: boolean;
 }
 
 /**
@@ -41,21 +50,37 @@ function SinavRozeti({ scope }: { scope: string }) {
  *
  * Telefonda SATIR, geniş ekranda KART: 12 paketi tek sütunda kart kart
  * kaydırmak 2800 piksel ediyordu, satır düzeninde ~1000.
+ *
+ * Denemede konu sayısı yerine yanlış kuralı yazar: denemenin "biçimi" soru,
+ * süre ve kuraldır; öğrenci provaya girerken bunu bilmeli.
  */
 export function PackageCard({ p }: { p: PackageCardData }) {
+  const deneme = Boolean(p.isMock);
+  const hazirlaniyor = deneme && !p.hazir && !p.inProgress;
+  const kural = deneme ? cezaKurali(p.penaltyRatio ?? 0) : null;
+
   return (
     <Link href={"/paketler/" + p.slug} className="group block h-full rounded-2xl">
       <Card className="flex h-full items-center gap-3 p-4 transition group-hover:border-gray-300 group-hover:shadow-theme-md max-sm:active:bg-gray-50 sm:flex-col sm:items-stretch sm:p-5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <SinavRozeti scope={p.examScope} />
+            {deneme ? (
+              <Badge size="sm" color="info" startIcon={<Trophy aria-hidden />}>
+                Deneme
+              </Badge>
+            ) : null}
             {p.inProgress ? (
-              <Badge size="sm" color="warning" startIcon={<Play aria-hidden />}>
-                Devam ediyor
+              <Badge size="sm" color="warning" startIcon={p.inProgressPaper ? <FileText aria-hidden /> : <Play aria-hidden />}>
+                {p.inProgressPaper ? "Kâğıtta, cevap bekliyor" : "Devam ediyor"}
               </Badge>
             ) : p.locked ? (
               <Badge size="sm" color="light" startIcon={<Lock aria-hidden />}>
                 Kilitli
+              </Badge>
+            ) : hazirlaniyor ? (
+              <Badge size="sm" color="light" startIcon={<Hourglass aria-hidden />}>
+                Hazırlanıyor
               </Badge>
             ) : p.isIntro ? (
               <Badge size="sm" color="success" startIcon={<Sparkles aria-hidden />}>
@@ -72,7 +97,7 @@ export function PackageCard({ p }: { p: PackageCardData }) {
 
           {/* Telefonda tek satır sayı şeridi; özet yalnızca geniş ekranda. */}
           <p className="tabular mt-1 text-theme-xs text-gray-500 sm:hidden">
-            {p.questionCount} soru · {p.durationMinutes} dk · {p.topicCount} konu
+            {p.questionCount} soru · {p.durationMinutes} dk · {kural ?? `${p.topicCount} konu`}
           </p>
 
           {p.summary ? (
@@ -92,15 +117,32 @@ export function PackageCard({ p }: { p: PackageCardData }) {
               <Clock className="size-4 text-gray-400" aria-hidden />
               <span className="tabular font-medium text-gray-800">{p.durationMinutes}</span> dk
             </span>
-            <span className="flex items-center gap-1.5">
-              <Layers className="size-4 text-gray-400" aria-hidden />
-              <span className="tabular font-medium text-gray-800">{p.topicCount}</span> konu
-            </span>
+            {kural ? (
+              <span className="flex items-center gap-1.5">
+                <Scale className="size-4 text-gray-400" aria-hidden />
+                {kural}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Layers className="size-4 text-gray-400" aria-hidden />
+                <span className="tabular font-medium text-gray-800">{p.topicCount}</span> konu
+              </span>
+            )}
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3.5">
             <span className="text-theme-sm font-medium text-brand-500">
-              {p.inProgress ? "Kaldığın yerden devam et" : p.locked ? "Ayrıntıları gör" : "Teste göz at"}
+              {p.inProgress
+                ? p.inProgressPaper
+                  ? "Cevaplarını optik forma işle"
+                  : "Kaldığın yerden devam et"
+                : p.locked
+                  ? "Ayrıntıları gör"
+                  : hazirlaniyor
+                    ? "Ayrıntıları gör"
+                    : deneme
+                      ? "Denemeye göz at"
+                      : "Teste göz at"}
             </span>
             <ChevronRight className="size-4 text-brand-500 transition group-hover:translate-x-0.5 rtl:rotate-180" aria-hidden />
           </div>

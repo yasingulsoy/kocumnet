@@ -151,6 +151,16 @@ export function ContentPreview({
               </figure>
             );
 
+          // Çözüm adımı ayırıcısı (`---`): önizlemede adım sınırı görünsün.
+          case "step_break":
+            return (
+              <div key={i} className="my-2 flex items-center gap-2 text-theme-xs text-gray-400" aria-hidden>
+                <span className="h-px flex-1 border-t border-dashed border-gray-300" />
+                sonraki adım
+                <span className="h-px flex-1 border-t border-dashed border-gray-300" />
+              </div>
+            );
+
           default:
             return null;
         }

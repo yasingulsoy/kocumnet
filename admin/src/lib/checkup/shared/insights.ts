@@ -28,6 +28,18 @@ export interface AggregateTopic {
 }
 
 /**
+ * Genel konu haritasının eşikleri. Dışa aktarılıyor: panel (grup raporunun
+ * ısı haritası lejantı) ve öbür ekranlar sayıyı elle yazmasın; burada
+ * değişince her yerde değişsin.
+ *
+ * Oran eşikleri tek testin puanlamasıyla aynı (scoring.ts: %75 güçlü,
+ * %45 orta); soru eşiği tek testten DAHA YÜKSEK, gerekçesi aşağıda.
+ */
+export const HARITA_EN_AZ_SORU = 3;
+export const HARITA_GUCLU_ORAN = 0.75;
+export const HARITA_ORTA_ORAN = 0.45;
+
+/**
  * Genel konu haritası: bir konu birden fazla testte sorulduysa hepsi toplanır.
  *
  * Seviye eşiği tek testten DAHA YÜKSEK (3 soru): burada farklı günlerde,
@@ -54,7 +66,14 @@ export function aggregateTopics(results: ResultLike[]): AggregateTopic[] {
       asked: v.asked,
       correct: v.correct,
       ratio,
-      level: v.asked < 3 ? null : ratio >= 0.75 ? "STRONG" : ratio >= 0.45 ? "MEDIUM" : "WEAK",
+      level:
+        v.asked < HARITA_EN_AZ_SORU
+          ? null
+          : ratio >= HARITA_GUCLU_ORAN
+            ? "STRONG"
+            : ratio >= HARITA_ORTA_ORAN
+              ? "MEDIUM"
+              : "WEAK",
     };
   });
 }

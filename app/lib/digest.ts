@@ -4,6 +4,8 @@ import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
 import { EXAMS } from "@/lib/exams";
 import { appUrl, isMailConfigured, renderMail, sendMail, type MailIcerik } from "@/lib/mailer";
 import { gunBasi } from "@/lib/review";
+import { gunAnahtari, gunlukSayimlar } from "@/lib/seri";
+import { okunmamisCevapSayisi } from "@/lib/koca-soru";
 
 /**
  * Haftalık koçluk postası — pazartesi sabahı "bu hafta ne çalışacaksın".
@@ -31,6 +33,26 @@ const PLAN_ISI: Record<string, string> = {
   REVIEW: "Yanlış analizi",
   RETEST: "Kontrol testi",
 };
+
+/**
+ * "Son 7 günde 4 gün çalıştın." — postanın çalışma satırı (saf; test edilir).
+ *
+ * Posta pazartesi sabahı gidiyor: "bu hafta" o an daha başlamamış oluyor.
+ * Bu yüzden bugün HARİÇ son yedi Türkiye günü sayılır (gecikmiş gönderimde
+ * de doğru kalır). Hiç çalışılmadıysa satır yok.
+ */
+export function haftalikCalismaSatiri(sayimlar: readonly { gun: string; adet: number }[], now: Date): string | null {
+  const bugun = gunAnahtari(now);
+  const bugunNo = Math.round(Date.parse(`${bugun}T00:00:00Z`) / 86_400_000);
+  const gunler = new Set(
+    sayimlar
+      .filter((s) => s.adet > 0)
+      .map((s) => Math.round(Date.parse(`${s.gun}T00:00:00Z`) / 86_400_000))
+      .filter((g) => g < bugunNo && g >= bugunNo - 7)
+  );
+  if (gunler.size === 0) return null;
+  return gunler.size === 7 ? "Son 7 günün hepsinde çalıştın. Harika gidiyorsun." : `Son 7 günde ${gunler.size} gün çalıştın.`;
+}
 
 export function postaZamaniMi(now: Date): boolean {
   const tr = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
@@ -84,7 +106,7 @@ async function haftalikPosta(
   // Gelecek pazartesi 00:00 (TR): bu haftanın sonu.
   const haftaSonu = new Date(hafta.getTime() + 7 * 86_400_000 - TR_OFFSET_MS);
 
-  const [plan, sonTest, defterVadeleri] = await Promise.all([
+  const [plan, sonTest, defterVadeleri, sayimlar, kocCevabi] = await Promise.all([
     aktifPlan(u.id, now),
     prisma.checkupSession.findFirst({
       // Alıştırma "son check-up" sayılmaz: ölçüm değil.
@@ -98,6 +120,9 @@ async function haftalikPosta(
       select: { dueAt: true },
       take: 500,
     }),
+    // Son 7 gün + bugün: kaç gün soru çözdü (lib/seri.ts, Türkiye günleri).
+    gunlukSayimlar(u.id, now, 8),
+    okunmamisCevapSayisi(u.id),
   ]);
 
   const ilkAd = u.name.trim().split(/\s+/)[0] || u.name;
@@ -131,6 +156,17 @@ async function haftalikPosta(
         }
       : undefined;
 
+  /*
+   * Postanın sonundaki iki kısa satır. Koçun cevabı en üstte değil: posta
+   * planın postası; ama okunmamış cevap varsa öğrenci bilsin. Çalışma
+   * satırı yalnızca en az bir gün çalıştıysa ("0 gün" azar gibi duruyor).
+   */
+  const kocSatiri =
+    kocCevabi > 0
+      ? `Koçun ${kocCevabi === 1 ? "bir sorunu" : `${kocCevabi} sorunu`} cevapladı: ${appUrl()}/sorularim`
+      : null;
+  const calismaSatiri = haftalikCalismaSatiri(sayimlar, now);
+
   let icerik;
   if (plan && plan.items.length) {
     const kalan = plan.items.filter((i) => !i.done);
@@ -144,7 +180,7 @@ async function haftalikPosta(
         .map((i) => `${i.done ? "✓" : "☐"} ${PLAN_ISI[i.kind] ?? i.kind}${i.topicName ? ` · ${i.topicName}` : ""} — ${i.estimatedMinutes} dk${i.kind === "RETEST" ? " (sistem doğrular)" : ""}`)
         .join("\n"),
       eylem: { etiket: "Planı aç", url: `${appUrl()}/panel` },
-      sonMetin: [geriSayim, "Kontrol testini elle işaretleyemezsin: o konuda 5 soruluk testi çözdüğünde sistem kendisi kapatır."].filter((s): s is string => Boolean(s)),
+      sonMetin: [kocSatiri, calismaSatiri, geriSayim, "Kontrol testini elle işaretleyemezsin: o konuda 5 soruluk testi çözdüğünde sistem kendisi kapatır."].filter((s): s is string => Boolean(s)),
     };
   } else {
     icerik = {
@@ -157,7 +193,7 @@ async function haftalikPosta(
             : "Bu haftanın planı henüz oluşmadı. Bir check-up çözdüğünde en zayıf iki konun için plan kurulur.",
       ],
       eylem: { etiket: "Check-up seç", url: `${appUrl()}/paketler` },
-      sonMetin: [geriSayim].filter((s): s is string => Boolean(s)),
+      sonMetin: [kocSatiri, calismaSatiri, geriSayim].filter((s): s is string => Boolean(s)),
     };
   }
 

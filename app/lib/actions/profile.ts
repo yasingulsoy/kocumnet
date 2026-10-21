@@ -9,6 +9,7 @@ import { createSession, currentSessionHash, destroySession, requireUser } from "
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { sendPasswordChangedMail } from "@/lib/mailer";
 import { sinirAsildi } from "@/lib/rate-limit";
+import { GUNLUK_HEDEF_SECENEKLERI } from "@/lib/seri";
 
 export interface ProfileState {
   ok?: string;
@@ -46,6 +47,27 @@ export async function updateProfileAction(
   // Kenar çubuğundaki ad da güncellensin.
   revalidatePath("/", "layout");
   return { ok: "Bilgilerin kaydedildi." };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Günlük soru hedefi (seri kartı)
+// ─────────────────────────────────────────────────────────────
+
+const gunlukHedefSemasi = z.coerce
+  .number()
+  .int()
+  .refine((n) => (GUNLUK_HEDEF_SECENEKLERI as readonly number[]).includes(n));
+
+/** Günde kaç soru (0 = hedef yok). Ana sayfadaki seri kartı buna bakar (lib/seri.ts). */
+export async function gunlukHedefAction(_prev: ProfileState, formData: FormData): Promise<ProfileState> {
+  const user = await requireUser();
+  const parsed = gunlukHedefSemasi.safeParse(formData.get("dailyQuestionGoal"));
+  if (!parsed.success) return { error: "Listeden bir hedef seç." };
+
+  await prisma.user.update({ where: { id: user.id }, data: { dailyQuestionGoal: parsed.data } });
+  return {
+    ok: parsed.data === 0 ? "Günlük hedef kapatıldı; seri sayılmaya devam ediyor." : `Günlük hedefin ${parsed.data} soru.`,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────

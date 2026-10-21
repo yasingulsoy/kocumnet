@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { NotebookText, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import {
   createObjectiveAction,
   deleteObjectiveAction,
+  saveObjectiveSummaryAction,
   updateObjectiveAction,
   type ObjectiveFormState,
 } from "@/lib/checkup/actions/objectives";
+import { OZET_KARTI_SINIRI } from "@/lib/checkup/content-limits";
 import { EXAM_LABEL, EXAM_SCOPES, QUESTION_STATUS_LABEL, QUESTION_STATUSES } from "@/lib/checkup/format";
+import { damgaAdi } from "@/lib/checkup/question-note";
+import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import { cx } from "@/components/tailadmin/cx";
 import { Checkbox } from "@/components/tailadmin/form/Checkbox";
 import { Field, FieldHint } from "@/components/tailadmin/form/Field";
@@ -18,8 +22,10 @@ import { Select } from "@/components/tailadmin/form/Select";
 import { labelClass } from "@/components/tailadmin/form/styles";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Button } from "@/components/tailadmin/ui/Button";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { ContentPreview } from "./ContentPreview";
 import { useOnay } from "./Onay";
-import { MONO } from "./ui";
+import { CODE, MONO } from "./ui";
 
 /*
  * Formlar `<form action>` ile DEĞİL, onSubmit'te action'ı elle çağırarak
@@ -46,6 +52,12 @@ export interface ObjectiveRow {
   /** Yayındaki seviye-1 soru sayısı. 2'nin altı: seviye 1'de bu kazanım ölçülemez. */
   l1Count: number;
   questionCount: number;
+  /** Özet kartının yazımı (Objective.summary); yoksa boş. */
+  summaryMarkup: string;
+  /** Kartı en son kim yazdı ("e-posta (#id)"). */
+  summaryStaff: string | null;
+  /** Kart yazım biçiminin temsil edemediği blok içeriyor (elle girilmiş tablo): düzenleme kapalı. */
+  summaryLocked: boolean;
 }
 
 const DURUM_SECENEKLERI = QUESTION_STATUSES.map((s) => ({ value: s, label: QUESTION_STATUS_LABEL[s] }));
@@ -255,5 +267,160 @@ export function ObjectiveRowEditor({ row, canEdit }: { row: ObjectiveRow; canEdi
         </div>
       </div>
     </form>
+  );
+}
+
+/**
+ * Kazanım özet kartı: öğrenci uygulamasında, yanlış yapılan kazanımın altında
+ * (sonuç ekranı, defter) çıkan kısa kart. Yazım biçimi soru formuyla aynı
+ * (`$…$`, `$$…$$`, `- ` öncül); adım ayırıcı yok, OZET_KARTI_SINIRI karakter.
+ * Görüntüleyici kartı okur, yazamaz (sunucu da reddeder).
+ */
+export function ObjectiveSummaryEditor({ row, canEdit }: { row: ObjectiveRow; canEdit: boolean }) {
+  const [acik, setAcik] = useState(false);
+  const [metin, setMetin] = useState(row.summaryMarkup);
+  const [hata, setHata] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const onayla = useOnay();
+
+  const temiz = metin.trim();
+  const fazla = temiz.length > OZET_KARTI_SINIRI;
+  const ayirici = useMemo(() => markupToContent(metin).blocks.some((b) => b.type === "step_break"), [metin]);
+  const degisti = temiz !== row.summaryMarkup.trim();
+  const yazilabilir = canEdit && !row.summaryLocked;
+
+  if (!acik) {
+    if (!row.summaryMarkup && !canEdit) return null;
+    return (
+      <Button
+        variant="ghost"
+        size="xs"
+        startIcon={<NotebookText />}
+        onClick={() => {
+          setMetin(row.summaryMarkup);
+          setHata(null);
+          setAcik(true);
+        }}
+        aria-label={row.code + " özet kartı"}
+      >
+        {row.summaryMarkup ? "Özet kartı" : "Özet ekle"}
+      </Button>
+    );
+  }
+
+  const kaydet = (yeni: string) =>
+    start(async () => {
+      const r = await saveObjectiveSummaryAction(row.id, yeni);
+      if (!r.ok) {
+        setHata(r.error);
+        return;
+      }
+      toast.success(row.code + (r.silindi ? ": özet kartı kaldırıldı." : ": özet kartı kaydedildi."));
+      setAcik(false);
+    });
+
+  return (
+    <div
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setAcik(false);
+      }}
+      className="mt-2 w-full space-y-3 rounded-xl border border-brand-100 bg-brand-25 p-3"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-theme-sm font-semibold text-gray-800">
+          Özet kartı · <code className={CODE}>{row.code}</code>
+        </p>
+        {row.summaryStaff ? (
+          <span className="text-theme-xs text-gray-500" title={row.summaryStaff}>
+            son yazan {damgaAdi(row.summaryStaff)}
+          </span>
+        ) : null}
+      </div>
+
+      {row.summaryLocked ? (
+        <Alert variant="warning" compact>
+          Kart yazım biçiminin temsil edemediği bir blok (tablo) içeriyor; burada kaydetmek onu silerdi, düzenleme kapalı.
+        </Alert>
+      ) : null}
+      {hata ? (
+        <Alert variant="error" compact>
+          {hata}
+        </Alert>
+      ) : null}
+
+      {yazilabilir ? (
+        <Field
+          label="Özet"
+          error={
+            fazla
+              ? `Kart ${OZET_KARTI_SINIRI} karakteri aşıyor (${temiz.length}).`
+              : ayirici
+                ? "Özet kartında tek başına --- satırı olamaz: kart tek parça açılır."
+                : undefined
+          }
+          hint={
+            <>
+              <span className="tabular">
+                {temiz.length}/{OZET_KARTI_SINIRI}
+              </span>{" "}
+              · 3-5 satır: kural, formül, bir örnek. Formül <code className={CODE}>$…$</code>, öncül listesi{" "}
+              <code className={CODE}>- </code>. Boş bırakıp kaydedersen kart kalkar.
+            </>
+          }
+        >
+          <TextArea
+            rows={5}
+            value={metin}
+            onChange={(e) => setMetin(e.target.value)}
+            className={cx(MONO, "leading-relaxed")}
+            // Özet ekle'ye basınca doğrudan yazmaya başlanabilsin.
+            autoFocus
+            placeholder={"3 ile bölünebilme: rakamlar toplamı 3'ün katıysa sayı 3'e bölünür.\n\n$$123 \to 1+2+3 = 6$$"}
+          />
+        </Field>
+      ) : null}
+
+      <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <p className="mb-2 text-theme-xs font-semibold tracking-wide text-gray-500 uppercase">Öğrencinin göreceği kart</p>
+        <ContentPreview markup={metin} placeholder="Özet kartı yok." />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {yazilabilir ? (
+          <>
+            <Button
+              size="xs"
+              startIcon={<Save />}
+              loading={pending}
+              disabled={!degisti || fazla || ayirici}
+              onClick={() => kaydet(metin)}
+            >
+              Kaydet
+            </Button>
+            {row.summaryMarkup ? (
+              <Button
+                variant="danger-outline"
+                size="xs"
+                disabled={pending}
+                onClick={async () => {
+                  const evet = await onayla({
+                    title: row.code + " özet kartı kaldırılsın mı?",
+                    description: "Öğrenci bu kazanımın altında özet kartı görmez.",
+                    confirmLabel: "Kaldır",
+                    tone: "danger",
+                  });
+                  if (evet) kaydet("");
+                }}
+              >
+                Kartı kaldır
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+        <Button variant="ghost" size="xs" onClick={() => setAcik(false)} startIcon={<X />}>
+          Kapat
+        </Button>
+      </div>
+    </div>
   );
 }

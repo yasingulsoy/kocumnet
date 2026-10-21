@@ -2,14 +2,18 @@
  * Panonun "Bugün" kartı: öğrenciye bugün yapacağı TEK işi söyler.
  *
  * Sıra (ilk tutan kazanır):
- *  1. Yarım kalan test (süre işliyor) ya da yarım kalan seviyeli check-up.
- *  2. Yanlış defteri: bugünkü tekrar ya da yarım kalan tekrar. Bugünkü
+ *  1. Yarım kalan test (süre işliyor).
+ *  2. Koçun ödevi: son tarihi 3 gün içinde olan bitmemiş ödev (seçimi
+ *     lib/odev.ts bugunOdevi). Açık testten sonra gelir: süre işleyen test
+ *     yarıda bırakılmaz. Öbür her şeyden önce gelir: son tarihi olan tek iş bu.
+ *  3. Yarım kalan seviyeli check-up.
+ *  4. Yanlış defteri: bugünkü tekrar ya da yarım kalan tekrar. Bugünkü
  *     tekrar bittiyse ya da vadesi gelen maddenin benzeri yoksa atlanır.
- *  3. Haftalık planın sıradaki işi (bitmemiş ilk iş).
- *  4. Önerilen test (katalogdan).
+ *  5. Haftalık planın sıradaki işi (bitmemiş ilk iş).
+ *  6. Önerilen test (katalogdan).
  *
  * Saf modül: veriyi pano zaten yüklüyor, burada yalnızca karar var. Kural
- * testleri `npm run smoke`'ta.
+ * testleri `npm run smoke`'ta (ödev sırası scripts/odev-test.mts'te).
  */
 
 export interface BugunTekrar {
@@ -19,8 +23,9 @@ export interface BugunTekrar {
   hazir: number;
 }
 
-export type BugunIsi<T, S, P, O> =
+export type BugunIsi<T, S, P, O, D = never> =
   | { tur: "TEST"; test: T }
+  | { tur: "ODEV"; odev: D }
   | { tur: "SEVIYELI"; kosu: S }
   | { tur: "TEKRAR_DEVAM"; oturum: { id: string; kalan: number; toplam: number } }
   | { tur: "TEKRAR"; soru: number }
@@ -28,17 +33,20 @@ export type BugunIsi<T, S, P, O> =
   | { tur: "ONERI"; paket: O }
   | { tur: "YOK" };
 
-export function bugunkuIs<T, S, P extends { done: boolean }, O>(g: {
+export function bugunkuIs<T, S, P extends { done: boolean }, O, D = never>(g: {
   /** Süresi dolmamış, alıştırma olmayan açık oturum. */
   acikTest: T | null;
+  /** Son tarihi yakın, bitmemiş ödev (lib/odev.ts bugunOdevi seçer). */
+  odev?: D | null;
   /** Yarım kalan seviyeli check-up (aşaması açık değilse; açıksa acikTest). */
   seviyeli: S | null;
   tekrar: BugunTekrar;
   /** Bu haftanın planındaki işler, plandaki sırayla. */
   planIsleri: readonly P[] | null;
   oneri: O | null;
-}): BugunIsi<T, S, P, O> {
+}): BugunIsi<T, S, P, O, D> {
   if (g.acikTest) return { tur: "TEST", test: g.acikTest };
+  if (g.odev) return { tur: "ODEV", odev: g.odev };
   if (g.seviyeli) return { tur: "SEVIYELI", kosu: g.seviyeli };
   if (g.tekrar.acik) return { tur: "TEKRAR_DEVAM", oturum: g.tekrar.acik };
   if (g.tekrar.hazir > 0) return { tur: "TEKRAR", soru: g.tekrar.hazir };

@@ -36,6 +36,14 @@ export interface ExamInfo {
   audience: string;
   /** Sınavın matematik bölümündeki soru sayısı. */
   mathQuestionCount: number;
+  /**
+   * Deneme sınavının önerilen süresi (dakika). Panelde yeni deneme açılırken
+   * varsayılan olarak gelir, paket başına değiştirilebilir. Matematik ayrı
+   * oturum olmadığı için sınavın resmî süresi soru sayısına oranlandı (TYT
+   * 165 dk/120 soru → 40 soru 55 dk; LGS sayısal 80/40; AYT 180/160; KPSS
+   * 130/120; DGS ve ALES 150/100). Kesin süre hocaya soruldu (HOCAYA §12).
+   */
+  mockDurationMinutes: number;
   /** Yanlışın doğruyu götürme oranı. 0 = götürmez. */
   penaltyRatio: number;
   /** Boş bırakma konusunda öğrenciye ne söylemeli. */
@@ -86,6 +94,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "LGS — Liselere Geçiş Sınavı",
     audience: "8. sınıf",
     mathQuestionCount: 20,
+    mockDurationMinutes: 40,
     // LGS'de 3 yanlış 1 doğruyu götürür.
     penaltyRatio: 1 / 3,
     blankAdvice: "Hiçbir fikrin yoksa boş bırak — 3 yanlış 1 doğruyu götürüyor.",
@@ -99,6 +108,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "TYT — Temel Yeterlilik Testi",
     audience: "YKS adayı",
     mathQuestionCount: 40,
+    mockDurationMinutes: 55,
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 25,
@@ -111,6 +121,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "AYT — Alan Yeterlilik Testi (Matematik)",
     audience: "Sayısal / Eşit ağırlık",
     mathQuestionCount: 40,
+    mockDurationMinutes: 45,
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 20,
@@ -123,6 +134,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "KPSS Lisans — Genel Yetenek (Matematik)",
     audience: "Üniversite mezunu / son sınıf",
     mathQuestionCount: 30,
+    mockDurationMinutes: 35,
     /*
      * ⚠️ DOĞRULANACAK (Serhat Hoca): ÖSYM'nin klasik "dörtte bir" kuralı mı
      * yürürlükte, yoksa yanlışlar dikkate alınmıyor mu? İkisi arasında
@@ -141,6 +153,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "KPSS Ön Lisans — Genel Yetenek (Matematik)",
     audience: "Ön lisans mezunu",
     mathQuestionCount: 30,
+    mockDurationMinutes: 35,
     /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
@@ -154,6 +167,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "DGS — Dikey Geçiş Sınavı (Sayısal)",
     audience: "Ön lisans mezunu / son sınıf",
     mathQuestionCount: 60,
+    mockDurationMinutes: 90,
     /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
@@ -167,6 +181,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     name: "ALES — Sayısal Bölüm",
     audience: "Lisans mezunu",
     mathQuestionCount: 50,
+    mockDurationMinutes: 75,
     /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",

@@ -93,6 +93,8 @@ export const PACKAGE_KIND_LABEL: Record<string, string> = {
   INTRO: "Tanışma",
   RETEST: "Konu tekrar testi",
   LEVEL: "Seviyeli",
+  MOCK: "Deneme",
+  PRACTICE: "Alıştırma",
 };
 
 /** Sunucu UTC'de çalışsa da tarihler Türkiye saatiyle gösterilir. */

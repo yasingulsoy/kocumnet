@@ -209,6 +209,11 @@ function Block({ block, compact, buyutulebilir }: { block: ContentBlock; compact
 
     case "spacer":
       return <div className="h-3" aria-hidden />;
+
+    // Çözümü adım adım açan bileşen adımları önceden böler; buraya gelen
+    // ayırıcı (yazdırma, tek parça gösterim) ince bir çizgi olur.
+    case "step_break":
+      return <hr className="my-3 border-dashed border-gray-200" aria-hidden />;
   }
 }
 

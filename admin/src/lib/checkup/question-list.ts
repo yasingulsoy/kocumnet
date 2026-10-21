@@ -13,9 +13,10 @@
 /**
  * Listenin anladığı süzgeçler. Başka hiçbir şey taşınmaz (açık yönlendirme yok).
  * `parti`: toplu içe aktarma kimliği (İçe aktarma geçmişi → "Soruları aç").
- * `not`: "acik" — çözülmemiş inceleme notu olanlar.
+ * `not`: "acik" — çözülmemiş inceleme notu ya da öğrenci bildirimi olanlar.
+ * `bildirim`: "acik" — çözülmemiş öğrenci bildirimi olanlar. `icerik`: ipucu, video, adımlı çözüm.
  */
-const LISTE_ANAHTARLARI = ["ara", "konu", "durum", "eksik", "kazanim", "parti", "not", "sayfa"] as const;
+const LISTE_ANAHTARLARI = ["ara", "konu", "durum", "eksik", "icerik", "kazanim", "parti", "not", "bildirim", "sayfa"] as const;
 
 /** Ham sorgu dizesinden yalnızca liste süzgeçlerini süzer. */
 export function listeSorgusu(raw: string | null | undefined): string {

@@ -46,6 +46,24 @@ export const ASGARI_ARA_SAAT = 24;
  */
 export const GUNLUK_ALISTIRMA_SORU = 30;
 
+/**
+ * KOÇ ÖDEVİ SINIR KURALI — konu ödevinin bir oturumu kaç soru getirir.
+ *
+ * Ödev oturumları günlük sınıra SAYILIR (ödev yapan öğrencinin o günkü
+ * serbest alıştırma hakkı azalır), ama sınır ödevi ENGELLEMEZ: ödevin
+ * kalan sorusu bitene kadar oturum açılır. Neden: ödevi koç verdi ve kaç
+ * soru olacağına o karar verdi; günlük sınır öğrencinin kendi başına havuzu
+ * boşaltmasına karşı bir fren, koçun kararını geri çevirmek için değil.
+ * Muafiyet ödevle sınırlı (panelde en fazla lib/odev.ts ODEV_SORU_UST), yani
+ * fren delinmiyor.
+ *
+ * Oturum yine en fazla KONU_CALISMA_SORU soru: hak varsa normal konu
+ * alıştırması kadar, hak bittiyse ödevin kalanı kadar.
+ */
+export function odevAlistirmaAdedi(odevKalan: number, gunlukKalan: number): number {
+  return Math.min(KONU_CALISMA_SORU, Math.max(0, odevKalan, gunlukKalan));
+}
+
 // ─────────────────────────────────────────────────────────────
 // Yanlış defteri (aralıklı tekrar)
 // ─────────────────────────────────────────────────────────────
@@ -62,6 +80,16 @@ export const TEKRAR_ARALIKLARI_GUN = [1, 3, 7] as const;
 
 /** Bugünkü tekrarda en fazla kaç soru (Türkiye saatiyle gün başına). */
 export const GUNLUK_TEKRAR_SORU = 10;
+
+/**
+ * İpucuyla gelen doğru "Bugünkü tekrar"da TAM DOĞRU SAYILMAZ: madde
+ * ilerlemez (aşaması aynı kalır), bu kadar gün sonra yeniden gelir.
+ * Başa da dönmez: soruyu ipucuyla çözen öğrenci yanlış yapmış değil, ama
+ * aralığı açmak için kendi başına çözmesini görmemiz gerekiyor.
+ *
+ * ⚠️ Hoca kararı bekliyor (1 gün, aşama korunur).
+ */
+export const IPUCLU_DOGRU_ARA_GUN = 1;
 
 const GUN_MS = 86_400_000;
 
@@ -118,9 +146,18 @@ export function yanlisKarari(
   return "SIFIRLA";
 }
 
-/** Tekrar cevabından sonra madde: doğruysa bir sonraki aralık ya da çıkış, değilse başa. */
-export function tekrarSonrasi(stage: number, dogru: boolean, simdi: Date): DefterDurumu & { cozuldu: boolean } {
+/**
+ * Tekrar cevabından sonra madde: doğruysa bir sonraki aralık ya da çıkış,
+ * değilse başa. İpucuyla doğru: aşama aynı, IPUCLU_DOGRU_ARA_GUN sonra yine.
+ */
+export function tekrarSonrasi(
+  stage: number,
+  dogru: boolean,
+  simdi: Date,
+  ipucuyla = false
+): DefterDurumu & { cozuldu: boolean } {
   if (!dogru) return { ...yanlisSonrasi(simdi), cozuldu: false };
+  if (ipucuyla) return { stage, dueAt: vade(simdi, IPUCLU_DOGRU_ARA_GUN), resolvedAt: null, cozuldu: false };
   const sonraki = stage + 1;
   if (sonraki < TEKRAR_ARALIKLARI_GUN.length) {
     return { stage: sonraki, dueAt: vade(simdi, TEKRAR_ARALIKLARI_GUN[sonraki]), resolvedAt: null, cozuldu: false };

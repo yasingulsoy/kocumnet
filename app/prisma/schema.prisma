@@ -130,6 +130,7 @@ model Topic {
   retestSessions CheckupSession[] @relation("RetestTopic")
   planItems      PlanItem[]
   notebookItems  NotebookItem[]
+  assignments    Assignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -160,6 +161,11 @@ enum PackageKind {
   /// Uygulama ilk kullanımda kendisi açar (lib/practice.ts); katalogda
   /// görünmez, panelden düzenlenmez.
   PRACTICE
+  /// Deneme sınavı: gerçek sınavın soru sayısı, süresi ve yanlış götürme
+  /// kuralıyla tam prova. Sorular pakette SABİT (PackageQuestion): herkes aynı
+  /// soruları aynı sırayla çözer. Yüzdelik dilim ancak böyle anlamlı; rastgele
+  /// seçilen sorularla iki öğrencinin neti karşılaştırılamaz.
+  MOCK
 }
 
 /// Check-up paketi = kapsamı ve soru dağılımı tanımlı bir test.
@@ -193,11 +199,32 @@ model Package {
   topics       PackageTopic[]
   sessions     CheckupSession[]
   entitlements Entitlement[]
+  /// Sabit soru listesi (yalnızca MOCK). Boşsa sorular konulardan seçilir.
+  questions    PackageQuestion[]
+  assignments  Assignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status, sortOrder])
+}
+
+/// Denemenin sabit soru listesi; sortOrder kitapçıktaki sıra.
+///
+/// sortOrder BİLEREK unique değil: panelde iki sorunun yeri değiştirilirken
+/// geçici bir çakışma olur ve tek UPDATE'le yapılamaz. Oturum başlarken sıra
+/// (sortOrder, id) ile sabitlenir, SessionItem.sortOrder zaten unique.
+model PackageQuestion {
+  id         String   @id @default(cuid())
+  packageId  String
+  package    Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  sortOrder  Int
+
+  @@unique([packageId, questionId])
+  @@index([packageId, sortOrder])
+  @@index([questionId])
 }
 
 /// Pakette hangi konudan kaç soru gelecek.
@@ -239,8 +266,18 @@ model Question {
   /// iki kez görür. Sessiz çift kayıt yerine içe aktarmanın patlaması iyidir.
   fingerprint String @unique
 
-  /// Adım adım çözüm (blok dizisi). Faz 2'de gösterilecek, şimdiden saklanır.
+  /// Adım adım çözüm (blok dizisi). `step_break` blokları adımları ayırır
+  /// (yazım biçiminde tek başına `---` satırı); ayırıcı yoksa tek adım.
   solution Json?
+
+  /// Kademeli ipuçları: en fazla 3 blok dizisi, [{ version, blocks }]
+  /// (lib/question-content.ts hintsSchema). YALNIZCA alıştırmada ve öğrenci
+  /// isteyince tek tek gider; süreli sınavın verisine hiç girmez.
+  hints Json?
+
+  /// Video çözüm bağlantısı (YouTube ya da Vimeo). Kaydederken
+  /// parseVideoUrl ile denetlenir; öğrenciye gömülü oynatıcıyla gösterilir.
+  videoUrl String?
 
   difficulty        Int @default(3) // 1 kolay … 5 zor
   targetTimeSeconds Int @default(75)
@@ -274,12 +311,14 @@ model Question {
   shownCount   Int @default(0)
   correctCount Int @default(0)
 
-  choices       Choice[]
-  items         SessionItem[]
-  exposures     QuestionExposure[]
-  notebookItems NotebookItem[]
-  /// Panelde soru üstüne inceleme notları (QuestionNote).
-  notes         QuestionNote[]
+  choices        Choice[]
+  items          SessionItem[]
+  exposures      QuestionExposure[]
+  notebookItems  NotebookItem[]
+  /// Panelde soru üstüne inceleme notları ve öğrenci bildirimleri (QuestionNote).
+  notes          QuestionNote[]
+  packageLinks   PackageQuestion[]
+  coachQuestions CoachQuestion[]
 
   /// Eski: yönetim bu uygulamanın içindeyken kullanılıyordu. Yeni kayıtlar
   /// aşağıdaki personel damgalarını kullanır.
@@ -330,17 +369,50 @@ model Choice {
   @@index([questionId, sortOrder])
 }
 
+/// Not kimden geldi.
+enum NoteKind {
+  /// Personelin inceleme notu.
+  STAFF
+  /// Öğrencinin "Bu soruda hata var" bildirimi.
+  STUDENT_REPORT
+}
+
+/// Öğrenci bildiriminin sebebi.
+enum ReportReason {
+  /// "Doğru cevap yanlış işaretlenmiş."
+  YANLIS_ANAHTAR
+  COZUM_HATALI
+  YAZIM_HATASI
+  GORSEL_SORUNU
+  /// Soru metni anlaşılmıyor ya da eksik.
+  SORU_ANLASILMIYOR
+  DIGER
+}
+
 /// Panelde bir soru üstüne inceleme notu ("anahtarı kontrol et", madde
-/// analizi bulgusu). Yalnızca personel görür; öğrenciye hiçbir yoldan gitmez.
+/// analizi bulgusu) ya da öğrencinin hata bildirimi. Notlar öğrenciye hiçbir
+/// yoldan gitmez; bildirimi yapan öğrenci yalnızca kendi bildiriminin
+/// durumunu görebilir.
 /// Personel başka veritabanında: yazan ve çözen "e-posta (#id)" damgası.
 model QuestionNote {
   id         String   @id @default(cuid())
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  authorStaff String
-  /// Düz metin; en fazla ~2000 karakter (panelde denetlenir).
+  kind NoteKind @default(STAFF)
+
+  /// Personel notunda dolu, öğrenci bildiriminde boş.
+  authorStaff String?
+  /// Düz metin; personel notunda en fazla ~2000, bildirimde ~500 karakter.
+  /// Bildirimde boş olabilir (sebep yeter).
   body        String
+
+  /// Öğrenci bildirimi: kim, hangi sebeple, hangi oturumdan. Öğrencinin kim
+  /// olduğunu panelde yalnızca öğrenci verisi yetkisi (MANAGE) olan görür.
+  reportedById String?
+  reportedBy   User?         @relation("QuestionReports", fields: [reportedById], references: [id], onDelete: SetNull)
+  reason       ReportReason?
+  sessionId    String?
 
   createdAt       DateTime  @default(now())
   /// Çözüldü: boşsa not açık. Yeniden açılınca ikisi de boşalır.
@@ -349,6 +421,10 @@ model QuestionNote {
 
   /// Soru ekranındaki liste ve "açık notu olanlar" süzgeci.
   @@index([questionId, resolvedAt])
+  /// Paneldeki "açık öğrenci bildirimleri" listesi.
+  @@index([kind, resolvedAt, createdAt])
+  /// Bildirim sınırı: öğrencinin son 24 saatteki bildirimleri.
+  @@index([reportedById, createdAt])
 }
 
 /// Geometri şekilleri ve grafikler. LaTeX ile çizilmeyen her şey.
@@ -431,12 +507,15 @@ model User {
 
   /// Hedef net (o sınavın matematik soru sayısına göre). Koçun ilk sorduğu
   /// üç şeyden biri: hangi sınav, ne zaman, kaç net.
-  targetNet      Decimal?  @db.Decimal(5, 2)
-  targetExamYear Int?
+  targetNet         Decimal?  @db.Decimal(5, 2)
+  targetExamYear    Int?
   /// Haftada kaç check-up hedefliyor — plan bunun üstüne kuruluyor.
-  weeklyTestGoal Int       @default(1)
+  weeklyTestGoal    Int       @default(1)
+  /// Günde kaç soru hedefliyor (her tür oturumda cevaplanan soru). Seri ve
+  /// günlük hedef kartı bunu kullanıyor (lib/seri.ts). 0 = hedef yok.
+  dailyQuestionGoal Int       @default(10)
   /// Tanışma adımları tamamlandı mı. null = hiç sormadık (sorup geçmekten farklı).
-  onboardedAt    DateTime?
+  onboardedAt       DateTime?
 
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
@@ -467,6 +546,10 @@ model User {
   levelRuns     LevelRun[]
   notebookItems NotebookItem[]
   parentLinks   ParentLink[]
+
+  groupMemberships GroupMember[]
+  coachQuestions   CoachQuestion[]
+  questionReports  QuestionNote[]  @relation("QuestionReports")
 
   @@index([role])
 }
@@ -612,6 +695,16 @@ enum QuestionLevel {
   L3_ANALIZ
 }
 
+/// Testin nasıl çözüldüğü.
+enum SessionMode {
+  /// Ekranda, sayaçla.
+  ONLINE
+  /// Kâğıtta: kitapçık yazdırılır, cevaplar sonra optik forma toplu işlenir.
+  /// Soru başına süre ve çözüm sırası YOK; süre analizi ve "yavaş" uyarısı
+  /// bu oturumlarda gösterilmez. expiresAt = cevapları işleme son anı.
+  PAPER
+}
+
 /// Bir aşama ana tur mu, telafi turu mu.
 enum StageKind {
   MAIN
@@ -635,6 +728,7 @@ model CheckupSession {
   package   Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
 
   kind SessionKind @default(PACKAGE)
+  mode SessionMode @default(ONLINE)
 
   /// TOPIC_RETEST ise hangi konu ölçülüyor; alıştırmada çalışılan konu.
   focusTopicId String?
@@ -704,6 +798,11 @@ model SessionItem {
   /// asıl soru). Sınav oturumlarında boş.
   sourceQuestionId String?
 
+  /// Alıştırmada kaç ipucu açıldı. Cevaptan ÖNCE açıldığı için Answer'da
+  /// değil burada; sunucu sayar, sayfayı yenilemek sıfırlamaz. İpucuyla gelen
+  /// doğru, yanlış defterinde tam doğru sayılmaz (lib/review.ts).
+  hintsUsed Int @default(0)
+
   answer Answer?
 
   @@unique([sessionId, questionId])
@@ -727,7 +826,10 @@ model Answer {
   /// Kaç kez şık değiştirdi — kararsızlık sinyali.
   changedCount Int @default(0)
 
-  answeredAt DateTime @default(now())
+  /// İlk işaretleme anı. Çözüm sırası ve turlama analizi bunu kullanır;
+  /// answeredAt her değişiklikte ilerleyebilir. Eski satırlarda boş.
+  firstAnsweredAt DateTime?
+  answeredAt      DateTime  @default(now())
 
   @@index([choiceId])
 }
@@ -781,6 +883,11 @@ model Objective {
   /// İçerik ekibinin kullandığı kalıcı kod — soru dosyalarında bu geçiyor.
   code String @unique
   name String
+
+  /// Kazanım özet kartı: 3-5 satırlık özet ve formüller (blok dizisi). Sonuç
+  /// ekranında ve defterde, öğrencinin yanlış yaptığı kazanımın altında çıkar.
+  summary               Json?
+  summaryUpdatedByStaff String?
 
   /// Hangi sınavlarda ölçülüyor. Boş = konusunun geçtiği her sınavda.
   examScopes ExamScope[] @default([])
@@ -984,4 +1091,122 @@ model NotebookItem {
   @@index([questionId])
   @@index([topicId])
   @@index([objectiveId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Koçluk: grup, ödev, koça soru
+// ─────────────────────────────────────────────────────────────
+
+/// Koçun öğrenci grubu ("TYT Pilot"). Grubu panelde personel kurar ve
+/// öğrenciyi personel ekler; öğrenci kendini gruba ekleyemez.
+/// Personel başka veritabanında: kuran "e-posta (#id)" damgası.
+model StudyGroup {
+  id        String     @id @default(cuid())
+  name      String
+  /// Grubun sınavı: ödev seçicisi bu sınavın paket ve konularını önerir.
+  examScope ExamScope?
+  note      String?
+
+  createdByStaff String
+  /// Arşivlenen grup listelerden düşer, ödevleri öğrenciye görünmez.
+  archivedAt     DateTime?
+
+  members     GroupMember[]
+  assignments Assignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([archivedAt])
+}
+
+model GroupMember {
+  id      String     @id @default(cuid())
+  groupId String
+  group   StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  addedByStaff String
+  createdAt    DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+enum AssignmentKind {
+  /// Bir paketi çöz (deneme dahil).
+  PACKAGE
+  /// Bir konudan alıştırma yap (en az questionCount soru).
+  TOPIC_PRACTICE
+}
+
+/// Gruba verilen ödev.
+///
+/// Tamamlanma SAKLANMAZ, TÜRETİLİR (lib/odev.ts): ödev açıldıktan sonra o
+/// paketi bitiren ya da o konuda yeterli alıştırma yapan öğrenci tamamlamış
+/// sayılır. Öğrencinin "yaptım" işareti yok — plandaki RETEST ile aynı ilke.
+model Assignment {
+  id      String     @id @default(cuid())
+  groupId String
+  group   StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  kind          AssignmentKind
+  packageId     String?
+  package       Package?       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  topicId       String?
+  topic         Topic?         @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  /// TOPIC_PRACTICE: en az kaç soru cevaplanmalı.
+  questionCount Int?
+
+  title String
+  /// Koçun kısa açıklaması; öğrenci görür.
+  note  String?
+
+  startsAt DateTime @default(now())
+  dueAt    DateTime
+
+  createdByStaff   String
+  /// İptal: öğrenciden kalkar, panelde "iptal" olarak durur.
+  cancelledAt      DateTime?
+  cancelledByStaff String?
+
+  createdAt DateTime @default(now())
+
+  @@index([groupId, dueAt])
+  @@index([packageId])
+  @@index([topicId])
+}
+
+/// "Koça sor": öğrencinin bir soru hakkında (ya da genel) koça yazdığı not ve
+/// koçun TEK cevabı. Yazışma değil soru-cevap: takip sorusu yeni satır.
+model CoachQuestion {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Hangi soru hakkında; boş = genel soru.
+  questionId String?
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  /// Nereden soruldu (sonuç ekranı, alıştırma): koç bağlamı görsün.
+  sessionId  String?
+
+  /// Düz metin, en fazla ~1000 karakter.
+  body      String
+  createdAt DateTime @default(now())
+
+  answerBody      String?
+  answeredAt      DateTime?
+  answeredByStaff String?
+  /// Öğrenci cevabı gördü: "yeni cevap" rozeti bununla söner.
+  readAt          DateTime?
+
+  /// Koç cevapsız kapattı (yinelenen, konu dışı).
+  closedAt      DateTime?
+  closedByStaff String?
+
+  @@index([userId, createdAt])
+  /// Panelin gelen kutusu: cevapsız ve açık olanlar, eskiden yeniye.
+  @@index([answeredAt, closedAt, createdAt])
+  @@index([questionId])
 }

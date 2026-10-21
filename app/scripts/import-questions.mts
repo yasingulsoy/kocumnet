@@ -21,8 +21,9 @@
  *  · Önce dosyanın TAMAMI çözümlenir ve denetlenir, sonra yazılır. Yarım
  *    içe aktarma yok: ya hepsi geçerli olanlar girer, ya hiçbiri.
  *  · Her içe aktarma bir ImportBatch kaydı açar; sorular ona bağlanır.
- *    `--geri-al` o partinin HİÇ ÇÖZÜLMEMİŞ sorularını siler (çözülmüş soru
- *    silinmez: öğrenci cevapları ona bağlı). Parti kaydı kalır; geri alma
+ *    `--geri-al` o partinin HİÇ ÇÖZÜLMEMİŞ ve hiçbir denemenin listesinde
+ *    olmayan sorularını siler (çözülmüş soru silinmez: öğrenci cevapları ona
+ *    bağlı; denemedeki soru denemeyi eksik bırakırdı). Parti kaydı kalır; geri alma
  *    zamanı ve `--personel` damgası ona yazılır (panelin geçmişinde görünür).
  *  · Kazanımlar koda göre bulunur; yoksa `Kazanım Adı` ile oluşturulur.
  *    İlk kullanımda ad zorunlu.
@@ -151,6 +152,9 @@ async function uygula(
               stemText: q.stemText,
               fingerprint: q.fingerprint,
               solution: q.solution ?? undefined,
+              // Boşsa yazılmaz (null kalır): "ipucu yok" ile "boş liste" ayrı durum olmasın.
+              hints: q.hints ?? undefined,
+              videoUrl: q.videoUrl,
               difficulty: q.difficulty,
               targetTimeSeconds: q.targetTimeSeconds,
               status: YAYINLA ? "PUBLISHED" : "DRAFT",
@@ -210,12 +214,16 @@ async function geriAl(batchId: string) {
     return;
   }
 
+  // Denemeye (MOCK paketin sabit listesine) konmuş soru da silinmez: liste ona
+  // bağlı (PackageQuestion → Question, onDelete: Restrict); silmek ya patlar ya
+  // da denemeyi eksik bırakırdı. Önce denemeden çıkarılmalı.
   const sorular = await prisma.question.findMany({
     where: { importBatchId: batchId },
-    select: { id: true, _count: { select: { items: true } } },
+    select: { id: true, _count: { select: { items: true, packageLinks: true } } },
   });
-  const cozulmus = sorular.filter((s) => s._count.items > 0);
-  const silinecek = sorular.filter((s) => s._count.items === 0).map((s) => s.id);
+  const cozulmus = sorular.filter((s) => s._count.items > 0 || s._count.packageLinks > 0);
+  const denemede = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks > 0).length;
+  const silinecek = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks === 0).map((s) => s.id);
 
   if (silinecek.length) {
     await prisma.$transaction([
@@ -269,8 +277,9 @@ async function geriAl(batchId: string) {
     console.log(`Partinin sorusu yoktu, kaydı silindi: ${batch.filename}`);
     return;
   }
+  if (denemede) console.log(`${denemede} soru bir denemenin listesinde olduğu için silinmedi (önce denemeden çıkar).`);
   if (silinecek.length === 0) {
-    console.log(`Silinecek soru yok: ${batch.filename} — ${cozulmus.length} soru öğrencilere sorulduğu için korunuyor (arşivle).`);
+    console.log(`Silinecek soru yok: ${batch.filename} — ${cozulmus.length} soru öğrencilere sorulduğu ya da denemede olduğu için korunuyor (arşivle).`);
     return;
   }
   await prisma.importBatch.update({
@@ -345,7 +354,11 @@ async function main() {
   const tekSoruluKazanimListesi = tekSoruluKazanimlar(l1Sayac, havuzdaL1);
 
   console.log(`\n${basename(yol)}: ${ham.length} soru bulundu`);
-  console.log(`  ✓ ${hazir.length} soru geçerli`);
+  const ipuclu = hazir.filter((q) => q.hints).length;
+  const videolu = hazir.filter((q) => q.videoUrl).length;
+  const adimli = hazir.filter((q) => q.adimSayisi > 1).length;
+  const ekler = [ipuclu && `${ipuclu} ipuçlu`, videolu && `${videolu} videolu`, adimli && `${adimli} adımlı çözümlü`].filter(Boolean);
+  console.log(`  ✓ ${hazir.length} soru geçerli` + (ekler.length ? ` (${ekler.join(", ")})` : ""));
   console.log(`  ✗ ${hatalar.length} soru reddedildi`);
   for (const h of hatalar) console.log(`    satır ${h.satir} · ${h.id}: ${h.sebep}`);
   if (tekSoruluKazanimListesi.length) {

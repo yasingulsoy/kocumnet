@@ -1,14 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
-import { Save } from "lucide-react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Lightbulb, Plus, Save, Trash2 } from "lucide-react";
 import {
   createQuestionAction,
   updateQuestionAction,
+  videoBaglantisiAction,
   type QuestionFormState,
 } from "@/lib/checkup/actions/questions";
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
-import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL } from "@/lib/checkup/format";
+import { markupToContent } from "@/lib/checkup/shared/question-markup";
+import { IPUCU_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
+import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL, QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
 import { listeAdresi } from "@/lib/checkup/question-list";
 import { cx } from "@/components/tailadmin/cx";
 import { Checkbox } from "@/components/tailadmin/form/Checkbox";
@@ -20,8 +23,10 @@ import { labelClass } from "@/components/tailadmin/form/styles";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
 import { ComponentCard } from "@/components/tailadmin/ui/Card";
+import { Badge } from "@/components/tailadmin/ui/Badge";
 import { ContentPreview } from "./ContentPreview";
 import { ImageUploader } from "./ImageUploader";
+import { CozumOnizleme, VideoBaglantisi, cozumAdimlari } from "./SolutionPreview";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 import { CODE, MONO } from "./ui";
 
@@ -61,8 +66,19 @@ export interface QuestionInitial {
   objectiveId: string;
   /** Hedef sınav (Question.examScopes). Boş = konunun her sınavı. */
   examScopes: string[];
+  /** Kademeli ipuçları, yazım biçiminde, açılış sırasıyla. */
+  hints: string[];
+  /** Video çözüm (kayıtlıysa canonicalUrl). */
+  videoUrl: string;
   version: number;
   shownCount: number;
+}
+
+/** Sorunun yer aldığı deneme (MOCK paketin sabit listesi). */
+export interface SorununDenemesi {
+  id: string;
+  name: string;
+  status: string;
 }
 
 const BOS: QuestionInitial = {
@@ -80,6 +96,8 @@ const BOS: QuestionInitial = {
   level: "",
   objectiveId: "",
   examScopes: [],
+  hints: [],
+  videoUrl: "",
   version: 1,
   shownCount: 0,
 };
@@ -95,7 +113,13 @@ export function QuestionForm({
   canEdit,
   returnQuery,
   sonrakiId = null,
+  maxIpucu,
+  denemeler = [],
 }: {
+  /** En fazla ipucu: shared/question-content.ts MAX_HINTS (sayfa geçirir; modül istemciye alınamıyor). */
+  maxIpucu: number;
+  /** Sorunun yer aldığı denemeler: yayından kaldırırken uyarılır. */
+  denemeler?: SorununDenemesi[];
   topics: TopicOption[];
   /** Kazanımlar — konuya göre süzülür. */
   objectives?: ObjectiveOption[];
@@ -129,6 +153,42 @@ export function QuestionForm({
     return c;
   });
   const [correctIndex, setCorrectIndex] = useState(mevcut.correctIndex);
+
+  // İpuçları: anahtar sıralama (yukarı/aşağı) sırasında metin kutusu odağını
+  // ve imleç yerini korusun diye; sıra gönderimde DOM sırası (name="hint").
+  const [ipuclari, setIpuclari] = useState(() => mevcut.hints.map((metin, i) => ({ key: i, metin })));
+  const [ipucuAnahtari, setIpucuAnahtari] = useState(mevcut.hints.length);
+  const [video, setVideo] = useState(mevcut.videoUrl);
+  /** Video alanının canlı denetimi (sunucuda parseVideoUrl). `girdi`: hangi metin için. */
+  const [videoKontrol, setVideoKontrol] = useState<{ girdi: string; url?: string; error?: string } | null>(null);
+
+  useEffect(() => {
+    const girdi = video.trim();
+    // Kayıtlı değer zaten denetlenmiş (canonicalUrl); boş alan denetlenmez.
+    if (!girdi || girdi === mevcut.videoUrl) return;
+    let iptal = false;
+    const t = setTimeout(() => {
+      void videoBaglantisiAction(girdi).then((r) => {
+        if (!iptal) setVideoKontrol(r.ok ? { girdi, url: r.url } : { girdi, error: r.error });
+      });
+    }, 450);
+    return () => {
+      iptal = true;
+      clearTimeout(t);
+    };
+  }, [video, mevcut.videoUrl]);
+
+  const videoGirdi = video.trim();
+  const videoSonucu =
+    videoGirdi && videoGirdi === mevcut.videoUrl
+      ? { url: mevcut.videoUrl, error: undefined }
+      : videoKontrol?.girdi === videoGirdi
+        ? videoKontrol
+        : null;
+
+  // Soru metnindeki adım ayırıcı: sunucu reddediyor, yazar kaydetmeden görsün.
+  const govdedeAyirici = useMemo(() => markupToContent(stem).blocks.some((b) => b.type === "step_break"), [stem]);
+  const adimSayisi = useMemo(() => cozumAdimlari(solution).length, [solution]);
 
   /*
    * React 19, form eylemi bittiğinde formu kendiliğinden SIFIRLIYOR.
@@ -218,6 +278,8 @@ export function QuestionForm({
     objectiveId,
     errorTypes,
     hedefSinavlar,
+    ipuclari.map((h) => h.metin),
+    video,
   ]);
   const [ilkOzet] = useState(ozet);
   const kirli = canEdit && ozet !== ilkOzet;
@@ -246,6 +308,24 @@ export function QuestionForm({
 
   const setChoice = (i: number, value: string) =>
     setChoices((prev) => prev.map((c, j) => (j === i ? value : c)));
+
+  const ipucuEkle = () => {
+    setIpuclari((prev) => (prev.length >= maxIpucu ? prev : [...prev, { key: ipucuAnahtari, metin: "" }]));
+    setIpucuAnahtari((k) => k + 1);
+  };
+  const ipucuYaz = (i: number, metin: string) =>
+    setIpuclari((prev) => prev.map((h, j) => (j === i ? { ...h, metin } : h)));
+  const ipucuTasi = (i: number, yon: -1 | 1) =>
+    setIpuclari((prev) => {
+      const j = i + yon;
+      if (j < 0 || j >= prev.length) return prev;
+      const kopya = [...prev];
+      [kopya[i], kopya[j]] = [kopya[j], kopya[i]];
+      return kopya;
+    });
+
+  // Yayındaki soru bir denemedeyse, yayından kaldırmak denemeyi eksik bırakır.
+  const denemeUyarisi = denemeler.length > 0 && mevcut.status === "PUBLISHED" && status !== "PUBLISHED";
 
   const doluSikSayisi = choices.filter((c) => c.trim()).length;
   const hataSayisi = Object.keys(state.fields ?? {}).length;
@@ -323,6 +403,12 @@ export function QuestionForm({
                 placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
               />
             </Field>
+            {govdedeAyirici && !state.fields?.stem ? (
+              <Alert variant="warning" compact>
+                Soru metninde tek başına <code className={CODE}>---</code> satırı var. Bu, çözümdeki adım ayırıcı; soru
+                metninde kullanılamaz, böyle kaydedilmez.
+              </Alert>
+            ) : null}
 
             <details className="group text-theme-sm text-gray-500">
               <summary className="cursor-pointer font-medium text-gray-700 select-none hover:text-brand-500">
@@ -508,20 +594,154 @@ export function QuestionForm({
               </>
             }
           >
-            <Field label="Adım adım çözüm" error={state.fields?.solution}>
+            <Field
+              label="Adım adım çözüm"
+              error={state.fields?.solution}
+              hint={
+                <>
+                  Adımları tek başına bir <code className={CODE}>---</code> satırıyla ayır; öğrenci çözümü adım adım açar.
+                  {adimSayisi > 1 ? <span className="tabular"> · {adimSayisi} adım</span> : null}
+                </>
+              }
+            >
               <TextArea
                 name="solution"
                 rows={6}
                 value={solution}
                 onChange={(e) => setSolution(e.target.value)}
                 className={cx(MONO, "leading-relaxed")}
-                placeholder={"Pisagor bağıntısından:\n\n$$|AC|^2 = |AB|^2 + |BC|^2$$\n\n$|AC| = 20$ bulunur."}
+                placeholder={"Pisagor bağıntısından:\n\n$$|AC|^2 = |AB|^2 + |BC|^2$$\n\n---\n\n$|AC| = 20$ bulunur."}
               />
             </Field>
             <div className={PREVIEW_BOX}>
               <p className={PREVIEW_LABEL}>Önizleme</p>
-              <ContentPreview markup={solution} placeholder="Çözüm yazılmadı." />
+              <CozumOnizleme markup={solution} />
             </div>
+
+            <Field
+              label="Video çözüm bağlantısı"
+              optional
+              error={state.fields?.videoUrl}
+              hint="YouTube ya da Vimeo. Kaydederken tek biçime çevrilir; başlangıç saniyesi (t=) korunur."
+            >
+              <Input
+                name="videoUrl"
+                // type="url" değil: tarayıcının kendi (İngilizce) uyarısı gönderimi
+                // durdururdu; denetim sunucuda, Türkçe.
+                inputMode="url"
+                value={video}
+                onChange={(e) => setVideo(e.target.value)}
+                maxLength={VIDEO_ADRES_SINIRI}
+                autoComplete="off"
+                placeholder="https://youtu.be/…"
+              />
+            </Field>
+            {videoSonucu?.error && !state.fields?.videoUrl ? (
+              <p className="text-theme-xs text-warning-700" aria-live="polite">
+                {videoSonucu.error}
+              </p>
+            ) : null}
+            {videoSonucu?.url ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <VideoBaglantisi url={videoSonucu.url} />
+                {videoSonucu.url !== videoGirdi ? (
+                  <span className="min-w-0 text-theme-xs break-all text-gray-500">
+                    Kaydedilecek: <span className={MONO}>{videoSonucu.url}</span>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </ComponentCard>
+
+          <ComponentCard
+            title="İpuçları"
+            badge={
+              ipuclari.length ? (
+                <Badge size="sm" color="warning" className="tabular">
+                  {ipuclari.length}/{maxIpucu}
+                </Badge>
+              ) : null
+            }
+            desc="Alıştırmada öğrenci takılınca ipuçlarını tek tek açar; süreli testte görünmez. İlki yön göstersin, sonuncusu çözüme bir adım kalsın."
+            actions={
+              canEdit ? (
+                <Button variant="outline" size="xs" startIcon={<Plus />} onClick={ipucuEkle} disabled={ipuclari.length >= maxIpucu}>
+                  İpucu ekle
+                </Button>
+              ) : null
+            }
+          >
+            {state.fields?.hints ? (
+              <div data-alan-hatasi>
+                <Alert variant="error" compact>
+                  {state.fields.hints}
+                </Alert>
+              </div>
+            ) : null}
+            {ipuclari.length === 0 ? (
+              <p className="text-theme-sm text-gray-500">
+                İpucu yok{canEdit ? ` — en fazla ${maxIpucu} tane ekleyebilirsin. Boş bırakılan kutu kaydedilmez.` : "."}
+              </p>
+            ) : (
+              <ol className="space-y-4">
+                {ipuclari.map((h, i) => (
+                  <li key={h.key} className="rounded-xl border border-gray-200 p-3">
+                    <Field
+                      label={
+                        <span className="inline-flex items-center gap-1.5">
+                          <Lightbulb aria-hidden className="size-4 text-warning-600" />
+                          {i + 1}. ipucu
+                        </span>
+                      }
+                      error={state.fields?.["hint_" + i]}
+                      hint={
+                        <span className={cx("tabular", h.metin.trim().length > IPUCU_SINIRI && "text-error-600")}>
+                          {h.metin.trim().length}/{IPUCU_SINIRI}
+                        </span>
+                      }
+                      labelAction={
+                        canEdit ? (
+                          <span className="flex items-center gap-0.5">
+                            <Button variant="ghost" size="xs" onClick={() => ipucuTasi(i, -1)} disabled={i === 0} aria-label={i + 1 + ". ipucunu yukarı taşı"}>
+                              <ArrowUp aria-hidden />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              onClick={() => ipucuTasi(i, 1)}
+                              disabled={i === ipuclari.length - 1}
+                              aria-label={i + 1 + ". ipucunu aşağı taşı"}
+                            >
+                              <ArrowDown aria-hidden />
+                            </Button>
+                            <Button
+                              variant="danger-outline"
+                              size="xs"
+                              onClick={() => setIpuclari((prev) => prev.filter((_, j) => j !== i))}
+                              aria-label={i + 1 + ". ipucunu kaldır"}
+                            >
+                              <Trash2 aria-hidden />
+                            </Button>
+                          </span>
+                        ) : null
+                      }
+                    >
+                      <TextArea
+                        name="hint"
+                        rows={2}
+                        value={h.metin}
+                        onChange={(e) => ipucuYaz(i, e.target.value)}
+                        className={cx(MONO, "leading-relaxed")}
+                        placeholder={i === 0 ? "Hız ile süre çarpılınca ne bulunur?" : "Bir adım daha: $x = v \\cdot t$"}
+                      />
+                    </Field>
+                    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                      <ContentPreview markup={h.metin} compact placeholder="Boş ipucu kaydedilmez." />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
           </ComponentCard>
         </div>
 
@@ -598,6 +818,13 @@ export function QuestionForm({
                   <option value="ARCHIVED">Arşiv</option>
                 </Select>
               </Field>
+              {denemeUyarisi ? (
+                <Alert variant="warning" compact>
+                  Bu soru {denemeler.length === 1 ? "bir denemede" : denemeler.length + " denemede"} kullanılıyor (
+                  {denemeler.map((d) => d.name).join(", ")}). {QUESTION_STATUS_LABEL[status] ?? status} durumuna alırsan
+                  deneme eksik kalır ve öğrenci başlatamaz; önce denemede yerine başka soru koy.
+                </Alert>
+              ) : null}
 
               <Field
                 label="Seviye"

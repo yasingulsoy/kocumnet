@@ -3,21 +3,25 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CopyPlus } from "lucide-react";
 import { db } from "@/lib/checkup/db";
-import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { trDate } from "@/lib/checkup/format";
+import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
+import { QUESTION_STATUS_LABEL, trDate } from "@/lib/checkup/format";
 import { loadQuestionAnalysis } from "@/lib/checkup/item-analysis";
 import { BULGU_SIRASI } from "@/lib/checkup/item-flags";
 import { bulgularNotu } from "@/lib/checkup/question-note";
 import { soruNotlari } from "@/lib/checkup/question-notes";
+import { soruBildirimleri } from "@/lib/checkup/student-reports";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
 import { komsular, listeSuzgeciSorgudan } from "@/lib/checkup/question-query";
-import { parseQuestionContent } from "@/lib/checkup/shared/question-content";
+import { MAX_HINTS, parseHints, parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { ItemAnalysisCard } from "@/components/checkup/ItemAnalysis";
 import { CopyIdButton } from "@/components/checkup/CopyIdButton";
 import { NotTaslagiSaglayici, SoruNotlari } from "@/components/checkup/QuestionNotes";
 import { QuestionForm } from "@/components/checkup/QuestionForm";
+import { OgrenciBildirimleri } from "@/components/checkup/StudentReports";
+import { QUESTION_STATUS_COLOR } from "@/components/checkup/ui";
+import { Badge } from "@/components/tailadmin/ui/Badge";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { ButtonLink, buttonClass } from "@/components/tailadmin/ui/Button";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
@@ -29,6 +33,8 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
   const gate = await checkStaff(ANY_STAFF);
   if (!gate.ok) return <GateNotice gate={gate} roles={ANY_STAFF} />;
   const yazabilir = CONTENT_ROLES.includes(gate.staff.role);
+  // Bildirenin adı ve denemelerin düzenleme ekranı yalnızca yönetici/müdüre.
+  const kisisel = MANAGE_ROLES.includes(gate.staff.role);
 
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   // Listeden gelindiyse süzgeç ve sayfa: kaydedince oraya dönülür.
@@ -41,7 +47,7 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     { href: listeAdresi(geri), label: "Sorular" },
   ];
 
-  const [question, topics, objectives, notlar] = await Promise.all([
+  const [question, topics, objectives, notlar, bildirimler, denemeBaglari] = await Promise.all([
     db.question.findUnique({
       where: { id },
       select: {
@@ -49,6 +55,8 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
         topicId: true,
         stem: true,
         solution: true,
+        hints: true,
+        videoUrl: true,
         difficulty: true,
         targetTimeSeconds: true,
         status: true,
@@ -82,9 +90,17 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
       select: { id: true, topicId: true, code: true, name: true, status: true },
     }),
     soruNotlari(id),
+    soruBildirimleri(id, kisisel),
+    // Sorunun yer aldığı denemeler (MOCK paketin sabit listesi).
+    db.packageQuestion.findMany({
+      where: { questionId: id, package: { kind: "MOCK" } },
+      orderBy: { package: { name: "asc" } },
+      select: { package: { select: { id: true, name: true, status: true } } },
+    }),
   ]);
 
   if (!question) notFound();
+  const denemeler = denemeBaglari.map((d) => d.package);
 
   const stemContent = parseQuestionContent(question.stem);
 
@@ -99,6 +115,13 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
           içeriyor. Bu formda kaydetmek o bloğu silerdi, bu yüzden düzenleme kapalı.
         </Alert>
         <SoruNotlari questionId={question.id} notlar={notlar} yazabilir={yazabilir} />
+        <OgrenciBildirimleri
+          questionId={question.id}
+          bildirimler={bildirimler}
+          yazabilir={yazabilir}
+          kisisel={kisisel}
+          guncelSurum={question.version}
+        />
       </>
     );
   }
@@ -139,6 +162,8 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     topicId: question.topicId,
     stem: contentToMarkup(stemContent),
     solution: question.solution ? contentToMarkup(parseQuestionContent(question.solution)) : "",
+    hints: parseHints(question.hints).map(contentToMarkup),
+    videoUrl: question.videoUrl ?? "",
     choices: question.choices.map((c) => contentToMarkup(parseQuestionContent(c.content))),
     correctIndex: Math.max(0, question.choices.findIndex((c) => c.isCorrect)),
     errorTypes: question.choices.map((c) => c.errorType),
@@ -225,13 +250,47 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
         </Alert>
       ) : null}
 
+      {denemeler.length > 0 ? (
+        <Alert variant="info" compact className="mb-4" title={"Bu soru " + (denemeler.length === 1 ? "bir denemede" : denemeler.length + " denemede") + " kullanılıyor"}>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {denemeler.map((d) => (
+              <span key={d.id} className="inline-flex items-center gap-1.5">
+                {kisisel ? (
+                  <Link href={"/checkup/paketler/" + d.id} className="font-medium text-gray-800 underline underline-offset-2">
+                    {d.name}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-gray-800">{d.name}</span>
+                )}
+                <Badge size="sm" color={QUESTION_STATUS_COLOR[d.status]}>
+                  {QUESTION_STATUS_LABEL[d.status]}
+                </Badge>
+              </span>
+            ))}
+          </span>
+          <span className="mt-1 block">
+            Denemede herkes aynı soruları çözer: bu soruyu arşivler ya da taslağa çekersen deneme eksik kalır ve öğrenci
+            başlatamaz.
+          </span>
+        </Alert>
+      ) : null}
+
       {/* Not kutusunun metni sağlayıcıda: analiz kartındaki "Not ekle" ona yazar. key: soru değişince taslak sıfırlansın. */}
       <NotTaslagiSaglayici key={question.id} ilkTaslak={ilkTaslak}>
         <ItemAnalysisCard analysis={analysis} version={question.version} notEklenebilir={yazabilir} />
         <SoruNotlari questionId={question.id} notlar={notlar} yazabilir={yazabilir} />
       </NotTaslagiSaglayici>
+      <OgrenciBildirimleri
+        questionId={question.id}
+        bildirimler={bildirimler}
+        yazabilir={yazabilir}
+        kisisel={kisisel}
+        guncelSurum={question.version}
+      />
 
       <QuestionForm
+        maxIpucu={MAX_HINTS}
+        denemeler={denemeler}
         canEdit={yazabilir}
         topics={topics.map((t) => ({
           id: t.id,

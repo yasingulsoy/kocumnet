@@ -63,7 +63,19 @@ const EYLEMLER: { status: string; etiket: string; variant: ButtonVariant; onay?:
   },
 ];
 
-export function BulkProvider({ ids, children }: { ids: string[]; children: ReactNode }) {
+/**
+ * `denemeleri`: yayındaki ve bir denemede olan soruların deneme adları (soru
+ * kimliği → adlar). Yayından kaldıran toplu işlemden önce uyarılır.
+ */
+export function BulkProvider({
+  ids,
+  denemeleri = {},
+  children,
+}: {
+  ids: string[];
+  denemeleri?: Record<string, string[]>;
+  children: ReactNode;
+}) {
   const [ham, setHam] = useState<Set<string>>(() => new Set());
   const [pending, start] = useTransition();
   /** Hangi düğme çalışıyor: dönen halka yalnızca onda. */
@@ -92,7 +104,23 @@ export function BulkProvider({ ids, children }: { ids: string[]; children: React
   const uygula = async (status: string, onay?: (n: number) => ConfirmOptions) => {
     const liste = [...secili];
     if (liste.length === 0) return;
-    if (onay && !(await onayla(onay(liste.length)))) return;
+    // Denemedeki yayında soru yayından kalkarsa deneme eksik kalır: bu uyarı
+    // eylemin kendi onayının yerine geçer (ikisini art arda sormayalım).
+    const denemedeki = status === "PUBLISHED" ? [] : liste.filter((id) => denemeleri[id]?.length);
+    if (denemedeki.length) {
+      const adlar = [...new Set(denemedeki.flatMap((id) => denemeleri[id]))];
+      const evet = await onayla({
+        title: "Seçilenlerden " + denemedeki.length + " soru denemelerde kullanılıyor",
+        description:
+          adlar.join(", ") +
+          ". " +
+          QUESTION_STATUS_LABEL[status] +
+          " durumuna alırsan bu denemeler eksik kalır ve öğrenci başlatamaz.",
+        confirmLabel: "Yine de değiştir",
+        tone: "warning",
+      });
+      if (!evet) return;
+    } else if (onay && !(await onayla(onay(liste.length)))) return;
     setCalisan(status);
     start(async () => {
       const res = await setQuestionsStatusAction(liste, status);

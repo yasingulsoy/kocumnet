@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/checkup/db";
-import { CONTENT_ROLES, staffForAction } from "@/lib/checkup/staff";
+import { Prisma } from "@/lib/checkup/generated/client";
+import { CONTENT_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
+import { OZET_KARTI_SINIRI } from "@/lib/checkup/content-limits";
+import { markupToContent } from "@/lib/checkup/shared/question-markup";
+import { containsStepBreak, safeParseQuestionContent, type QuestionContent } from "@/lib/checkup/shared/question-content";
 // Sınav listesi öğrenci uygulamasından (shared/exams.ts): yeni sınav burada ayrıca eklenmesin.
 import { EXAM_SCOPES } from "@/lib/checkup/format";
 
@@ -121,4 +125,45 @@ export async function deleteObjectiveAction(id: string): Promise<{ ok: boolean; 
   await db.objective.delete({ where: { id } });
   yenile();
   return { ok: true };
+}
+
+/**
+ * Kazanım özet kartı (Objective.summary): yazım biçiminde 3-5 satır özet ve
+ * formül. Öğrenci uygulaması sonuç ekranında ve defterde, yanlış yapılan
+ * kazanımın altında gösteriyor. Boş metin kartı kaldırır (null).
+ *
+ * Kurallar: OZET_KARTI_SINIRI karakter (kart kısa kalsın), adım ayırıcı
+ * (---) yok — kart tek parça açılır. Kim yazdı: summaryUpdatedByStaff.
+ */
+export async function saveObjectiveSummaryAction(
+  id: unknown,
+  markup: unknown
+): Promise<{ ok: true; silindi: boolean } | { ok: false; error: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof id !== "string" || !/^[a-z0-9]{6,64}$/i.test(id) || typeof markup !== "string" || markup.length > OZET_KARTI_SINIRI * 4) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+
+  const metin = markup.replace(/\r\n?/g, "\n").trim();
+  if (metin.length > OZET_KARTI_SINIRI) {
+    return { ok: false, error: `Özet kartı en fazla ${OZET_KARTI_SINIRI} karakter (şu an ${metin.length}): kısa tut, ders anlatımı başka yerde.` };
+  }
+
+  let summary: QuestionContent | null = null;
+  if (metin) {
+    const p = safeParseQuestionContent(markupToContent(metin));
+    if (!p.success) return { ok: false, error: "Özet çözümlenemedi." };
+    if (containsStepBreak(p.data)) return { ok: false, error: "Özet kartında --- (adım ayırıcı) olamaz; kart tek parça açılır." };
+    summary = p.data;
+  }
+
+  const r = await db.objective.updateMany({
+    where: { id },
+    data: { summary: summary ?? Prisma.DbNull, summaryUpdatedByStaff: staffStamp(auth.staff) },
+  });
+  if (r.count === 0) return { ok: false, error: "Kazanım bulunamadı." };
+
+  yenile();
+  return { ok: true, silindi: summary === null };
 }

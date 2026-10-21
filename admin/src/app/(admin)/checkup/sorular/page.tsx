@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChartColumn, FileUp, ListChecks, MessageSquareText, Plus, Search, X } from "lucide-react";
+import { ChartColumn, FileUp, Flag, Lightbulb, ListChecks, ListOrdered, MessageSquareText, PlayCircle, Plus, Search, X } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { partiBilgisi } from "@/lib/checkup/question-import";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
@@ -13,8 +13,9 @@ import {
   trDate,
   trNumber,
 } from "@/lib/checkup/format";
-import { EKSIK, LISTE_SIRASI, listeKosulu, listeSuzgeci } from "@/lib/checkup/question-query";
+import { EKSIK, ICERIK, LISTE_SIRASI, listeKosulu, listeSuzgeci } from "@/lib/checkup/question-query";
 import { listeSorgusuParams, soruAdresi } from "@/lib/checkup/question-list";
+import { containsStepBreak, safeParseQuestionContent, splitSolutionSteps } from "@/lib/checkup/shared/question-content";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { StatusSelect } from "@/components/checkup/StatusSelect";
 import { BulkCheckbox, BulkProvider, BulkSelectAll } from "@/components/checkup/BulkStatus";
@@ -54,6 +55,42 @@ function SuzgecCipi({ etiket, children, kaldir }: { etiket: string; children: Re
   );
 }
 
+/**
+ * Satırın ek içerik izleri: ipucu sayısı, video, adımlı çözüm. Küçük simgeler
+ * (süzgeç satırı ve künye zaten kalabalık); ekran okuyucu metni okur.
+ */
+function EkIcerik({ hints, videoUrl, solution }: { hints: unknown; videoUrl: string | null; solution: unknown }) {
+  const ipucu = Array.isArray(hints) ? hints.length : 0;
+  // Öğrencinin göreceği adım sayısı (boş adım atılır): ortak modülün kuralıyla.
+  const cozum = solution ? safeParseQuestionContent(solution) : null;
+  const adim = cozum?.success && containsStepBreak(cozum.data) ? splitSolutionSteps(cozum.data).length : 0;
+  if (!ipucu && !videoUrl && !adim) return null;
+  const IZ = "inline-flex items-center gap-0.5 text-gray-600 [&_svg]:size-3.5";
+  return (
+    <>
+      {ipucu ? (
+        <span className={IZ} title={ipucu + " ipucu"}>
+          <Lightbulb aria-hidden />
+          <span className="tabular">{ipucu}</span>
+          <span className="sr-only"> ipucu</span>
+        </span>
+      ) : null}
+      {videoUrl ? (
+        <span className={IZ} title="Video çözüm var">
+          <PlayCircle aria-hidden />
+          video
+        </span>
+      ) : null}
+      {adim ? (
+        <span className={IZ} title={"Çözüm " + adim + " adım"}>
+          <ListOrdered aria-hidden />
+          <span className="tabular">{adim}</span> adım
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 export default async function QuestionsPage({ searchParams }: PageProps<"/checkup/sorular">) {
   const gate = await checkStaff(ANY_STAFF);
   if (!gate.ok) return <GateNotice gate={gate} roles={ANY_STAFF} />;
@@ -64,7 +101,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
   // Süzgeç ve sıra tek yerde (lib/checkup/question-query.ts): soru ekranındaki
   // önceki/sonraki gezinmesi aynı listeyi izliyor.
   const suzgec = listeSuzgeci(sp);
-  const { konu, durum, ara, kazanim, eksik, parti, not, sayfa } = suzgec;
+  const { konu, durum, ara, kazanim, eksik, icerik, parti, not, bildirim, sayfa } = suzgec;
 
   const where = listeKosulu(suzgec);
 
@@ -94,19 +131,48 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         updatedAt: true,
         updatedByStaff: true,
         solution: true,
+        hints: true,
+        videoUrl: true,
         topic: { select: { name: true, examScope: true } },
         objective: { select: { code: true } },
-        // Satırdaki "açık not" rozeti.
-        _count: { select: { notes: { where: { resolvedAt: null } } } },
+        // Satırdaki "açık not" rozeti: yalnızca personel notları (bildirimin kendi rozeti var).
+        _count: { select: { notes: { where: { resolvedAt: null, kind: "STAFF" } } } },
+        // Sorunun yer aldığı denemeler: rozet ve yayından kaldırma uyarısı.
+        packageLinks: { where: { package: { kind: "MOCK" } }, select: { package: { select: { name: true } } } },
       },
     }),
     parti ? partiBilgisi(parti) : Promise.resolve(null),
   ]);
 
+  // Satırdaki "bildirim" rozeti: bu sayfadaki soruların açık öğrenci bildirimleri.
+  const bildirimSayilari = questions.length
+    ? await db.questionNote.groupBy({
+        by: ["questionId"],
+        where: { kind: "STUDENT_REPORT", resolvedAt: null, questionId: { in: questions.map((q) => q.id) } },
+        _count: { _all: true },
+      })
+    : [];
+  const bildirimSayisi = new Map(bildirimSayilari.map((b) => [b.questionId, b._count._all]));
+  // Yayındaki ve bir denemede olan sorular: yayından kaldırırken uyarılır.
+  const denemeleri = Object.fromEntries(
+    questions.filter((q) => q.status === "PUBLISHED" && q.packageLinks.length).map((q) => [q.id, q.packageLinks.map((l) => l.package.name)])
+  );
+
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
-  const suzgecVar = Boolean(konu || durum || ara || eksik || kazanim || parti || not);
+  const suzgecVar = Boolean(konu || durum || ara || eksik || icerik || kazanim || parti || not || bildirim);
   // Soruyu açıp kaydedince bu süzgece ve sayfaya dönülür.
-  const geri = listeSorgusuParams({ ara, konu, durum, eksik, kazanim, parti, not, sayfa: sayfa > 1 ? String(sayfa) : undefined });
+  const geri = listeSorgusuParams({
+    ara,
+    konu,
+    durum,
+    eksik,
+    icerik,
+    kazanim,
+    parti,
+    not,
+    bildirim,
+    sayfa: sayfa > 1 ? String(sayfa) : undefined,
+  });
 
   const kaydedilen = tek(sp.kaydedildi);
   const guncellenen = tek(sp.guncellendi);
@@ -159,7 +225,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         </Alert>
       ) : null}
 
-      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []}>
+      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []} denemeleri={denemeleri}>
         <Card>
           {/* Süzgeçler — GET formu: seçim adres çubuğunda kalır, paylaşılabilir. */}
           <form method="get" role="search" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 sm:px-6 sm:py-5">
@@ -209,9 +275,21 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
               </Select>
             </Field>
 
+            <Field label="Ek içerik" className="min-w-0 grow basis-44">
+              <Select name="icerik" defaultValue={icerik} compact>
+                <option value="">Hepsi</option>
+                {Object.entries(ICERIK).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
             {/* Sıkı alan yüksekliğinde (36 px): kutu öteki alanların kutularıyla aynı hizada. */}
-            <div className="flex h-9 items-center">
+            <div className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1">
               <Checkbox name="not" value="acik" defaultChecked={not === "acik"} label="Açık notu olanlar" />
+              <Checkbox name="bildirim" value="acik" defaultChecked={bildirim === "acik"} label="Açık bildirimi olanlar" />
             </div>
 
             <div className="flex gap-2">
@@ -229,13 +307,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
           {kazanim || parti ? (
             <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 sm:px-6">
               {kazanim ? (
-                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, parti, not })}>
+                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, parti, not, bildirim })}>
                   <span className={MONO}>{kazanim}</span>
                 </SuzgecCipi>
               ) : null}
               {parti ? (
                 <>
-                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, not })}>
+                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, kazanim, not, bildirim })}>
                     {partiKaydi ? (
                       <>
                         {partiKaydi.dosyaAdi} · {trDate(partiKaydi.tarih, { time: true })}
@@ -300,6 +378,17 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                                 </Badge>
                               </Link>
                             ) : null}
+                            {bildirimSayisi.get(q.id) ? (
+                              <Link
+                                href={soruAdresi(q.id, geri) + "#bildirimler"}
+                                title="Çözülmemiş öğrenci bildirimi"
+                                className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                              >
+                                <Badge size="sm" color="error" startIcon={<Flag aria-hidden />}>
+                                  <span className="tabular">{bildirimSayisi.get(q.id)}</span> bildirim
+                                </Badge>
+                              </Link>
+                            ) : null}
                             <span>
                               {examLabel(q.topic.examScope)} · {q.topic.name}
                             </span>
@@ -316,6 +405,12 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                               </span>
                             ) : null}
                             {q.solution === null ? <span className="text-warning-700">çözüm yok</span> : null}
+                            <EkIcerik hints={q.hints} videoUrl={q.videoUrl} solution={q.solution} />
+                            {q.packageLinks.length ? (
+                              <span className="text-brand-700" title={q.packageLinks.map((l) => l.package.name).join(", ")}>
+                                {q.packageLinks.length === 1 ? "denemede" : q.packageLinks.length + " denemede"}
+                              </span>
+                            ) : null}
                             {q.sourceRef ? <span>{q.sourceRef}</span> : null}
                             <span title={q.updatedByStaff ?? undefined}>
                               güncellendi {trDate(q.updatedAt, { year: false })}
@@ -331,7 +426,9 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                             {QUESTION_STATUS_LABEL[q.status]}
                           </Badge>
                           {/* key: toplu değişiklikten sonra seçim kutusu yeni durumla yeniden kurulsun. */}
-                          {yazabilir ? <StatusSelect key={q.id + q.status} id={q.id} status={q.status} /> : null}
+                          {yazabilir ? (
+                            <StatusSelect key={q.id + q.status} id={q.id} status={q.status} denemeler={denemeleri[q.id]} />
+                          ) : null}
                         </div>
                       </div>
                     </li>
@@ -345,7 +442,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         <Pagination
           currentPage={Math.min(sayfa, sonSayfa)}
           totalPages={sonSayfa}
-          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, kazanim, parti, not, sayfa: p > 1 ? p : undefined })}
+          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, kazanim, parti, not, bildirim, sayfa: p > 1 ? p : undefined })}
         />
       </BulkProvider>
     </>

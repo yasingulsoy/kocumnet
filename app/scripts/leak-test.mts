@@ -18,6 +18,7 @@ import {
   startTopicRetest,
   getCheckupReview,
   getSessionState,
+  getKitapcik,
   CheckupError,
   GUNLUK_TEKRAR_SINIRI,
   KAYIT_TOLERANSI_MS,
@@ -535,6 +536,78 @@ async function main() {
   // Paketi eski haline getir.
   await prisma.package.update({ where: { id: pkg.id }, data: { isFree: pkg.isFree } });
   await prisma.entitlement.deleteMany({ where: { userId: user.id } });
+
+  // ── KÂĞIT VE KİTAPÇIK ───────────────────────────────────────
+  /*
+   * Kâğıt oturumunda sorular yazdırılıp paylaşılabilen bir belgeye
+   * (kitapçık) dönüşüyor ve 48 saat açık kalıyor. Kitapçığa ya da optik
+   * formun verisine anahtar, çözüm, ipucu, video girerse sızıntı kâğıtta
+   * kalıcı olur. Alanlar beyaz listeyle denetleniyor: yeni bir alan eklenirse
+   * burada yakalanır.
+   */
+  console.log("\nKâğıt ve kitapçık sızıntısı:");
+  await prisma.checkupSession.deleteMany({ where: { userId: { in: [user.id, other.id] } } });
+  const KAGIT_IZLERI = [
+    "isCorrect",
+    "is_correct",
+    "errorType",
+    "error_type",
+    "answerKey",
+    "solution",
+    "hints",
+    "videoUrl",
+    "correct",
+  ];
+  const kagitId = await startCheckup(user.id, "tyt-ilk-15", { mode: "PAPER" });
+  const kagitOturum = await getStudentSession(kagitId, user.id);
+  check("kâğıt oturumu açıldı (PAPER)", kagitOturum.mode === "PAPER" && kagitOturum.questions.length === 15);
+  const kagitJson = JSON.stringify(kagitOturum);
+  for (const iz of KAGIT_IZLERI) {
+    check(`"${iz}" kâğıt oturumu verisinde YOK`, !kagitJson.includes(iz));
+  }
+
+  const kitapcik = await getKitapcik(kagitId, user.id);
+  const kitapcikJson = JSON.stringify(kitapcik);
+  for (const iz of KAGIT_IZLERI) {
+    check(`"${iz}" kitapçıkta YOK`, !kitapcikJson.includes(iz));
+  }
+  const alanlar = (o: object[]) => [...new Set(o.flatMap((x) => Object.keys(x)))].sort().join(",");
+  check(
+    "kitapçık üst alanları beyaz listede",
+    Object.keys(kitapcik).sort().join(",") ===
+      "durationMinutes,examScope,expiresAt,id,packageName,penaltyRatio,questions,startedAt,status,studentName",
+    Object.keys(kitapcik).sort().join(",")
+  );
+  check("kitapçık soru alanları yalnızca order/stem/choices", alanlar(kitapcik.questions) === "choices,order,stem", alanlar(kitapcik.questions));
+  check(
+    "kitapçık şık alanları yalnızca label/content (kimlik de yok)",
+    alanlar(kitapcik.questions.flatMap((q) => q.choices)) === "content,label",
+    alanlar(kitapcik.questions.flatMap((q) => q.choices))
+  );
+  check(
+    "başka öğrenci kitapçığı açamıyor",
+    await getKitapcik(kagitId, other.id).then(
+      () => false,
+      (e) => e instanceof CheckupError
+    )
+  );
+  const ekranId = await startCheckup(other.id, "tyt-ilk-15");
+  check(
+    "ekranda çözülen testin kitapçığı yok",
+    await getKitapcik(ekranId, other.id).then(
+      () => false,
+      (e) => e instanceof CheckupError
+    )
+  );
+  check(
+    "kâğıt testi sürerken inceleme kapalı",
+    await getCheckupReview(kagitId, user.id).then(
+      () => false,
+      (e) => e instanceof CheckupError
+    )
+  );
+  const kagitDurum = JSON.stringify(await getSessionState(kagitId, user.id));
+  check("kâğıt eşitleme verisinde anahtar YOK", !KAGIT_IZLERI.some((iz) => kagitDurum.includes(iz)));
 
   // Temizlik
   await prisma.checkupSession.deleteMany({ where: { userId: { in: [user.id, other.id] } } });

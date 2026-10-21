@@ -22,7 +22,7 @@ import {
   type IceAktarmaKazanimi,
   type SoruRaporu,
 } from "../lib/question-import";
-import { deriveQuestionFields, type QuestionContent } from "../lib/question-content";
+import { deriveQuestionFields, extractText, type QuestionContent } from "../lib/question-content";
 import { markupToContent } from "../lib/question-markup";
 
 let failed = 0;
@@ -94,7 +94,7 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
   const ham = dosyayiCozumle(ORNEK);
   check("3 soru bulundu", ham.length === 3, String(ham.length));
   const { sorular, hazir } = dosyayiDenetle(ham, baglam());
-  check("başlık satırları 7, 35, 56", sorular.map((s) => s.satir).join(",") === "7,35,56", sorular.map((s) => s.satir).join(","));
+  check("başlık satırları 7, 45, 66", sorular.map((s) => s.satir).join(",") === "7,45,66", sorular.map((s) => s.satir).join(","));
   check("yalnızca 3. soru reddedildi", sorular.map((s) => (s.hazir ? "✓" : "✗")).join("") === "✓✓✗");
   check("2 soru yazılmaya hazır", hazir.length === 2);
 
@@ -107,7 +107,7 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
     'İdeal Süre 10-600 arası tam sayı olmalı (şu an "hızlı").',
     "Seviye 2 ve 3 sorusuna Kazanım Kodu yazılmaz.",
     "Birden fazla doğru şık işaretli: A, B.",
-    "C şıkkında hata kodu yok (satır 69).",
+    "C şıkkında hata kodu yok (satır 79).",
     "E şıkkındaki hata kodu listede yok: UYDURMA_KOD.",
   ];
   check(
@@ -130,6 +130,9 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
   );
   check("1. soru blok formül ayrı blok", h1.stem.blocks.some((b) => b.type === "math_block"));
   check("1. soru çözümü var", h1.solution !== null);
+  check("1. soru çözümü 3 adım (--- ayırıcı)", h1.adimSayisi === 3 && h1.solution?.blocks.filter((b) => b.type === "step_break").length === 2, String(h1.adimSayisi));
+  check("1. soru 2 ipucu, sırasıyla", h1.hints?.length === 2 && extractText(h1.hints[0]).includes("büyük olması"), JSON.stringify(h1.hints?.map(extractText)));
+  check("1. soru videosu canonicalUrl (t= korunur)", h1.videoUrl === "https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=75", String(h1.videoUrl));
   check("1. soru hedef sınavsız (konunun her sınavı)", h1.examScopes.length === 0);
   check("1. soru uyarısız", q1.uyarilar.length === 0, q1.uyarilar.join(" | "));
 
@@ -137,6 +140,7 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
   check("2. soru hedef sınav DGS, ALES", h2.examScopes.join(",") === "DGS,ALES");
   check("2. soru kazanım adını dosyadaki 1. sorudan alıyor", h2.kazanimAdi === null && q2.hatalar.length === 0);
   check("2. soru 4 şıklı: LGS dışı sınav uyarısı", uyariVar(q2, "4 şıklı"), q2.uyarilar.join(" | "));
+  check("2. soru ipucusuz, videosuz, tek adım", h2.hints === null && h2.videoUrl === null && h2.adimSayisi === 1);
   check("kazanım adı dosyadaki ilk tanımdan", kazanimAdiSec(hazir, "ORNEK-TK-A") === h1.kazanimAdi);
 
   const l1 = seviye1Sayilari(hazir);
@@ -304,6 +308,74 @@ console.log("\nGörseller:");
   check("görsel kimliği yerleşti (blok + satır içi)", (json.match(/"mediaId":"cm-medya-1"/g) ?? []).length === 2, json);
   check("metindeki dosya adı ve alt metin değişmedi", json.includes("Dosya adı sekil-01.png metinde") && json.includes("sekil-01.png çizimi"));
   check("parmak izi yerleştirmeden etkilenmez", deriveQuestionFields(icerik).fingerprint === deriveQuestionFields(yeni).fingerprint);
+}
+
+// ── ipucu, video ve adım ayırıcı (Ekim 2026) ─────────────
+console.log("\nİpucu, video ve adım ayırıcı:");
+{
+  /** Seçeneklerden hemen önce ek alan satırları (ipucu, video) ekler. Fonksiyonla: dizgede "$$" tek "$" olurdu. */
+  const ekle = (metin: string, satirlar: string[]) =>
+    metin.replace("* **Seçenekler:**", () => [...satirlar, "* **Seçenekler:**"].join("\n"));
+
+  const uc = denetle(ekle(soru({}), ["* **İpucu:** bir", "* **İpucu 2:** iki", "* **İpucu:** üç"])).sorular[0];
+  check("3 ipucu geçer (numaralı yazım da)", uc.hatalar.length === 0 && uc.hazir?.hints?.length === 3, uc.hatalar.join(" | "));
+  check("İpucu alanı tanınmayan alan / tekrar uyarısı vermez", !uyariVar(uc, "Tanınmayan") && !uyariVar(uc, "kez yazılmış"), uc.uyarilar.join(" | "));
+
+  const dort = denetle(ekle(soru({}), ["* **İpucu:** 1", "* **İpucu:** 2", "* **İpucu:** 3", "* **İpucu:** 4"])).sorular[0];
+  check("4. ipucu reddedilir (satırıyla)", hataVar(dort, "En fazla 3 ipucu yazılabilir (şu an 4; fazlası satır"), dort.hatalar.join(" | "));
+
+  const cokSatir = denetle(ekle(soru({}), ["* **İpucu:**", "Yolu düşün:", "", "$$x = v \\cdot t$$"])).sorular[0];
+  const ip = cokSatir.hazir?.hints?.[0];
+  check("çok satırlı ipucu tek ipucu (blok formül dahil)", cokSatir.hazir?.hints?.length === 1 && ip?.blocks.some((b) => b.type === "math_block") === true, cokSatir.hatalar.join(" | "));
+
+  const bos = denetle(ekle(soru({}), ["* **İpucu:**", "* **İpucu:** dolu"])).sorular[0];
+  check("boş ipucu uyarıyla atlanır", bos.hatalar.length === 0 && bos.hazir?.hints?.length === 1 && uyariVar(bos, "Boş İpucu alanı"), bos.uyarilar.join(" | "));
+
+  const ayiricili = denetle(ekle(soru({}), ["* **İpucu:** önce bunu dene", "---", "sonra şunu"])).sorular[0];
+  check("ipucunda --- reddedilir", hataVar(ayiricili, "1. ipucu (satır") && hataVar(ayiricili, "adım ayırıcı (---) olamaz"), ayiricili.hatalar.join(" | "));
+
+  const gorselli = denetle(ekle(soru({}), ["* **İpucu:** ![şekil](sekil-01.png)"]), baglam({ gorselVar: () => true })).sorular[0];
+  check("ipucunda görsel reddedilir", hataVar(gorselli, "görsel yalnızca Soru Metni'nde"), gorselli.hatalar.join(" | "));
+  check("ipucundaki görsel anılanlarda (kullanılmayan uyarısı çıkmaz)", anilanGorseller(dosyayiCozumle(ekle(soru({}), ["* **İpucu:** ![a](ip.png)"]))).includes("ip.png"));
+
+  const yt = denetle(ekle(soru({}), ["* **Video:** https://www.youtube.com/shorts/aqz-KE-bpKQ"])).sorular[0];
+  check("YouTube shorts → watch adresi", yt.hazir?.videoUrl === "https://www.youtube.com/watch?v=aqz-KE-bpKQ", String(yt.hazir?.videoUrl));
+  const vimeo = denetle(ekle(soru({}), ["* **Video:**", "https://player.vimeo.com/video/123456"])).sorular[0];
+  check("Vimeo (sonraki satırda) → vimeo.com/id", vimeo.hazir?.videoUrl === "https://vimeo.com/123456", String(vimeo.hazir?.videoUrl));
+  const kotu = denetle(ekle(soru({}), ["* **Video:** https://example.com/video.mp4"])).sorular[0];
+  check("başka site reddedilir, anlaşılır mesaj", ilk(kotu).startsWith('Video bağlantısı tanınmadı: "https://example.com/video.mp4"') && ilk(kotu).includes("YouTube"), ilk(kotu));
+  const kisaId = denetle(ekle(soru({}), ["* **Video:** https://youtu.be/kisa"])).sorular[0];
+  check("bozuk YouTube kimliği reddedilir", hataVar(kisaId, "Video bağlantısı tanınmadı"), kisaId.hatalar.join(" | "));
+
+  const adimli = denetle(soru({ "Çözüm Açıklaması": "Önce hızı bul.\n\n---\n\nSonra süreyle çarp: $180$." })).sorular[0];
+  check("çözümde --- iki adım", adimli.hazir?.adimSayisi === 2, adimli.hatalar.join(" | "));
+  const sonunda = denetle(soru({ "Çözüm Açıklaması": "Tek adım.\n\n---\n\n" })).sorular[0];
+  check("sondaki --- (dosya sonu) ayırıcı değil", sonunda.hazir?.adimSayisi === 1 && !sonunda.hazir.solution?.blocks.some((b) => b.type === "step_break"));
+  const ikiSoru = denetle(soru({ "Çözüm Açıklaması": "Birinci." }) + "\n---\n\n" + soru({ ID: "T-02", "Soru Metni": "İkinci soru $x$?" })).sorular;
+  check("soru arasındaki --- soruyu kapatır", ikiSoru.length === 2 && ikiSoru[0].hazir?.adimSayisi === 1 && ikiSoru[1].hatalar.length === 0, ikiSoru.map((r) => r.hatalar.join(",")).join(" | "));
+  const alanOnce = denetle(soru({ "Çözüm Açıklaması": "Birinci.\n\n---\n* **Kaynak:** özgün" })).sorular[0];
+  check("--- ardından alan gelirse alanı kapatır, alan okunur", alanOnce.hazir?.adimSayisi === 1 && alanOnce.hazir.sourceRef === "T-01 · özgün", String(alanOnce.hazir?.sourceRef));
+
+  const govde = denetle(soru({ "Soru Metni": "Birinci kısım $x$.\n\n---\n\nİkinci kısım kaçtır?" })).sorular[0];
+  check("soru metninde --- reddedilir (eskiden sonrası düşüyordu)", hataVar(govde, "Soru Metni'nde adım ayırıcı (---) var"), govde.hatalar.join(" | "));
+  const sik = denetle(soru({}, ["[ ] A) 120 (ISLEM_HATASI: x)", "[x] B) 180", "[ ] C) --- (TERS_ISLEM: y)", "[ ] D) 240 (EKSIK_OKUMA: z)", "[ ] E) 20 (DIGER)"])).sorular[0];
+  check("şıkta --- reddedilir (validateChoices)", hataVar(sik, "C şıkkında adım ayırıcı (---) olamaz"), sik.hatalar.join(" | "));
+
+  const formul = denetle(ekle(soru({}), ["* **İpucu:** $\\frac{1$ dene"]), baglam({ formulHatasi: (l) => (l.includes("\\frac{1") ? "eksik" : null) })).sorular[0];
+  check("ipucundaki formül de denetlenir", uyariVar(formul, "1. ipucundaki formül çizilemiyor"), formul.uyarilar.join(" | "));
+}
+
+// ── şablondaki tam örnek ─────────────────────────────────
+console.log("\nSORU-SABLONU.md §8 tam örneği:");
+{
+  // Şablonun anlattığı örnek gerçekten geçmeli: belge ile ayrıştırıcı ayrışmasın.
+  const sablon = readFileSync(join(KOK, "SORU-SABLONU.md"), "utf8");
+  const blok = /## 8\. Tam örnek[\s\S]*?```markdown\n([\s\S]*?)```/.exec(sablon)?.[1] ?? "";
+  const r = denetle(blok).sorular;
+  check("örnek bulundu, tek soru", r.length === 1, String(r.length));
+  const h = r[0]?.hazir;
+  check("örnek geçerli ve uyarısız", r[0]?.hatalar.length === 0 && r[0]?.uyarilar.length === 0, [...(r[0]?.hatalar ?? []), ...(r[0]?.uyarilar ?? [])].join(" | "));
+  check("örnekte 2 ipucu, video, 3 adım", h?.hints?.length === 2 && Boolean(h.videoUrl) && h.adimSayisi === 3, `${h?.hints?.length} · ${h?.videoUrl} · ${h?.adimSayisi}`);
 }
 
 // ── formüller ────────────────────────────────────────────

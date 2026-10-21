@@ -7,7 +7,14 @@ import { EXAM_SCOPES, QUESTION_STATUS_LABEL, examLabel, isExamScope } from "@/li
 import { konuSinavdaMi, soruSinavdaKosulu } from "@/lib/checkup/exam-scope";
 import { MIN_L1_PER_OBJECTIVE, levelSizes } from "@/lib/checkup/levels";
 import { GateNotice } from "@/components/checkup/GateNotice";
-import { ObjectiveCreateForm, ObjectiveRowEditor, type ObjectiveRow } from "@/components/checkup/ObjectiveForms";
+import {
+  ObjectiveCreateForm,
+  ObjectiveRowEditor,
+  ObjectiveSummaryEditor,
+  type ObjectiveRow,
+} from "@/components/checkup/ObjectiveForms";
+import { safeParseQuestionContent } from "@/lib/checkup/shared/question-content";
+import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { CODE, ProgressLine, QUESTION_STATUS_COLOR, qs } from "@/components/checkup/ui";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Badge } from "@/components/tailadmin/ui/Badge";
@@ -25,6 +32,8 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
 
   const sp = await searchParams;
   const sinav = isExamScope(sp.sinav) ? sp.sinav : "";
+  // "Özeti olmayanlar": özet kartı yazılacak kazanımlar (içerik ekibinin listesi).
+  const ozetYok = sp.ozet === "yok";
 
   const [topics, objectives, l1Counts] = await Promise.all([
     // Bütün konular: kapsam kuralı kazanımın konusuna bakıyor (yaprak olmasa da).
@@ -43,6 +52,8 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
         examScopes: true,
         status: true,
         sortOrder: true,
+        summary: true,
+        summaryUpdatedByStaff: true,
         _count: { select: { questions: true } },
       },
     }),
@@ -73,6 +84,12 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
     return konu ? konuSinavdaMi(konu, s) : false;
   };
 
+  /** Özet kartı → yazım biçimi. Bozuk satır sayfayı düşürmesin: kart yok sayılır. */
+  const ozet = (json: unknown) => {
+    const p = json == null ? null : safeParseQuestionContent(json);
+    return p?.success ? { markup: contentToMarkup(p.data), kilitli: hasUneditableBlocks(p.data) } : { markup: "", kilitli: false };
+  };
+
   const tumSatirlar: ObjectiveRow[] = objectives.map((o) => ({
     id: o.id,
     topicId: o.topicId,
@@ -83,8 +100,13 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
     sortOrder: o.sortOrder,
     l1Count: l1.get(o.id) ?? 0,
     questionCount: o._count.questions,
+    summaryMarkup: ozet(o.summary).markup,
+    summaryStaff: o.summaryUpdatedByStaff,
+    summaryLocked: ozet(o.summary).kilitli,
   }));
-  const satirlar = sinav ? tumSatirlar.filter((o) => olculurMu(o, sinav)) : tumSatirlar;
+  const sinavdakiler = sinav ? tumSatirlar.filter((o) => olculurMu(o, sinav)) : tumSatirlar;
+  const ozetsizSayisi = sinavdakiler.filter((o) => !o.summaryMarkup).length;
+  const satirlar = ozetYok ? sinavdakiler.filter((o) => !o.summaryMarkup) : sinavdakiler;
 
   // Sınav bazlı hazırlık: yayında + yeterli L1 sorusu olan kazanım sayısı.
   const hazir = satirlar.filter((o) => o.status === "PUBLISHED" && o.l1Count >= MIN_L1_PER_OBJECTIVE).length;
@@ -112,14 +134,35 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
         label="Sınav süzgeci"
         className="mb-4"
         items={[
-          { key: "hepsi", href: "/checkup/kazanimlar", label: "Tüm sınavlar", active: !sinav, count: tumSatirlar.length },
+          {
+            key: "hepsi",
+            href: qs("/checkup/kazanimlar", { ozet: ozetYok ? "yok" : undefined }),
+            label: "Tüm sınavlar",
+            active: !sinav,
+            count: tumSatirlar.length,
+          },
           ...EXAM_SCOPES.map((s) => ({
             key: s,
-            href: qs("/checkup/kazanimlar", { sinav: s }),
+            href: qs("/checkup/kazanimlar", { sinav: s, ozet: ozetYok ? "yok" : undefined }),
             label: examLabel(s),
             active: s === sinav,
             count: tumSatirlar.filter((o) => olculurMu(o, s)).length,
           })),
+        ]}
+      />
+
+      <SegmentedTabs
+        label="Özet kartı süzgeci"
+        className="mb-4"
+        items={[
+          { key: "hepsi", href: qs("/checkup/kazanimlar", { sinav }), label: "Tüm kazanımlar", active: !ozetYok, count: sinavdakiler.length },
+          {
+            key: "yok",
+            href: qs("/checkup/kazanimlar", { sinav, ozet: "yok" }),
+            label: "Özet kartı olmayanlar",
+            active: ozetYok,
+            count: ozetsizSayisi,
+          },
         ]}
       />
 
@@ -162,7 +205,7 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
             <Card>
               <EmptyState
                 icon={<Target />}
-                title={sinav ? "Bu sınavda ölçülen kazanım yok" : "Kazanım yok"}
+                title={ozetYok ? "Özet kartı olmayan kazanım yok" : sinav ? "Bu sınavda ölçülen kazanım yok" : "Kazanım yok"}
                 description={
                   yazabilir
                     ? "Yandaki formdan ilk kazanımı ekle ya da içe aktarma betiğini çalıştır."
@@ -208,6 +251,15 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
                                 {o.questionCount} soru
                               </Badge>
                             ) : null}
+                            {o.summaryMarkup ? (
+                              <Badge size="sm" color="info" title="Özet kartı var (sonuç ekranında ve defterde görünür)">
+                                özet kartı
+                              </Badge>
+                            ) : (
+                              <Badge size="sm" color="light" title="Özet kartı yazılmamış">
+                                özet yok
+                              </Badge>
+                            )}
                             {o.questionCount > 0 ? (
                               <Link
                                 href={qs("/checkup/sorular", { kazanim: o.code })}
@@ -218,6 +270,7 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
                             ) : null}
                           </div>
                           <ObjectiveRowEditor row={o} canEdit={yazabilir} />
+                          <ObjectiveSummaryEditor row={o} canEdit={yazabilir} />
                         </div>
                         {o.examScopes.length ? (
                           <p className="mt-1 text-theme-xs text-gray-500">{o.examScopes.map(examLabel).join(" · ")}</p>

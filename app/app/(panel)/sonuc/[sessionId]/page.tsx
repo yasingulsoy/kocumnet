@@ -40,7 +40,11 @@ import { alistirmaHakki, benzerDurumlari } from "@/lib/practice";
 import { KONU_CALISMA_SORU } from "@/lib/review";
 import { trNumber } from "@/components/ui";
 import { PrintButton } from "@/components/PrintButton";
+import { DenemeKarsilastirmaKarti } from "@/components/DenemeKarsilastirma";
+import { SureAnaliziKarti } from "@/components/SureAnalizi";
 import { MathContent } from "@/components/MathContent";
+import { KazanimKarti } from "@/components/KazanimKarti";
+import { splitSolutionSteps, type QuestionContent } from "@/lib/question-content";
 import { RadialGauge } from "@/components/tailadmin/charts/RadialGauge";
 import { cx } from "@/components/tailadmin/cx";
 import { Badge } from "@/components/tailadmin/ui/Badge";
@@ -94,7 +98,8 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             penaltyRatio: true,
             focusTopicId: true,
             focusTopic: { select: { name: true } },
-            package: { select: { name: true, slug: true, examScope: true } },
+            mode: true,
+            package: { select: { name: true, slug: true, examScope: true, kind: true } },
           },
         },
       },
@@ -244,7 +249,13 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         order: item.order,
         topicName: item.topicName,
         stem: <MathContent content={item.stem} />,
-        solution: item.solution ? <MathContent content={item.solution} /> : null,
+        // Adımlar burada bölünür (ayırıcı: step_break); istemci yalnızca açıp kapatır.
+        cozumAdimlari: item.solution
+          ? splitSolutionSteps(item.solution).map((adim, i) => <MathContent key={i} content={adim} />)
+          : null,
+        video: item.video ? { embedUrl: item.video.embedUrl, provider: item.video.provider } : null,
+        rapor: item.rapor ?? null,
+        kocaSoru: item.kocaSoru ?? null,
         choices: item.choices.map((c) => ({
           id: c.id,
           label: c.label,
@@ -258,6 +269,18 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         targetTimeSeconds: item.targetTimeSeconds,
       }))
     : null;
+
+  /*
+   * Tekrar etmen gereken kazanımlar: yanlış ya da boş soruların kazanımları,
+   * tekrarsız, soru sırasıyla. Özeti olmayan kazanım listeye girmez (boş
+   * kart "bu kazanımı bilmiyoruz" gibi durur).
+   */
+  const tekrarKazanimlari: { id: string; ad: string; ozet: QuestionContent }[] = [];
+  for (const item of review ?? []) {
+    const k = item.objective;
+    if (item.isCorrect === true || !k?.summary || tekrarKazanimlari.some((t) => t.id === k.id)) continue;
+    tekrarKazanimlari.push({ id: k.id, ad: k.name, ozet: k.summary });
+  }
 
   // Sunum yardımcıları.
   const yuzde = Math.round(oran * 100);
@@ -285,6 +308,12 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             {retest ? (
               <Badge size="sm" color="success">
                 Kontrol testi
+              </Badge>
+            ) : null}
+            {/* Kâğıtta: süre analizi ve "yavaş" uyarıları yok (süre ölçülmedi). */}
+            {result.session.mode === "PAPER" ? (
+              <Badge size="sm" color="light">
+                Kâğıtta çözüldü
               </Badge>
             ) : null}
           </span>
@@ -334,6 +363,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           <MetricCard compact label="Yanlış" value={<span className="text-error-700">{result.wrongCount}</span>} />
           <MetricCard compact label="Boş" value={result.blankCount} />
         </div>
+
+        {/* ── Deneme: çözenler arasındaki yer (yalnızca MOCK; değilse boş) ── */}
+        <DenemeKarsilastirmaKarti sessionId={sessionId} userId={user.id} />
 
         {/* ── Koçun cümlesi ───────────────────────────────── */}
         <div className={cx("rounded-2xl border p-4 sm:p-6", TON[sonuc.ton].kutu)}>
@@ -483,6 +515,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           </div>
         ) : null}
 
+        {/* ── Süre ve strateji (ekranda süreli ölçüm; kâğıtta boş) ── */}
+        <SureAnaliziKarti sessionId={sessionId} userId={user.id} />
+
         {/* ── Önceki denemeye göre ────────────────────────── */}
         {!retest && ilerleme && (ilerleme.gelisen.length > 0 || ilerleme.gerileyen.length > 0) ? (
           <ComponentCard title="Geçen denemene göre" flush>
@@ -541,8 +576,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
 
         {/* ── Sonraki ölçüm ───────────────────────────────── */}
         {/* Kontrol testinde yok: katalogda görünmeyen "kontrol testi paketini
-            10 gün sonra tekrar çöz" diyordu. */}
-        {!retest ? (
+            10 gün sonra tekrar çöz" diyordu. Denemede de yok: sorular sabit,
+            "tekrar çöz" aynı soruları getirir; deneme kartı bunu zaten söylüyor. */}
+        {!retest && result.session.package.kind !== "MOCK" ? (
           <Card className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
               <RotateCcw className="size-5" aria-hidden />
@@ -581,6 +617,21 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
                 </li>
               ))}
             </ul>
+          </ComponentCard>
+        ) : null}
+
+        {/* ── Tekrar etmen gereken kazanımlar ─────────────── */}
+        {/* Az kart açık gelir; çoksa başlıklar kalır, dokununca açılır (telefonda kısa kalsın). */}
+        {tekrarKazanimlari.length > 0 ? (
+          <ComponentCard
+            title="Tekrar etmen gereken kazanımlar"
+            desc="Yanlış ya da boş bıraktığın soruların kazanımları: kısa özet ve formüller."
+          >
+            <div className="space-y-3">
+              {tekrarKazanimlari.map((k) => (
+                <KazanimKarti key={k.id} ad={k.ad} ozet={k.ozet} acilir acik={tekrarKazanimlari.length <= 2} />
+              ))}
+            </div>
           </ComponentCard>
         ) : null}
 

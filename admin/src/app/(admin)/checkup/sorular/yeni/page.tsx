@@ -4,7 +4,7 @@ import { db } from "@/lib/checkup/db";
 import { CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { QUESTION_LEVELS, isExamScope, isQuestionStatus } from "@/lib/checkup/format";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
-import { parseQuestionContent } from "@/lib/checkup/shared/question-content";
+import { MAX_HINTS, parseHints, parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { QuestionForm, type QuestionInitial } from "@/components/checkup/QuestionForm";
@@ -53,6 +53,7 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
             stem: true,
             stemText: true,
             solution: true,
+            hints: true,
             difficulty: true,
             targetTimeSeconds: true,
             level: true,
@@ -82,6 +83,11 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
         topicId: kaynak.topicId,
         stem: contentToMarkup(stem),
         solution: kaynak.solution ? contentToMarkup(parseQuestionContent(kaynak.solution)) : "",
+        // İpuçları taşınır (çözüm gibi, yeni sayılara göre düzeltilir); video
+        // TAŞINMAZ: başka sayılarla çekilmiş video yanlış çözümü gösterirdi ve
+        // bağlantının içi önizlemede görünmediği için gözden kaçar.
+        hints: parseHints(kaynak.hints).map(contentToMarkup),
+        videoUrl: "",
         choices: kaynak.choices.map((c) => contentToMarkup(parseQuestionContent(c.content))),
         correctIndex: Math.max(0, kaynak.choices.findIndex((c) => c.isCorrect)),
         errorTypes: kaynak.choices.map((c) => c.errorType),
@@ -141,7 +147,8 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
       {kopyaNotu ? (
         <Alert variant="info" className="mb-4" title="Kopyadan başlıyorsun">
           Kaynak: “{kopyaNotu}”. Metin aynı kaldıkça kaydedilemez — aynı soru iki kez havuza giremez.
-          Sayıları ya da ifadeyi değiştir; şıkları ve çözümü buna göre güncelle.
+          Sayıları ya da ifadeyi değiştir; şıkları, çözümü ve ipuçlarını buna göre güncelle. Video çözüm
+          kopyalanmaz.
         </Alert>
       ) : null}
       {kopyaHatasi ? (
@@ -155,6 +162,7 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
         // sıfırdan kurulsun; yoksa React önceki sorunun metnini durumda tutar.
         key={kopyaId || kaydedilen || "bos"}
         canEdit
+        maxIpucu={MAX_HINTS}
         topics={topics.map((t) => ({
           id: t.id,
           name: t.name,

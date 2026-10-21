@@ -5,6 +5,7 @@ import { KeyRound, Trash2 } from "lucide-react";
 import {
   changePasswordAction,
   deleteAccountAction,
+  gunlukHedefAction,
   updateProfileAction,
   type ProfileState,
 } from "@/lib/actions/profile";
@@ -225,6 +226,62 @@ export function HedefForm({
 
       <Button type="submit" loading={pending} disabled={!sinif}>
         {pending ? "Kaydediliyor…" : "Hedefi kaydet"}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * Günlük soru hedefi (ana sayfadaki seri kartı). Seçenekler sayfadan gelir
+ * (lib/seri.ts): bu dosya istemci bileşeni, veritabanı modülünü import edemez.
+ */
+export function GunlukHedefForm({ hedef, secenekler }: { hedef: number; secenekler: readonly number[] }) {
+  const [state, formAction, pending] = useActionState(gunlukHedefAction, initial);
+  // Seçim durumda, değer gizli alanda: React 19 form eylemi bitince formu
+  // sıfırlıyor; radyo varsayılana dönüp kaydedilen hedef yerine eskisini
+  // gösterirdi (HedefForm'daki desen).
+  const [secili, setSecili] = useState(hedef);
+
+  return (
+    <form action={formAction} className="space-y-5">
+      {state.ok ? (
+        <Alert variant="success" compact>
+          {state.ok}
+        </Alert>
+      ) : null}
+      {state.error ? (
+        <Alert variant="error" compact>
+          {state.error}
+        </Alert>
+      ) : null}
+
+      <input type="hidden" name="dailyQuestionGoal" value={secili} />
+      <fieldset>
+        <legend className={labelClass}>Günde kaç soru?</legend>
+        {/* 360 px'te beş seçenek yan yana sığmıyor: telefonda iki satır. */}
+        <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+          {secenekler.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setSecili(n)}
+              aria-pressed={secili === n}
+              className={cx(
+                "min-h-11 cursor-pointer touch-manipulation rounded-lg border px-3 text-sm font-medium transition",
+                secimSinifi(secili === n)
+              )}
+            >
+              {n === 0 ? "Hedef yok" : `${n} soru`}
+            </button>
+          ))}
+        </div>
+        <p className={hintClass}>
+          Her tür test ve alıştırmada çözdüğün sorular sayılır. Hedef olmasa da seri sayılmaya devam eder.
+        </p>
+      </fieldset>
+
+      <Button type="submit" loading={pending}>
+        {pending ? "Kaydediliyor…" : "Günlük hedefi kaydet"}
       </Button>
     </form>
   );

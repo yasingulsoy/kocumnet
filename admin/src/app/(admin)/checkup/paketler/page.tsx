@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Package, Plus } from "lucide-react";
+import { ClipboardList, Package, Plus } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import {
@@ -58,6 +58,8 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
   const katalog = katalogTumu.filter((p) => !sinav || p.examScope === sinav);
   const seviyeli = health.filter((p) => p.kind === "LEVEL");
   const tekrar = health.filter((p) => p.kind === "RETEST");
+  // Denemeler (MOCK): sabit soru listesi, katalogdan ayrı bölüm.
+  const denemeler = health.filter((p) => p.kind === "MOCK");
 
   const ucretliSayisi = health.filter((p) => !p.isFree).length;
   const yayindaSorunlu = katalogTumu.filter((p) => p.status === "PUBLISHED" && p.state === "blocked").length;
@@ -88,13 +90,18 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
           health.length +
           " paket · " +
           (ucretliSayisi ? ucretliSayisi + " ücretli" : "hepsi ücretsiz") +
-          ". Katalog paketleri panelden düzenlenir; tanışma, seviyeli ve tekrar paketleri sistemindir."
+          ". Katalog paketleri ve denemeler panelden düzenlenir; tanışma, seviyeli ve tekrar paketleri sistemindir."
         }
         actions={
           yonetebilir ? (
-            <ButtonLink href="/checkup/paketler/yeni" size="xs" startIcon={<Plus />}>
-              Yeni paket
-            </ButtonLink>
+            <>
+              <ButtonLink href="/checkup/paketler/yeni-deneme" variant="outline" size="xs" startIcon={<ClipboardList />}>
+                Yeni deneme
+              </ButtonLink>
+              <ButtonLink href="/checkup/paketler/yeni" size="xs" startIcon={<Plus />}>
+                Yeni paket
+              </ButtonLink>
+            </>
           ) : null
         }
       />
@@ -191,6 +198,82 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
                         </p>
                       ) : null}
                       <Dagilim paket={p} />
+                    </TableCell>
+                    <TableCell align="end">
+                      <span className="tabular text-gray-800">{trNumber(testMap.get(p.id) ?? 0)}</span>
+                    </TableCell>
+                    <TableCell>{yayinHucresi(p)}</TableCell>
+                    <TableCell>{erisimHucresi(p)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </ComponentCard>
+
+        {/* ── Denemeler ───────────────────────────────────── */}
+        <ComponentCard
+          title="Denemeler"
+          desc="Gerçek sınavın provası: herkes aynı soruları aynı sırayla çözer. Liste tam ve bütün soruları yayında olan deneme yayınlanabilir."
+          actions={
+            yonetebilir ? (
+              <ButtonLink href="/checkup/paketler/yeni-deneme" variant="outline" size="xs" startIcon={<Plus />}>
+                Yeni deneme
+              </ButtonLink>
+            ) : null
+          }
+          flush
+        >
+          {denemeler.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList />}
+              title="Henüz deneme yok"
+              description={yonetebilir ? "“Yeni deneme” ile sınav seç, listeyi dağılıma göre doldur." : "Denemeleri yönetici ve müdür kurar."}
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableCell isHeader>Deneme</TableCell>
+                  <TableCell isHeader>Koşullar</TableCell>
+                  <TableCell isHeader>Liste</TableCell>
+                  <TableCell isHeader align="end">
+                    Tamamlanan
+                  </TableCell>
+                  <TableCell isHeader>Yayın</TableCell>
+                  <TableCell isHeader>Erişim</TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {denemeler.map((p) => (
+                  <TableRow key={p.id} className="align-top">
+                    <TableCell className="min-w-48">
+                      {yonetebilir ? (
+                        <Link href={"/checkup/paketler/" + p.id} className="font-medium text-gray-800 hover:text-brand-500">
+                          {p.name}
+                        </Link>
+                      ) : (
+                        <p className="font-medium text-gray-800">{p.name}</p>
+                      )}
+                      <p className="mt-0.5 text-theme-xs text-gray-500">{p.slug}</p>
+                    </TableCell>
+                    <TableCell className="min-w-36">
+                      {examLabel(p.examScope)} · {p.questionCount} soru · {p.durationMinutes} dk
+                    </TableCell>
+                    <TableCell className="min-w-60">
+                      <Badge size="sm" color={PACKAGE_STATE_COLOR[p.state]}>
+                        {p.state === "ready" ? "Hazır" : "Yayınlanamaz"}
+                      </Badge>
+                      <p className="tabular mt-1 text-theme-xs text-gray-600">
+                        {p.mock?.listede ?? 0} / {p.questionCount} soru
+                      </p>
+                      {p.mock?.engeller.length ? (
+                        <ul className="mt-1 max-w-80 space-y-0.5 text-theme-xs text-error-600">
+                          {p.mock.engeller.map((e) => (
+                            <li key={e}>{e}</li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </TableCell>
                     <TableCell align="end">
                       <span className="tabular text-gray-800">{trNumber(testMap.get(p.id) ?? 0)}</span>

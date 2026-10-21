@@ -263,6 +263,9 @@ function raporOlustur(
             yeniKazanim: Boolean(h.kazanimKodu && !kazanimlar.has(h.kazanimKodu)),
             sinavlar: h.examScopes,
             gorselSayisi: new Set(h.gorseller.map((g) => g.dosya)).size,
+            ipucuSayisi: h.hints?.length ?? 0,
+            video: h.videoUrl,
+            adimSayisi: h.adimSayisi,
           }
         : null,
       cift: s.cift ?? null,
@@ -270,6 +273,7 @@ function raporOlustur(
         soru: q.alanlar["soru metni"] ?? "",
         secenekler: q.secenekler.map((x) => ({ harf: x.harf, metin: x.metin, dogru: x.isaretli })),
         cozum: q.alanlar["cozum aciklamasi"] ?? "",
+        ipuclari: q.ipuclari.map((x) => x.metin).filter((m) => m.trim()),
       },
     };
   });
@@ -285,6 +289,8 @@ function raporOlustur(
       uyarili: sorular.filter((s) => s.uyarilar.length > 0).length,
       gorsel: new Set(sonuc.hazir.flatMap((h) => h.gorseller.map((g) => g.dosya))).size,
       yeniKazanim: yeniKazanimlar.size,
+      ipuclu: sonuc.hazir.filter((h) => h.hints).length,
+      videolu: sonuc.hazir.filter((h) => h.videoUrl).length,
     },
     genelUyarilar,
     sorular,
@@ -380,6 +386,9 @@ export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Pro
               stemText: q.stemText,
               fingerprint: q.fingerprint,
               solution: q.solution ?? undefined,
+              // Boşsa yazılmaz (null kalır): "ipucu yok" ile "boş liste" ayrı durum olmasın.
+              hints: q.hints ?? undefined,
+              videoUrl: q.videoUrl,
               difficulty: q.difficulty,
               targetTimeSeconds: q.targetTimeSeconds,
               status: yayinla ? "PUBLISHED" : "DRAFT",
@@ -484,11 +493,14 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
   }
   const damga = staffStamp(staff);
 
+  // Bir denemenin sabit listesindeki soru da silinmez (PackageQuestion →
+  // Question, onDelete: Restrict): silme işlemi patlardı, olmasa deneme eksik
+  // kalırdı. Korunanlar arasında sayılır; önce denemeden çıkarılmalı.
   const sorular = await db.question.findMany({
     where: { importBatchId: partiId },
-    select: { id: true, objectiveId: true, _count: { select: { items: true } } },
+    select: { id: true, objectiveId: true, _count: { select: { items: true, packageLinks: true } } },
   });
-  const silinecek = sorular.filter((s) => s._count.items === 0);
+  const silinecek = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks === 0);
   const kazanimAdaylari = [...new Set(silinecek.map((s) => s.objectiveId).filter((x): x is string => Boolean(x)))];
 
   const sonuc = await db.$transaction(
@@ -497,7 +509,12 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
       // Şıklar Choice → Question (onDelete: Cascade) ile gider.
       const silinen = silinecek.length
         ? await tx.question.deleteMany({
-            where: { id: { in: silinecek.map((s) => s.id) }, importBatchId: partiId, items: { none: {} } },
+            where: {
+              id: { in: silinecek.map((s) => s.id) },
+              importBatchId: partiId,
+              items: { none: {} },
+              packageLinks: { none: {} },
+            },
           })
         : { count: 0 };
       const kalan = await tx.question.count({ where: { importBatchId: partiId } });
@@ -584,7 +601,7 @@ export interface PartiSatiri {
   /** Partide şu an duran sorular ve durumları. */
   kalan: number;
   durumlar: Record<string, number>;
-  /** Öğrenci testine girmiş (geri almada korunacak) sorular. */
+  /** Öğrenci testine girmiş ya da denemede olan (geri almada korunacak) sorular. */
   korunacak: number;
   /** Atlanan soruların listesi (ImportBatch.errors). */
   atlananlar: { satir: number; sebep: string; etiket: string }[];
@@ -631,7 +648,8 @@ export async function partiGecmisi(adet = 50): Promise<PartiSatiri[]> {
         db.question.groupBy({ by: ["importBatchId", "status"], where: { importBatchId: { in: idler } }, _count: { _all: true } }),
         db.question.groupBy({
           by: ["importBatchId"],
-          where: { importBatchId: { in: idler }, items: { some: {} } },
+          // Geri almada korunacaklar: öğrenciye sorulmuş ya da bir denemenin listesinde.
+          where: { importBatchId: { in: idler }, OR: [{ items: { some: {} } }, { packageLinks: { some: {} } }] },
           _count: { _all: true },
         }),
       ])

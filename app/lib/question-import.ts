@@ -17,6 +17,9 @@
  * 300 soruluk dosyayı tek turda düzeltebilsin. Sıra eski betiğin sırası;
  * `hatalar[0]` betiğin raporuna yazdığı satırdır (komut satırı raporu
  * değişmesin diye). Sonradan eklenen kurallar en sonda denetlenir.
+ *
+ * Ekim 2026 eklemeleri (şablon §2, §4): `İpucu` (en fazla 3, alan tekrar
+ * yazılır), `Video` (YouTube/Vimeo) ve çözümde adım ayırıcı `---`.
  */
 import { ERROR_TYPES } from "./error-types";
 import { konuSinavdaMi } from "./exam-scope";
@@ -24,8 +27,13 @@ import { EXAM_SCOPES } from "./exams";
 import { markupToContent } from "./question-markup";
 import {
   CHOICE_LABELS,
+  MAX_HINTS,
+  containsStepBreak,
   deriveQuestionFields,
+  hintsSchema,
+  parseVideoUrl,
   safeParseQuestionContent,
+  splitSolutionSteps,
   validateChoices,
   type ChoiceDraft,
   type InlineNode,
@@ -67,7 +75,21 @@ const BILINEN_ALANLAR = new Set([
   "secenekler",
   "dogru sik",
   "cozum aciklamasi",
+  "video",
 ]);
+
+/**
+ * İpucu alanı: `İpucu` en fazla üç kez yazılır, sırası açılış sırasıdır.
+ * "İpucu 1", "İpucu 2" diye numaralı yazan da aynı alana düşer — numara
+ * yalnızca okunurluk için, sıra yine dosyadaki sıra.
+ */
+const IPUCU_ALANI = /^ipucu(?: [1-9])?$/;
+
+/** İpucu alanlarının iç anahtarı: `alanlar` sözlüğüne yazılmaz, `ipuclari` listesine gider. */
+const IPUCU = "\u0000ipucu";
+
+/** Tek başına çizgi: `---` (question-markup.ts'teki adım ayırıcıyla aynı desen). */
+const AYIRICI = /^-{3,}$/;
 
 /** v2'den kalan ya da sık karıştırılan alanlar: yok sayılır, nedeni söylenir. */
 const ESKI_ALANLAR: Record<string, string> = {
@@ -97,6 +119,8 @@ export interface HamSoru {
   /** İndirgenmiş alan adı → dosyada yazıldığı hâli, satırı, kaç kez yazıldığı. */
   alanBilgisi: Record<string, { ad: string; satir: number; kez: number }>;
   secenekler: HamSecenek[];
+  /** `İpucu` alanları dosyadaki sırayla (tekrar yazılabilen tek alan). */
+  ipuclari: { satir: number; metin: string }[];
 }
 
 /** `* **Alan:** değer` başlığını yakalar. Değer aynı satırda ya da sonraki satırlarda. */
@@ -159,18 +183,40 @@ export function dosyayiCozumle(metin: string): HamSoru[] {
         alanlar: Object.create(null),
         alanBilgisi: Object.create(null),
         secenekler: [],
+        ipuclari: [],
       };
       sorular.push(mevcut);
       aktifAlan = null;
       continue;
     }
     if (!mevcut) continue;
-    if (s.trim() === "---") {
+    if (AYIRICI.test(s.trim())) {
+      /*
+       * Tek başına `---` iki anlama geliyor: soruyu kapatan çizgi ve çözümdeki
+       * adım ayırıcı. Ardından aynı alanın metni geliyorsa alanın İÇİNDE kalır
+       * (adım ayırıcı); başlık, yeni alan ya da dosya sonu geliyorsa alanı
+       * kapatır. Soru metnindeki ayırıcı da alanda kalır ki denetim "Soru
+       * Metni'nde --- var" desin: eskiden ondan sonraki metin sessizce düşüyordu.
+       */
+      if (aktifAlan && aktifAlan !== "secenekler" && alanDevamEdiyor(satirlar, i)) {
+        if (aktifAlan === IPUCU) {
+          const son = mevcut.ipuclari[mevcut.ipuclari.length - 1];
+          son.metin += "\n" + s.trim();
+        } else {
+          mevcut.alanlar[aktifAlan] += "\n" + s.trim();
+        }
+        continue;
+      }
       aktifAlan = null;
       continue;
     }
 
     const alan = s.match(ALAN);
+    if (alan && IPUCU_ALANI.test(ad(alan[1]))) {
+      aktifAlan = IPUCU;
+      mevcut.ipuclari.push({ satir: i + 1, metin: alan[2].trim() });
+      continue;
+    }
     if (alan) {
       aktifAlan = ad(alan[1]);
       const onceki = mevcut.alanBilgisi[aktifAlan];
@@ -194,25 +240,50 @@ export function dosyayiCozumle(metin: string): HamSoru[] {
       continue;
     }
 
-    // Çok satırlı alan devamı (soru metni, çözüm, kazanım adı…).
-    if (aktifAlan && aktifAlan !== "secenekler") {
+    // Çok satırlı alan devamı (soru metni, çözüm, ipucu, kazanım adı…).
+    if (aktifAlan === IPUCU) {
+      const son = mevcut.ipuclari[mevcut.ipuclari.length - 1];
+      son.metin = (son.metin + "\n" + s).replace(/^\n+/, "");
+    } else if (aktifAlan && aktifAlan !== "secenekler") {
       mevcut.alanlar[aktifAlan] = (mevcut.alanlar[aktifAlan] + "\n" + s).replace(/^\n+/, "");
     }
   }
 
-  for (const q of sorular) for (const k of Object.keys(q.alanlar)) q.alanlar[k] = q.alanlar[k].trim();
+  for (const q of sorular) {
+    for (const k of Object.keys(q.alanlar)) q.alanlar[k] = q.alanlar[k].trim();
+    for (const h of q.ipuclari) h.metin = h.metin.trim();
+  }
   return sorular;
 }
 
 /**
+ * `---` satırından sonra aynı alanın metni mi geliyor? İlk dolu satır
+ * başlık, alan, şık, kod bloğu ya da yine çizgi değilse evet; dosya sonu
+ * (ya da yalnızca boş satırlar) hayır.
+ */
+function alanDevamEdiyor(satirlar: readonly string[], i: number): boolean {
+  for (let j = i + 1; j < satirlar.length; j++) {
+    const t = satirlar[j].trim();
+    if (!t) continue;
+    return !(/^#{1,6}\s/.test(t) || ALAN.test(t) || SECENEK.test(t) || AYIRICI.test(t) || t.startsWith("```"));
+  }
+  return false;
+}
+
+/**
  * Dosyada `![alt](dosya)` ile anılan görsel adları (tekil, ilk geçiş sırasıyla).
- * Soru metninin yanında şık ve çözüm de taranır: oradaki görsel reddedilir
- * ama "kullanılmayan görsel" diye ayrıca uyarılmasın.
+ * Soru metninin yanında şık, çözüm ve ipucu da taranır: oradaki görsel
+ * reddedilir ama "kullanılmayan görsel" diye ayrıca uyarılmasın.
  */
 export function anilanGorseller(ham: readonly HamSoru[]): string[] {
   const adlar = new Set<string>();
   for (const q of ham) {
-    const metinler = [q.alanlar["soru metni"] ?? "", q.alanlar["cozum aciklamasi"] ?? "", ...q.secenekler.map((s) => s.metin)];
+    const metinler = [
+      q.alanlar["soru metni"] ?? "",
+      q.alanlar["cozum aciklamasi"] ?? "",
+      ...q.secenekler.map((s) => s.metin),
+      ...q.ipuclari.map((h) => h.metin),
+    ];
     for (const metin of metinler) for (const m of metin.matchAll(GORSEL)) adlar.add(m[2]);
   }
   return [...adlar];
@@ -263,6 +334,12 @@ export interface HazirSoru {
   stemText: string;
   fingerprint: string;
   solution: QuestionContent | null;
+  /** Çözümün adım sayısı (`---` ile ayrılır; ayırıcısız çözüm 1, çözümsüz 0). */
+  adimSayisi: number;
+  /** Kademeli ipuçları, açılış sırasıyla (en fazla MAX_HINTS); yoksa null. */
+  hints: QuestionContent[] | null;
+  /** Video çözüm: parseVideoUrl'in canonicalUrl'i; yoksa null. */
+  videoUrl: string | null;
   drafts: ChoiceDraft[];
   /** Şık sırasıyla; doğru şıkta null. */
   errorTypes: (string | null)[];
@@ -538,6 +615,51 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
     }
   }
 
+  // ── Adım ayırıcı, ipucu ve video (Ekim 2026) ───────────
+  // Ayırıcı yalnızca çözümde anlamlı: soru metninde öğrenci ekranı onu
+  // çizmez, metin ortadan bölünmüş görünürdü. Şıktaki ayırıcıyı yukarıda
+  // validateChoices yakalıyor.
+  if (stem && containsStepBreak(stem)) {
+    hata("Soru Metni'nde adım ayırıcı (---) var; ayırıcı yalnızca Çözüm Açıklaması'nda adımları ayırır.");
+  }
+
+  const yazilanIpuclari = q.ipuclari.filter((h) => h.metin.trim());
+  for (const h of q.ipuclari) if (!h.metin.trim()) uyari(`Boş İpucu alanı yok sayıldı (satır ${h.satir}).`);
+  const hints: QuestionContent[] = [];
+  if (yazilanIpuclari.length > MAX_HINTS) {
+    hata(
+      `En fazla ${MAX_HINTS} ipucu yazılabilir (şu an ${yazilanIpuclari.length}; fazlası satır ` +
+        yazilanIpuclari.slice(MAX_HINTS).map((h) => h.satir).join(", ") +
+        "). Daha fazlası çözümün kendisi olur."
+    );
+  }
+  yazilanIpuclari.forEach((h, i) => {
+    const sira = `${i + 1}. ipucu (satır ${h.satir})`;
+    // Görsel yalnızca soru metninde: ipucundaki dosya adı kimliğe çevrilmiyor.
+    for (const m of h.metin.matchAll(GORSEL)) hata(`${sira}: görsel var (${m[2]}); görsel yalnızca Soru Metni'nde kullanılabilir.`);
+    const p = safeParseQuestionContent(markupToContent(h.metin));
+    if (!p.success) hata(`${sira} çözümlenemedi.`);
+    else if (containsStepBreak(p.data)) hata(`${sira}: adım ayırıcı (---) olamaz; ipucu tek parça açılır, adımlar yalnızca çözümde.`);
+    else hints.push(p.data);
+  });
+  // Son güvence: şemanın kendi kuralı (sayı ve ayırıcı) — yukarıdakiler geçtiyse geçer.
+  if (hints.length && yazilanIpuclari.length <= MAX_HINTS && !hintsSchema.safeParse(hints).success) {
+    hata("İpuçları şemadan geçmedi.");
+  }
+
+  const videoHam = (a["video"] ?? "").trim();
+  let videoUrl: string | null = null;
+  if (videoHam) {
+    const v = parseVideoUrl(videoHam);
+    if (v) videoUrl = v.canonicalUrl;
+    else {
+      hata(
+        `Video bağlantısı tanınmadı: "${videoHam.length > 80 ? videoHam.slice(0, 80) + "…" : videoHam}". ` +
+          "Yalnızca YouTube (youtube.com/watch?v=…, youtu.be/…, shorts) ya da Vimeo (vimeo.com/123…) bağlantısı yazılır."
+      );
+    }
+  }
+
   // ── Uyarılar ───────────────────────────────────────────
   for (const [anahtar, bilgi] of Object.entries(q.alanBilgisi)) {
     // hasOwn: "constructor" diye yazılmış bir alan Object'in kendi alanına denk gelmesin.
@@ -566,6 +688,7 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
       ["Soru metnindeki", stem],
       ...drafts.map((d): [string, QuestionContent] => [`${d.label} şıkkındaki`, d.content]),
       ["Çözümdeki", solution],
+      ...hints.map((h, i): [string, QuestionContent] => [`${i + 1}. ipucundaki`, h]),
     ];
     let sayi = 0;
     for (const [yer, icerik] of yerler) {
@@ -602,6 +725,9 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
       stemText: turetilen.stemText,
       fingerprint: turetilen.fingerprint,
       solution,
+      adimSayisi: solution ? splitSolutionSteps(solution).length : 0,
+      hints: hints.length ? hints : null,
+      videoUrl,
       drafts,
       errorTypes,
       difficulty: zorluk,

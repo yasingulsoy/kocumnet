@@ -1,6 +1,7 @@
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { konuSinavdaMi } from "@/lib/exam-scope";
+import { denemeHazirMi } from "@/lib/deneme";
 
 /**
  * Soru seçimi — MVP'de adaptif DEĞİL, katmanlı sabit uzunluk (PLAN §5).
@@ -223,6 +224,37 @@ export async function selectQuestionsForPackage(
   }
 
   return { questions: shuffle(chosen), shortfalls, relaxedExposureCount };
+}
+
+/**
+ * Deneme sınavının soruları: paketin SABİT listesi (PackageQuestion), panelde
+ * kurulan sırayla — (sortOrder, id); sortOrder bilerek unique değil.
+ *
+ * Seçim yok, karıştırma yok, 30 günlük tekrar engeli yok: yüzdelik dilim
+ * ancak herkes aynı soruları aynı sırayla çözerse anlamlı. Öğrencinin bu
+ * soruları daha önce görmüş olması denemeyi açmaya engel değil; tekrar
+ * çözülen deneme karşılaştırma havuzuna zaten girmiyor (lib/checkup.ts).
+ *
+ * Liste tam ve tamamı yayında değilse `hazir: false` döner (kural
+ * lib/deneme.ts denemeHazirMi); çağıran başlatmayı reddeder.
+ */
+export async function selectQuestionsForMock(
+  packageId: string,
+  questionCount: number
+): Promise<{ hazir: boolean; questions: SelectedQuestion[] }> {
+  const satirlar = await prisma.packageQuestion.findMany({
+    where: { packageId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: { question: { select: { id: true, topicId: true, version: true, status: true } } },
+  });
+  const yayinda = satirlar.filter((s) => s.question.status === "PUBLISHED");
+  const hazir = denemeHazirMi({ toplam: satirlar.length, yayinda: yayinda.length }, questionCount);
+  return {
+    hazir,
+    questions: hazir
+      ? yayinda.map((s) => ({ id: s.question.id, topicId: s.question.topicId, version: s.question.version }))
+      : [],
+  };
 }
 
 /**

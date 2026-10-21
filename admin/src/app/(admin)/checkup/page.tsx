@@ -6,10 +6,12 @@ import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { BLUEPRINT_KINDS, PACKAGE_STATE_LABEL, loadPackageHealth } from "@/lib/checkup/pool";
 import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
+import { acikBildirimSayisi } from "@/lib/checkup/student-reports";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { TestGrafigi } from "@/components/checkup/Grafikler";
+import { KocaSoruKutusu } from "@/components/checkup/KocaSoruKutusu";
 import { PACKAGE_STATE_COLOR } from "@/components/checkup/ui";
 import { ChartCard } from "@/components/tailadmin/charts/ChartCard";
 import { MeterList } from "@/components/tailadmin/charts/MeterList";
@@ -218,7 +220,17 @@ export default async function CheckupOverviewPage() {
   // ── İçerik kuyruğu: içerik ekibinin "sırada ne var" listesi ──
   const bulgulu = analiz.filter((x) => x.bulgular.length > 0).length;
   const anahtarSupheli = analiz.filter((x) => x.bulgular.some((b) => b.key === "ters")).length;
+  // Açık öğrenci hata bildirimi (kuyruğun ilk kutusu): öğrenci bir sorunu
+  // görüp yazmış, en acil iş. Tek sayım, indeksli (kind, resolvedAt).
+  const acikBildirim = await acikBildirimSayisi();
   const kuyruk: { href: string; label: string; sayi: number; renk: BadgeColor; aciklama: string }[] = [
+    {
+      href: "/checkup/bildirimler",
+      label: "Açık hata bildirimi",
+      sayi: acikBildirim,
+      renk: "error",
+      aciklama: "Öğrencilerin “bu soruda hata var” bildirimleri",
+    },
     {
       href: "/checkup/sorular?durum=REVIEW",
       label: "İncelemede",
@@ -292,6 +304,9 @@ export default async function CheckupOverviewPage() {
           {engelli.map((p) => p.name).join(", ")}. Öğrenci katalogda görüyor ama &quot;Başla&quot;ya basınca hata alır.
         </Alert>
       ) : null}
+
+      {/* Cevap bekleyen "Koça sor" soruları: yalnızca cevaplayabilen rollere (kendi sorgusu var). */}
+      {yazabilir ? <KocaSoruKutusu /> : null}
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-7">

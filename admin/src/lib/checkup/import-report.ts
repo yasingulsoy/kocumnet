@@ -73,6 +73,12 @@ export interface RaporSorusu {
     yeniKazanim: boolean;
     sinavlar: string[];
     gorselSayisi: number;
+    /** Kademeli ipucu sayısı (0-3). */
+    ipucuSayisi: number;
+    /** Video çözüm (canonicalUrl) ya da null. */
+    video: string | null;
+    /** Çözümün adım sayısı: `---` ile ayrılır; çözümsüz 0. */
+    adimSayisi: number;
   } | null;
   /** Çift kayıt: aynı metnin dosyadaki ilk satırı ya da havuzdaki soru. */
   cift: { dosyadaSatir?: number; havuzdakiSoruId?: string } | null;
@@ -81,6 +87,8 @@ export interface RaporSorusu {
     soru: string;
     secenekler: { harf: string; metin: string; dogru: boolean }[];
     cozum: string;
+    /** Dolu ipuçlarının yazımı, dosyadaki sırayla. */
+    ipuclari: string[];
   };
 }
 
@@ -93,6 +101,9 @@ export interface IceAktarmaRaporu {
     uyarili: number;
     gorsel: number;
     yeniKazanim: number;
+    /** Geçerli sorulardan ipucu / video çözüm içerenler. */
+    ipuclu: number;
+    videolu: number;
   };
   /** Dosyanın geneline dair uyarılar (tek sorulu kazanım, kullanılmayan görsel…). */
   genelUyarilar: string[];

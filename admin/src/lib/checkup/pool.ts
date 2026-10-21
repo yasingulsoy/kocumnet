@@ -4,6 +4,7 @@ import { db } from "./db";
 import { sqlKendisiYaDaKonusuSinavda, sqlKonuSinavda } from "./exam-scope";
 import { MIN_L1_PER_OBJECTIVE, levelSizes } from "./levels";
 import type { HavuzSayisi } from "./package-rules";
+import { denemeEngelleri } from "./mock-rules";
 
 /** Ham sorgulardaki sınav ifadeleri (sütun; kullanıcı girdisi değil). */
 const PAKET_SINAVI = Prisma.raw('p."examScope"');
@@ -82,7 +83,7 @@ export async function loadTopicPool(): Promise<TopicPoolRow[]> {
 // Paketler
 // ─────────────────────────────────────────────────────────────
 
-export type PackageKind = "STANDARD" | "INTRO" | "RETEST" | "LEVEL";
+export type PackageKind = "STANDARD" | "INTRO" | "RETEST" | "LEVEL" | "MOCK" | "PRACTICE";
 export type PackageState = "ready" | "narrow" | "blocked";
 
 /** Konu dağılımı olan paketler (katalog). Tekrar testi ve seviyeli paketin dağılımı yok. */
@@ -135,6 +136,8 @@ export interface PackageHealth {
   retest: { ready: number; total: number } | null;
   /** Seviyeli check-up: seviye başına hazırlık. */
   level: LevelReadiness | null;
+  /** Deneme: sabit listenin durumu (mock-rules.ts ListeDurumu) ve yayın engelleri. */
+  mock: { listede: number; yayindaOlmayan: Record<string, number>; sinavDisi: number; engeller: string[] } | null;
   state: PackageState;
   /** Durumun tek cümlelik açıklaması — tabloda ve yayın engeli mesajında. */
   summary: string;
@@ -156,6 +159,13 @@ interface RawRetest {
   packageId: string;
   total: number;
   ready: number;
+}
+
+interface RawMock {
+  packageId: string;
+  status: string;
+  n: number;
+  sinavDisi: number;
 }
 
 interface RawLevel {
@@ -183,7 +193,7 @@ interface RawLevel {
  * uyguluyor: konusu paketin sınavında değilse kapsamı boş soru gelmez.
  */
 export async function loadPackageHealth(): Promise<PackageHealth[]> {
-  const [packages, blueprint, retest, level] = await Promise.all([
+  const [packages, blueprint, retest, level, mock] = await Promise.all([
     db.package.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: {
@@ -232,6 +242,19 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
       GROUP BY p.id
     `,
     db.$queryRaw<RawLevel[]>(seviyeliHazirlikSorgusu()),
+    // Deneme: sabit liste — kaç soru, kaçı yayında değil (duruma göre), kaçı
+    // paketin sınavında sorulamıyor. Kural lib/checkup/mock-rules.ts denemeEngelleri.
+    db.$queryRaw<RawMock[]>`
+      SELECT pq."packageId", q.status::text AS status,
+             count(*)::int AS n,
+             count(*) FILTER (WHERE NOT ${sqlKendisiYaDaKonusuSinavda("q", "t", PAKET_SINAVI)})::int AS "sinavDisi"
+      FROM "PackageQuestion" pq
+      JOIN "Package" p ON p.id = pq."packageId"
+      JOIN "Question" q ON q.id = pq."questionId"
+      JOIN "Topic" t ON t.id = q."topicId"
+      WHERE p.kind = 'MOCK'
+      GROUP BY pq."packageId", q.status
+    `,
   ]);
 
   const dagilim = new Map<string, BlueprintRow[]>();
@@ -251,6 +274,14 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
   }
   const tekrar = new Map(retest.map((r) => [r.packageId, r]));
   const seviyeli = new Map(level.map((r) => [r.packageId, r]));
+  const deneme = new Map<string, { listede: number; yayindaOlmayan: Record<string, number>; sinavDisi: number }>();
+  for (const r of mock) {
+    const d = deneme.get(r.packageId) ?? { listede: 0, yayindaOlmayan: {}, sinavDisi: 0 };
+    d.listede += Number(r.n);
+    d.sinavDisi += Number(r.sinavDisi);
+    if (r.status !== "PUBLISHED") d.yayindaOlmayan[r.status] = Number(r.n);
+    deneme.set(r.packageId, d);
+  }
 
   return packages.map((p): PackageHealth => {
     const kind = p.kind as PackageKind;
@@ -277,7 +308,22 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
       blocking,
       retest: null,
       level: null,
+      mock: null,
     };
+
+    if (kind === "MOCK") {
+      // Konu dağılımı yok (PackageTopic satırı gerekmez): ölçü sabit listenin kendisi.
+      const d = deneme.get(p.id) ?? { listede: 0, yayindaOlmayan: {}, sinavDisi: 0 };
+      const engeller = denemeEngelleri({ soruSayisi: p.questionCount, ...d });
+      return {
+        ...base,
+        gaps: [],
+        blocking: [],
+        mock: { ...d, engeller },
+        state: engeller.length ? "blocked" : "ready",
+        summary: engeller.length ? engeller.join(" ") : "Liste tam: " + d.listede + " soru, hepsi yayında.",
+      };
+    }
 
     if (kind === "RETEST") {
       const r = tekrar.get(p.id);

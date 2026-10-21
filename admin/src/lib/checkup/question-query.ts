@@ -22,6 +22,28 @@ export const EKSIK = {
 } as const satisfies Record<string, { label: string; where: Prisma.QuestionWhereInput }>;
 export type EksikKey = keyof typeof EKSIK;
 
+/*
+ * Ek içerik süzgeci — ipucu, video, adımlı çözüm. Tek seçim kutusu: listenin
+ * süzgeç satırı zaten kalabalık. "Yok" seçenekleri içerik ekibinin "hangi
+ * soruya ipucu yazmadık" sorusu için.
+ *
+ * İpucu: kayıt yolları ipucusuz soruya null yazıyor; elle düzenlenmiş bir
+ * satırda boş dizi de "ipucu yok" sayılsın. Adımlı çözüm: çözümün blok
+ * dizisinde en az bir `step_break` (jsonb @> ile).
+ */
+const IPUCU_YOK: Prisma.QuestionWhereInput[] = [{ hints: { equals: Prisma.AnyNull } }, { hints: { equals: [] } }];
+export const ICERIK = {
+  ipucu: { label: "İpucu var", where: { NOT: IPUCU_YOK } },
+  ipucusuz: { label: "İpucu yok", where: { OR: IPUCU_YOK } },
+  video: { label: "Video çözüm var", where: { videoUrl: { not: null } } },
+  videosuz: { label: "Video çözüm yok", where: { videoUrl: null } },
+  adimli: { label: "Adımlı çözüm", where: { solution: { path: ["blocks"], array_contains: [{ type: "step_break" }] } } },
+} as const satisfies Record<string, { label: string; where: Prisma.QuestionWhereInput }>;
+export type IcerikKey = keyof typeof ICERIK;
+
+/** Açık öğrenci bildirimi (QuestionNote, STUDENT_REPORT). */
+const ACIK_BILDIRIM: Prisma.QuestionNoteWhereInput = { kind: "STUDENT_REPORT", resolvedAt: null };
+
 export interface ListeSuzgeci {
   ara: string;
   konu: string;
@@ -30,8 +52,11 @@ export interface ListeSuzgeci {
   kazanim: string;
   /** Toplu içe aktarma (ImportBatch) kimliği: yalnızca o dosyadan gelen sorular. */
   parti: string;
-  /** "acik": çözülmemiş inceleme notu olan sorular. */
+  /** "acik": çözülmemiş inceleme notu YA DA öğrenci bildirimi olan sorular (ikisi de QuestionNote). */
   not: "acik" | "";
+  /** "acik": çözülmemiş öğrenci bildirimi olan sorular. */
+  bildirim: "acik" | "";
+  icerik: IcerikKey | "";
   sayfa: number;
 }
 
@@ -53,6 +78,8 @@ export function listeSuzgeci(sp: Params): ListeSuzgeci {
     // Kimlik biçimi dışındaki değer süzgeç sayılmaz (sorgu yine parametreli).
     parti: /^[a-z0-9]{1,64}$/i.test(tek(sp.parti)) ? tek(sp.parti) : "",
     not: tek(sp.not) === "acik" ? "acik" : "",
+    bildirim: tek(sp.bildirim) === "acik" ? "acik" : "",
+    icerik: Object.hasOwn(ICERIK, tek(sp.icerik)) ? (tek(sp.icerik) as IcerikKey) : "",
     sayfa: Math.max(1, Math.floor(Number(tek(sp.sayfa) || 1)) || 1),
   };
 }
@@ -76,15 +103,21 @@ export function listeKosulu(s: ListeSuzgeci): Prisma.QuestionWhereInput {
       }
     : null;
 
-  return {
-    ...(s.konu ? { topic: { slug: s.konu } } : {}),
-    ...(s.durum ? { status: s.durum } : {}),
-    ...(s.kazanim ? { objective: { code: s.kazanim.toUpperCase() } } : {}),
-    ...(s.parti ? { importBatchId: s.parti } : {}),
-    ...(s.not ? { notes: { some: { resolvedAt: null } } } : {}),
-    ...(s.eksik ? EKSIK[s.eksik].where : {}),
-    ...(arama ? { AND: [arama] } : {}),
-  };
+  // Koşullar AND listesinde: aynı alana bakan iki süzgeç (çözümsüz + adımlı
+  // çözüm, açık not + açık bildirim) nesneye yayılınca biri ötekini EZERDİ.
+  const kosullar: Prisma.QuestionWhereInput[] = [
+    ...(s.konu ? [{ topic: { slug: s.konu } }] : []),
+    ...(s.durum ? [{ status: s.durum }] : []),
+    ...(s.kazanim ? [{ objective: { code: s.kazanim.toUpperCase() } }] : []),
+    ...(s.parti ? [{ importBatchId: s.parti }] : []),
+    // Personel notu ya da öğrenci bildirimi: ikisi de "bakılacak" demek.
+    ...(s.not ? [{ notes: { some: { resolvedAt: null } } }] : []),
+    ...(s.bildirim ? [{ notes: { some: ACIK_BILDIRIM } }] : []),
+    ...(s.eksik ? [EKSIK[s.eksik].where] : []),
+    ...(s.icerik ? [ICERIK[s.icerik].where] : []),
+    ...(arama ? [arama] : []),
+  ];
+  return kosullar.length ? { AND: kosullar } : {};
 }
 
 /** Son düzenlenen üstte; eşitlikte kimlik — sayfalama ve komşular kararlı olsun. */

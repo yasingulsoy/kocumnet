@@ -14,9 +14,15 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { alistirmaCevaplaAction } from "@/lib/actions/practice";
+import { alistirmaCevaplaAction, ipucuAlAction } from "@/lib/actions/practice";
+import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
+import { CozumAdimlari } from "@/components/CozumAdimlari";
 import { GorselBuyutec, useGorselBuyutec } from "@/components/GorselBuyutec";
+import { HataBildir } from "@/components/HataBildir";
+import { Karalama, eskiKaralamalariTemizle, karalamalariTemizle } from "@/components/Karalama";
+import { KocaSorDugmesi } from "@/components/KocaSor";
 import { OkumaBetigi, OkumaBoyuDugmeleri, useOkumaBoyu } from "@/components/OkumaBoyu";
+import { VideoCozum } from "@/components/VideoCozum";
 import { Logo } from "@/components/ui/logo";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Badge, type BadgeColor } from "@/components/tailadmin/ui/Badge";
@@ -44,9 +50,17 @@ export interface PracticeFeedbackView {
   correctChoiceId: string | null;
   errorLabel: string | null;
   errorAdvice: string | null;
-  solution: ReactNode | null;
+  /** Çözümün adımları (sunucuda bölünüp çizildi); tek adımlı çözümde bir eleman. */
+  cozumAdimlari: ReactNode[] | null;
   /** Yanlış defteri: bu cevaptan sonra madde ne oldu (yalnızca tekrarda). */
   note?: string | null;
+  /** Cevaptan önce açılan ipucu sayısı. */
+  ipucuSayisi: number;
+  video: { embedUrl: string; provider: "youtube" | "vimeo" } | null;
+  /** Yanlış ya da boş cevapta kazanım özet kartı (sunucuda çizildi). */
+  kazanim: ReactNode | null;
+  rapor: RaporDurumu | null;
+  kocaSoru: KocaSoruDurumu | null;
 }
 
 export interface PracticeQuestionView {
@@ -55,6 +69,11 @@ export interface PracticeQuestionView {
   topicName: string;
   stem: ReactNode;
   choices: PracticeChoiceView[];
+  /**
+   * Kademeli ipucu: toplam sayı ve YALNIZCA açılmış olanlar (sunucuda
+   * çizildi). Açılmamış ipucunun içeriği sayfaya hiç girmez.
+   */
+  ipucu: { toplam: number; acilan: ReactNode[] };
   feedback: PracticeFeedbackView | null;
 }
 
@@ -115,6 +134,7 @@ export function PracticeRunner({
   const [hata, setHata] = useState<string | null>(null);
   const [oturumYok, setOturumYok] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [ipucuPending, startIpucu] = useTransition();
   // Okuma rahatlığı (yalnızca görünüm): yazı boyu ve şekli tam ekranda büyütme.
   const [okumaBoyu, setOkumaBoyu] = useOkumaBoyu();
   const { gorsel, yakala: gorselYakala, kapat: gorselKapat, acikRef: gorselAcikRef } = useGorselBuyutec();
@@ -123,6 +143,14 @@ export function PracticeRunner({
   const cevapli = Boolean(current?.feedback);
   const kilitli = cevapli || closed || pending;
   const secili = current ? (secim[current.id] ?? null) : null;
+
+  // ── karalama: eskileri temizle; alıştırma kapanınca bunun karalamaları da gitsin ──
+  useEffect(() => {
+    eskiKaralamalariTemizle();
+  }, []);
+  useEffect(() => {
+    if (closed) karalamalariTemizle(sessionId);
+  }, [closed, sessionId]);
 
   // ── süre (yalnızca kayıt için; ekranda sayaç yok) ──────────
   const gosterildiRef = useRef(0);
@@ -179,6 +207,29 @@ export function PracticeRunner({
     [current, kilitli, sessionId]
   );
 
+  /*
+   * İpucu: sunucu sayacı artırır ve sayfayı yeniden çizdirir; açılan ipucu
+   * sunucuda çizilip props'la gelir (içerik eylemin dönüşünde yok).
+   */
+  const ipucuAl = useCallback(
+    (sira: number) => {
+      if (!current || kilitli || ipucuPending) return;
+      setHata(null);
+      startIpucu(async () => {
+        try {
+          const r = await ipucuAlAction({ sessionId, questionId: current.id, sira });
+          if (!r.ok) {
+            if (r.oturumYok) setOturumYok(true);
+            setHata(r.error ?? "İpucu açılamadı.");
+          }
+        } catch {
+          setHata("Bağlantı koptu, ipucu açılamadı. Tekrar dene.");
+        }
+      });
+    },
+    [current, ipucuPending, kilitli, sessionId]
+  );
+
   const sec = useCallback(
     (choiceId: string) => {
       if (!current || kilitli) return;
@@ -196,6 +247,8 @@ export function PracticeRunner({
       if (hedef instanceof HTMLElement && (hedef.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(hedef.tagName))) {
         return;
       }
+      // Açık pencere (hata bildirimi, koça sor): Enter onun düğmesinin işi.
+      if (hedef instanceof Element && hedef.closest("dialog")) return;
       if (cevapli) {
         if (e.key === "ArrowRight" || e.key === "Enter") {
           // Odak bir bağlantıdaysa Enter onun işi.
@@ -298,63 +351,108 @@ export function PracticeRunner({
           />
         ) : current ? (
           <>
-            {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
-            <article
-              key={current.id}
-              aria-labelledby={baslikId}
-              onClick={gorselYakala}
-              className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
-            >
-              <div className="flex items-center gap-2">
-                <h1
-                  id={baslikId}
-                  className="tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-2 font-display text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
-                >
-                  <span className="sr-only">Soru </span>
-                  {index + 1}
-                  <span className="sr-only"> / {questions.length}</span>
-                </h1>
-                <span className="min-w-0 truncate rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 sm:py-1 sm:text-theme-xs">
-                  {current.topicName}
-                </span>
-                <span className="ms-auto shrink-0 text-[11px] font-medium text-gray-500 sm:text-theme-xs">Süre yok</span>
-              </div>
-
-              <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
-                <div className="okuma">{current.stem}</div>
-              </div>
-
-              <div
-                role={cevapli ? "list" : "radiogroup"}
-                aria-label={`Soru ${index + 1} şıkları`}
-                className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5"
+            {/* Karalama: soru kartının üstüne çizilen tuval (components/Karalama.tsx);
+                soru başına bu cihazda saklı, alıştırma kapanınca silinir. */}
+            <Karalama key={current.id} oturumId={sessionId} soruId={current.id}>
+              {/* Şekle dokununca tam ekran (MathContent'in düğmesi; tıklama burada yakalanır). */}
+              <article
+                key={current.id}
+                aria-labelledby={baslikId}
+                onClick={gorselYakala}
+                className="animate-rise rounded-2xl border border-gray-200 bg-white p-4 sm:p-8"
               >
-                {current.choices.map((c) => {
-                  const fb = current.feedback;
-                  if (fb) {
-                    const dogruSik = c.id === fb.correctChoiceId;
-                    const benim = c.id === fb.selectedChoiceId;
+                <div className="flex items-center gap-2">
+                  <h1
+                    id={baslikId}
+                    className="tabular flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500 px-2 font-display text-[13px] font-bold text-white sm:h-8 sm:min-w-8 sm:text-sm"
+                  >
+                    <span className="sr-only">Soru </span>
+                    {index + 1}
+                    <span className="sr-only"> / {questions.length}</span>
+                  </h1>
+                  <span className="min-w-0 truncate rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 sm:py-1 sm:text-theme-xs">
+                    {current.topicName}
+                  </span>
+                  <span className="ms-auto shrink-0 text-[11px] font-medium text-gray-500 sm:text-theme-xs">Süre yok</span>
+                </div>
+
+                <div className="mt-4 text-read leading-relaxed text-gray-800 sm:mt-5">
+                  <div className="okuma">{current.stem}</div>
+                </div>
+
+                <div
+                  role={cevapli ? "list" : "radiogroup"}
+                  aria-label={`Soru ${index + 1} şıkları`}
+                  className="mt-5 space-y-2 sm:mt-6 sm:space-y-2.5"
+                >
+                  {current.choices.map((c) => {
+                    const fb = current.feedback;
+                    if (fb) {
+                      const dogruSik = c.id === fb.correctChoiceId;
+                      const benim = c.id === fb.selectedChoiceId;
+                      return (
+                        <div
+                          key={c.id}
+                          role="listitem"
+                          className={cn(
+                            "flex min-h-[var(--tap-comfort)] items-center gap-3 rounded-xl border-2 px-3 py-3 sm:gap-4 sm:px-4",
+                            dogruSik
+                              ? "border-success-500 bg-success-50"
+                              : benim
+                                ? "border-error-300 bg-error-50"
+                                : "border-transparent bg-gray-50"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                              dogruSik
+                                ? "bg-success-600 text-white"
+                                : benim
+                                  ? "bg-error-600 text-white"
+                                  : "bg-white text-gray-500 ring-1 ring-gray-200 ring-inset"
+                            )}
+                          >
+                            {c.label}
+                          </span>
+                          <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
+                            <span className="okuma block">{c.content}</span>
+                          </span>
+                          {dogruSik ? (
+                            <Badge size="sm" color="success">
+                              Doğru
+                            </Badge>
+                          ) : benim ? (
+                            <Badge size="sm" color="error">
+                              Seninki
+                            </Badge>
+                          ) : null}
+                        </div>
+                      );
+                    }
+                    const bu = secili === c.id;
                     return (
-                      <div
+                      <button
                         key={c.id}
-                        role="listitem"
+                        type="button"
+                        role="radio"
+                        aria-checked={bu}
+                        disabled={kilitli}
+                        onClick={() => sec(c.id)}
                         className={cn(
-                          "flex min-h-[var(--tap-comfort)] items-center gap-3 rounded-xl border-2 px-3 py-3 sm:gap-4 sm:px-4",
-                          dogruSik
-                            ? "border-success-500 bg-success-50"
-                            : benim
-                              ? "border-error-300 bg-error-50"
-                              : "border-transparent bg-gray-50"
+                          "group flex w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
+                          "min-h-[var(--tap-comfort)] disabled:cursor-default",
+                          bu
+                            ? "border-brand-500 bg-brand-25"
+                            : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:bg-gray-50"
                         )}
                       >
                         <span
                           className={cn(
-                            "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                            dogruSik
-                              ? "bg-success-600 text-white"
-                              : benim
-                                ? "bg-error-600 text-white"
-                                : "bg-white text-gray-500 ring-1 ring-gray-200 ring-inset"
+                            "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition",
+                            bu
+                              ? "bg-brand-500 text-white"
+                              : "bg-gray-100 text-gray-700 ring-1 ring-gray-300 ring-inset group-hover:ring-gray-400"
                           )}
                         >
                           {c.label}
@@ -362,62 +460,35 @@ export function PracticeRunner({
                         <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
                           <span className="okuma block">{c.content}</span>
                         </span>
-                        {dogruSik ? (
-                          <Badge size="sm" color="success">
-                            Doğru
-                          </Badge>
-                        ) : benim ? (
-                          <Badge size="sm" color="error">
-                            Seninki
-                          </Badge>
-                        ) : null}
-                      </div>
+                        {bu ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
+                      </button>
                     );
-                  }
-                  const bu = secili === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={bu}
-                      disabled={kilitli}
-                      onClick={() => sec(c.id)}
-                      className={cn(
-                        "group flex w-full cursor-pointer touch-manipulation items-center gap-3 rounded-xl border-2 px-3 py-3 text-start transition sm:gap-4 sm:px-4",
-                        "min-h-[var(--tap-comfort)] disabled:cursor-default",
-                        bu
-                          ? "border-brand-500 bg-brand-25"
-                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 active:bg-gray-50"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition",
-                          bu
-                            ? "bg-brand-500 text-white"
-                            : "bg-gray-100 text-gray-700 ring-1 ring-gray-300 ring-inset group-hover:ring-gray-400"
-                        )}
-                      >
-                        {c.label}
-                      </span>
-                      <span className="min-w-0 flex-1 text-body text-gray-800 sm:text-base">
-                        <span className="okuma block">{c.content}</span>
-                      </span>
-                      {bu ? <CircleCheck className="size-5 shrink-0 text-brand-500" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+                  })}
+                </div>
 
-              {current.feedback ? (
-                <GeriBildirim fb={current.feedback} choices={current.choices} kararRef={kararRef} />
-              ) : closed ? (
-                <p className="mt-5 rounded-xl bg-gray-50 px-3.5 py-3 text-theme-sm text-gray-500">
-                  Alıştırma kapandı; bu soru cevaplanmadı. Çözümü, soruyu denemeden açılmaz.
-                </p>
-              ) : null}
-            </article>
+                <Ipuclari
+                  ipucu={current.ipucu}
+                  acilabilir={!cevapli && !closed}
+                  kilitli={kilitli}
+                  pending={ipucuPending}
+                  onAl={ipucuAl}
+                />
+
+                {current.feedback ? (
+                  <GeriBildirim
+                    fb={current.feedback}
+                    choices={current.choices}
+                    kararRef={kararRef}
+                    sessionId={sessionId}
+                    questionId={current.id}
+                  />
+                ) : closed ? (
+                  <p className="mt-5 rounded-xl bg-gray-50 px-3.5 py-3 text-theme-sm text-gray-500">
+                    Alıştırma kapandı; bu soru cevaplanmadı. Çözümü, soruyu denemeden açılmaz.
+                  </p>
+                ) : null}
+              </article>
+            </Karalama>
 
             {hata ? (
               <Alert variant="error" compact className="mt-4">
@@ -516,20 +587,80 @@ function Eylemler({
   );
 }
 
+/**
+ * Kademeli ipucu: açılmış ipuçları ve "İpucu al (2/3)". Sorunun ipucu yoksa
+ * hiçbir şey çizilmez. Cevaptan sonra açılmış ipuçları yerinde kalır (düğme
+ * gider); öğrenci çözümü ipuçlarıyla birlikte okuyabilsin.
+ */
+function Ipuclari({
+  ipucu,
+  acilabilir,
+  kilitli,
+  pending,
+  onAl,
+}: {
+  ipucu: PracticeQuestionView["ipucu"];
+  /** Cevaplanmamış ve oturum açık: yeni ipucu istenebilir. */
+  acilabilir: boolean;
+  kilitli: boolean;
+  pending: boolean;
+  onAl: (sira: number) => void;
+}) {
+  const { toplam, acilan } = ipucu;
+  if (toplam === 0 || (!acilabilir && acilan.length === 0)) return null;
+  const sira = acilan.length + 1;
+
+  return (
+    <section aria-label="İpuçları" className="mt-5 space-y-2.5 sm:mt-6">
+      <div aria-live="polite" className="space-y-2.5">
+        {acilan.map((h, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3">
+            <p className="tabular flex items-center gap-1.5 text-theme-xs font-semibold tracking-wide text-gray-600 uppercase">
+              <Lightbulb className="size-4 text-warning-500" aria-hidden /> İpucu {i + 1}
+              {toplam > 1 ? <span className="font-medium text-gray-400 normal-case">/ {toplam}</span> : null}
+            </p>
+            <div className="okuma mt-1.5 text-body leading-relaxed text-gray-800">{h}</div>
+          </div>
+        ))}
+      </div>
+      {acilabilir && sira <= toplam ? (
+        <Button
+          variant="outline"
+          size="xs"
+          startIcon={<Lightbulb className="text-warning-500" />}
+          loading={pending}
+          disabled={kilitli}
+          onClick={() => onAl(sira)}
+        >
+          <span className="tabular">
+            {pending ? "İpucu açılıyor…" : `İpucu al (${sira}/${toplam})`}
+          </span>
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
 function GeriBildirim({
   fb,
   choices,
   kararRef,
+  sessionId,
+  questionId,
 }: {
   fb: PracticeFeedbackView;
   choices: PracticeChoiceView[];
   kararRef: RefObject<HTMLHeadingElement | null>;
+  sessionId: string;
+  questionId: string;
 }) {
   const dogruHarf = choices.find((c) => c.id === fb.correctChoiceId)?.label ?? null;
   const ton = fb.isCorrect === true ? "ok" : fb.isCorrect === false ? "bad" : "neutral";
   const baslik =
     fb.isCorrect === true
-      ? "Doğru."
+      ? fb.ipucuSayisi > 0
+        ? "Doğru, ipucuyla."
+        : "Doğru."
       : fb.isCorrect === false
         ? `Yanlış. Doğrusu ${dogruHarf ?? "işaretli şık"}.`
         : `Boş bıraktın. Doğrusu ${dogruHarf ?? "işaretli şık"}.`;
@@ -572,18 +703,22 @@ function GeriBildirim({
         </div>
       ) : null}
 
-      {fb.solution ? (
-        <div className="rounded-xl border border-brand-100 bg-brand-25 p-3.5 sm:p-5">
-          <p className="flex items-center gap-2 text-theme-xs font-semibold tracking-wide text-brand-500 uppercase">
-            <Lightbulb className="size-4" aria-hidden /> Çözüm
-          </p>
-          <div className="mt-2.5 text-body leading-relaxed text-gray-800">
-            <div className="okuma">{fb.solution}</div>
-          </div>
-        </div>
+      {fb.cozumAdimlari && fb.cozumAdimlari.length > 0 ? (
+        <CozumAdimlari adimlar={fb.cozumAdimlari} />
       ) : (
         <p className="text-theme-xs text-gray-500">Bu soruya henüz çözüm eklenmemiş.</p>
       )}
+
+      {fb.video ? <VideoCozum embedUrl={fb.video.embedUrl} provider={fb.video.provider} /> : null}
+
+      {/* Yanlışın ardından: o kazanımın kısa özeti (özeti olmayan kazanımda yok). */}
+      {fb.kazanim}
+
+      {/* Takıldıysa koçuna, soruda hata gördüyse içerik ekibine. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3">
+        <KocaSorDugmesi questionId={questionId} sessionId={sessionId} durum={fb.kocaSoru} />
+        <HataBildir questionId={questionId} sessionId={sessionId} durum={fb.rapor} className="ms-auto" />
+      </div>
     </section>
   );
 }
