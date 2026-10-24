@@ -42,8 +42,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${base}${localizedPath(key, locale)}`,
       lastModified,
       changeFrequency:
-        key === "home" ? ("weekly" as const) : key === "blog" ? ("daily" as const) : ("monthly" as const),
-      priority: key === "home" ? 1 : key === "blog" ? 0.9 : 0.8,
+        key === "home"
+          ? ("weekly" as const)
+          : key === "blog"
+            ? ("daily" as const)
+            : key === "privacy"
+              ? ("yearly" as const)
+              : ("monthly" as const),
+      // Gizlilik sayfası aranacak bir içerik değil; listede durur ama öncelik düşük.
+      priority: key === "home" ? 1 : key === "blog" ? 0.9 : key === "privacy" ? 0.3 : 0.8,
       alternates: { languages: absolutise(base, languageAlternates(key)) },
     }))
   );

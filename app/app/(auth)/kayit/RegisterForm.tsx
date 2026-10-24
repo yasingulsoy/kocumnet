@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { registerAction, type FormState } from "@/lib/actions/auth";
+import { VELI_ONAYI_METNI } from "@/lib/legal";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Checkbox } from "@/components/tailadmin/form/Checkbox";
 import { Field } from "@/components/tailadmin/form/Field";
@@ -56,7 +57,9 @@ export function RegisterForm() {
       </Field>
 
       {/* KVKK onayı zorunlu: required ile tarayıcı, sunucuda da ayrıca denetleniyor.
-          Kutunun tamamı etiket: telefonda dokunma alanı geniş. */}
+          Kutunun tamamı etiket: telefonda dokunma alanı geniş.
+          Veli cümlesi gizlilik sayfasındakiyle AYNI (lib/legal.ts VELI_ONAYI_METNI).
+          Bu bir onay KAYDI değil, yalnızca beyan; veli onayının hukuki çözümü bekliyor. */}
       <Checkbox
         name="kvkk"
         required
@@ -70,7 +73,7 @@ export function RegisterForm() {
             okudum.
           </>
         }
-        description="18 yaşından küçüksem velimin bilgisi dahilinde kayıt oluyorum."
+        description={VELI_ONAYI_METNI}
       />
 
       <Button type="submit" size="md" block loading={pending}>

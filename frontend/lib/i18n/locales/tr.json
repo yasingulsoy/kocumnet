@@ -14,6 +14,7 @@
     "products": "Ürünlerimiz",
     "blog": "Blog",
     "contact": "İletişim",
+    "privacy": "Gizlilik",
     "checkup": "Matematik Check-up",
     "opensInNewTab": "yeni sekmede açılır",
     "menu": "Menü",
@@ -77,6 +78,7 @@
     "checkupPoint3": "Bu haftanın çalışma planı",
     "checkupCta": "Check-up'a başla",
     "checkupNote": "LGS · TYT · AYT · KPSS · DGS · ALES",
+    "checkupLangNote": "",
     "servicesEyebrow": "NE YAPIYORUZ",
     "servicesTitle": "Sınav sürecinin her aşamasında yanınızdayız",
     "servicesDesc": "Tercih danışmanlığından beslenme desteğine kadar altı başlıkta birebir hizmet.",
@@ -180,6 +182,8 @@
     "formMessage": "Mesajınız",
     "formMessagePlaceholder": "Mesajınızı yazın...",
     "formSend": "Gönder",
+    "privacyNote": "Gönderdiğiniz ad, e-posta ve mesaj yalnızca size dönüş yapmak için saklanır.",
+    "privacyLink": "Gizlilik metni",
     "quickTitle": "Hızlı iletişim",
     "quickSubtitle": "Sorularınızı yazın",
     "quickMessagePlaceholder": "Kısa mesajınız",
@@ -197,6 +201,52 @@
     "errEmailInvalid": "Geçerli bir e-posta adresi yazın, ör. ad@ornek.com",
     "errMessage": "Mesajınızı yazın.",
     "errMessageShort": "Mesajınızı biraz daha açar mısınız? En az 10 karakter."
+  },
+  "privacy": {
+    "title": "Gizlilik",
+    "metaDescription": "Koçum.Net iletişim formunun topladığı veriler, ne kadar saklandıkları, kullandığımız hizmet sağlayıcılar ve çerezler.",
+    "heroTitle": "Gizlilik ve kişisel veriler",
+    "heroSubtitle": "Siteyi gezerken ve bize yazarken hangi verilerin işlendiğini sade bir dille anlatıyoruz.",
+    "updated": "Son güncelleme: 22 Ekim 2026",
+    "intro": "Bu metin kocum.net için geçerlidir. Veri sorumlusu Koçum.Net'tir. Sorularınız ve talepleriniz için {email} adresine yazabilirsiniz.",
+    "browseTitle": "Siteyi gezerken",
+    "browse": [
+      "Siteyi gezmek için hesap açmanız ya da bilgi vermeniz gerekmez.",
+      "Sitenin kendisi ziyaretçilere çerez koymaz; analiz, reklam ya da izleme aracı kullanılmaz.",
+      "Yazı tipleri ve görseller kendi sunucularımızdan (kocum.net ve api.kocum.net) yüklenir.",
+      "Blog yazılarındaki görüntülenme sayacı yalnızca toplam sayıyı artırır; yazıyı kimin okuduğu kaydedilmez."
+    ],
+    "formTitle": "İletişim formu",
+    "formIntro": "Formu gönderdiğinizde mesajınız veritabanımıza kaydedilir ve ekibe bildirilir. Kaydedilenler:",
+    "formFields": [
+      "Adınız, e-posta adresiniz ve mesajınız; yazdıysanız konu. Amaç: size dönüş yapmak. Form telefon numarası sormaz.",
+      "Formun dili ve hangi formdan geldiği (iletişim sayfası ya da ana sayfadaki kısa form): yanıtı doğru dilde yazmak için.",
+      "IP adresinizin anahtarlı bir özeti (adresin kendisi değil) ve tarayıcı bilgisi (user agent): tekrar tekrar gelen istenmeyen mesajları tanımak için. Bu iki alan ekibin mesaj ekranında da gösterilmez."
+    ],
+    "formLimit": "Kötüye kullanımı önlemek için aynı IP adresinden saatte en fazla 5 mesaj kabul edilir. Bunun için IP adresiniz bir saat boyunca yalnızca sunucu belleğinde sayılır, kaydedilmez.",
+    "whoTitle": "Kim görür",
+    "whoBody": "Mesajları yalnızca Koçum.Net ekibinde mesaj kutusuna erişim yetkisi olan kişiler görür. Mesajınız reklam ya da pazarlama için kullanılmaz.",
+    "autoReplyTitle": "Otomatik yanıt",
+    "autoReplyBody": "Mesajınız ulaşınca yazdığınız adrese kısa bir “Mesajınız bize ulaştı” postası gider. Bu posta yazdığınız hiçbir şeyi (ad, mesaj) içermez ve aynı adrese 24 saatte en fazla bir kez gönderilir.",
+    "retentionTitle": "Ne kadar saklanır",
+    "retention": [
+      "Yanıtlanan ya da kapatılan mesajlarda kişisel bilgiler (ad, e-posta, konu, mesaj, IP özeti, tarayıcı bilgisi) gönderimden 2 yıl sonra silinir; geriye yalnızca mesajın tarihi ve durumu kalır.",
+      "İstenmeyen (spam) olarak işaretlenen mesajlarda bu süre 90 gündür.",
+      "Henüz yanıtlanmamış mesajlar size dönüş yapılana kadar saklanır.",
+      "Ekibe giden bildirim postası mesajınızın tam bir kopyasını taşır ve ekibin e-posta kutusunda kalır; bu kopya yukarıdaki otomatik silmenin dışındadır. Silinmesini isterseniz bize yazın."
+    ],
+    "providersTitle": "Hizmet sağlayıcılar",
+    "providers": [
+      "Cloudflare: sitenin bütün trafiği güvenlik ve hız için Cloudflare üzerinden geçer; istekleriniz (IP adresiniz dahil) bu yolda Cloudflare'den geçer.",
+      "E-posta gönderim hizmeti: ekibe giden bildirim ve size giden otomatik yanıt bir e-posta gönderim hizmeti aracılığıyla gönderilir; bu hizmet postaların alıcısını ve içeriğini görür."
+    ],
+    "cookiesTitle": "Çerezler",
+    "cookiesBody": "Ziyaretçilere çerez konmaz. Tek çerez, Koçum.Net personelinin site yönetimine (/admin) girişte kullandığı oturum çerezidir: 6 saat geçerlidir, yalnızca sunucu okur ve ziyaretçileri ilgilendirmez.",
+    "checkupTitle": "Matematik Check-up",
+    "checkupBody": "Matematik Check-up hesap açmanızı isteyen ayrı bir uygulamadır; topladığı veriler kendi gizlilik metninde anlatılır.",
+    "checkupLink": "Check-up gizlilik metni",
+    "rightsTitle": "Başvuru",
+    "rightsBody": "KVKK'nın 11. maddesindeki haklarınızı kullanmak, örneğin verilerinizin işlenip işlenmediğini öğrenmek ya da düzeltilmesini veya silinmesini istemek için {email} adresine yazabilirsiniz."
   },
   "blog": {
     "title": "Blog",

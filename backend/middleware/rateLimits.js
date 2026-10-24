@@ -25,7 +25,8 @@ const { ADMIN_JWT_COOKIE } = require('../utils/authCookie');
  *
  * IP = `req.clientIp` (middleware/clientIp.js): BFF_SHARED_SECRET tanımlıysa
  * site yönetiminden gelen isteklerde frontend'in imzaladığı GERÇEK tarayıcı
- * IP'si; değilse req.ip.
+ * IP'si; doğrudan gelen isteklerde, eş Cloudflare ise cf-connecting-ip,
+ * değilse req.ip.
  *
  * Geliştirmede sınırlar bilinçli olarak yüksek: yerelde kendimizi kilitlemeyelim.
  */

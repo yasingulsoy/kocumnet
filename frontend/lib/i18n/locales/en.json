@@ -14,6 +14,7 @@
     "products": "Products",
     "blog": "Blog",
     "contact": "Contact",
+    "privacy": "Privacy",
     "checkup": "Math Check-up",
     "opensInNewTab": "opens in a new tab",
     "menu": "Menu",
@@ -76,7 +77,8 @@
     "checkupPoint2": "The pattern behind your mistakes",
     "checkupPoint3": "This week's study plan",
     "checkupCta": "Start the check-up",
-    "checkupNote": "LGS · TYT · AYT · KPSS · DGS · ALES",
+    "checkupNote": "LGS · TYT · AYT · KPSS · DGS · ALES (in Turkish)",
+    "checkupLangNote": "The check-up is in Turkish.",
     "servicesEyebrow": "WHAT WE DO",
     "servicesTitle": "With you at every stage of the exam journey",
     "servicesDesc": "Six areas of one-to-one support, from university choice counselling to nutrition.",
@@ -180,6 +182,8 @@
     "formMessage": "Your message",
     "formMessagePlaceholder": "Write your message...",
     "formSend": "Send",
+    "privacyNote": "The name, email and message you send are kept only to get back to you.",
+    "privacyLink": "Privacy notice",
     "quickTitle": "Quick contact",
     "quickSubtitle": "Write your questions",
     "quickMessagePlaceholder": "Your short message",
@@ -197,6 +201,52 @@
     "errEmailInvalid": "Please enter a valid e-mail address, e.g. name@example.com",
     "errMessage": "Please write your message.",
     "errMessageShort": "Could you tell us a little more? At least 10 characters."
+  },
+  "privacy": {
+    "title": "Privacy",
+    "metaDescription": "What the Koçum.Net contact form collects, how long we keep it, the service providers we use, and cookies.",
+    "heroTitle": "Privacy and personal data",
+    "heroSubtitle": "A plain account of what data is processed when you browse the site and when you write to us.",
+    "updated": "Last updated: 22 October 2026",
+    "intro": "This notice applies to kocum.net. The data controller is Koçum.Net. For questions and requests, write to {email}.",
+    "browseTitle": "While you browse",
+    "browse": [
+      "You do not need an account, or to give us any information, to browse the site.",
+      "The site itself sets no cookies for visitors and uses no analytics, advertising or tracking tools.",
+      "Fonts and images are loaded from our own servers (kocum.net and api.kocum.net).",
+      "The view counter on blog posts only increases a total; who read a post is not recorded."
+    ],
+    "formTitle": "Contact form",
+    "formIntro": "When you send the form, your message is saved in our database and the team is notified. What is saved:",
+    "formFields": [
+      "Your name, email address and message, plus the subject if you wrote one: to get back to you. The form does not ask for a phone number.",
+      "The language of the form and which form it came from (the contact page or the short form on the home page): to reply in the right language.",
+      "A keyed hash of your IP address (not the address itself) and your browser information (user agent): to recognise repeated unwanted messages. These two fields are not shown even on the team's message screen."
+    ],
+    "formLimit": "To prevent abuse, at most 5 messages an hour are accepted from the same IP address. For this, your IP address is counted only in server memory for one hour and is not stored.",
+    "whoTitle": "Who sees it",
+    "whoBody": "Only members of the Koçum.Net team with access to the message inbox see messages. Your message is not used for advertising or marketing.",
+    "autoReplyTitle": "Automatic reply",
+    "autoReplyBody": "When your message arrives, a short “Your message has reached us” email goes to the address you entered. It contains nothing you wrote (name, message) and is sent to the same address at most once every 24 hours.",
+    "retentionTitle": "How long we keep it",
+    "retention": [
+      "For messages that were answered or closed, the personal data (name, email, subject, message, IP hash, browser information) is deleted 2 years after sending; only the message's date and status remain.",
+      "For messages marked as spam, this period is 90 days.",
+      "Messages not yet answered are kept until we get back to you.",
+      "The notification email sent to the team carries a full copy of your message and stays in the team's mailbox; that copy is outside the automatic deletion above. Write to us if you want it deleted."
+    ],
+    "providersTitle": "Service providers",
+    "providers": [
+      "Cloudflare: all of the site's traffic passes through Cloudflare for security and speed; your requests (including your IP address) pass through Cloudflare on the way.",
+      "Email delivery service: the team notification and the automatic reply to you are sent through an email delivery service, which sees the recipient and content of those emails."
+    ],
+    "cookiesTitle": "Cookies",
+    "cookiesBody": "No cookies are set for visitors. The only cookie is the session cookie Koçum.Net staff use when signing in to site management (/admin): it lasts 6 hours, only the server reads it, and it does not concern visitors.",
+    "checkupTitle": "Math Check-up",
+    "checkupBody": "The Math Check-up is a separate application that requires an account; the data it collects is described in its own privacy notice (in Turkish).",
+    "checkupLink": "Check-up privacy notice",
+    "rightsTitle": "Requests",
+    "rightsBody": "To use your rights under Article 11 of Türkiye's Personal Data Protection Law (KVKK), such as learning whether your data is processed or asking for it to be corrected or deleted, write to {email}."
   },
   "blog": {
     "title": "Blog",

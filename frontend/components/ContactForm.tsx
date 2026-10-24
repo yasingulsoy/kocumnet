@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Mail, Send } from "lucide-react";
@@ -7,6 +8,7 @@ import { PUBLIC_BACKEND_URL } from "@/lib/api";
 import { SITE_BRAND } from "@/lib/site-brand";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
+import { localizedPath } from "@/lib/routes";
 import { Field } from "@/components/tailadmin/form/Field";
 import { Input } from "@/components/tailadmin/form/Input";
 import { TextArea } from "@/components/tailadmin/form/TextArea";
@@ -342,6 +344,14 @@ export function ContactForm({
           )}
         </Alert>
       ) : null}
+
+      {/* Göndermeden önce: neyin, ne için saklandığı (ayrıntı gizlilik sayfasında). */}
+      <p className="text-theme-xs leading-relaxed text-gray-500">
+        {t.privacyNote}{" "}
+        <Link href={localizedPath("privacy", locale)} className={EPOSTA_BAGLANTISI}>
+          {t.privacyLink}
+        </Link>
+      </p>
 
       <Button
         type="submit"

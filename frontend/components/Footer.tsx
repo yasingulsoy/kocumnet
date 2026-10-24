@@ -110,7 +110,11 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-white/10 pt-6 text-theme-xs text-gray-400 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            &copy; {year} {SITE_BRAND.name}. {dict.footer.rights}
+            &copy; {year} {SITE_BRAND.name}. {dict.footer.rights}{" "}
+            {/* Gizlilik sayfası hızlı bağlantılarda değil: bir "sayfa" değil, başvuru metni. */}
+            <Link href={localizedPath("privacy", locale)} className={BAGLANTI}>
+              {dict.nav.privacy}
+            </Link>
           </p>
           <p>{dict.footer.tagline}</p>
         </div>

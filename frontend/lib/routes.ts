@@ -15,6 +15,7 @@ export const ROUTE_SEGMENTS = {
   products: { tr: "urunlerimiz", en: "products", ar: "products" },
   blog: { tr: "blog", en: "blog", ar: "blog" },
   contact: { tr: "iletisim", en: "contact", ar: "contact" },
+  privacy: { tr: "gizlilik", en: "privacy", ar: "privacy" },
 } as const satisfies Record<string, Record<Locale, string>>;
 
 export type RouteKey = keyof typeof ROUTE_SEGMENTS;

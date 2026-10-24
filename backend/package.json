@@ -10,10 +10,12 @@
     "db:ensure": "node scripts/ensure-database.js",
     "db:migrate:role": "node scripts/migrate-user-role.js",
     "db:indexes": "node scripts/ensure-indexes.js",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "test:ip": "node scripts/client-ip-test.js",
+    "test:contact": "node scripts/contact-messages-test.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -234,14 +234,21 @@ async function notifyNewContactMessage(kayit) {
   });
 }
 
+/**
+ * Gönderene otomatik yanıt. KULLANICININ YAZDIĞI HİÇBİR ŞEY İÇİNDE YOK: ne
+ * ad ne mesajın kopyası. Formdaki e-posta alanına herkes herhangi bir adresi
+ * yazabiliyor; eskiden yanıt mesajın tam kopyasını taşıdığı için form,
+ * istenen adrese istenen metni bizim alan adımızdan göndermenin yoluydu
+ * (spam, oltalama). Şimdi yalnızca sabit bir "aldık" metni gidiyor; aynı
+ * adrese 24 saatte en fazla bir tane (routes/contact.js).
+ */
 const OTO_YANIT = {
   tr: {
     konu: 'Mesajınızı aldık',
     baslik: 'Mesajınız bize ulaştı',
-    metin: (ad) => [
-      `Merhaba ${ad},`,
-      'Koçum.Net ekibine yazdığınız için teşekkürler. Mesajınızı aldık; en kısa sürede, genellikle bir iş günü içinde size dönüş yapacağız.',
-      'Aşağıda gönderdiğiniz mesajın bir kopyası var.',
+    metin: [
+      'Mesajınız bize ulaştı, en kısa sürede dönüş yapacağız.',
+      'Bu adresle Koçum.Net iletişim formundan bir mesaj gönderildi. Siz göndermediyseniz bu postayı yok sayabilirsiniz.',
     ],
     dipnot: 'Bu posta otomatik gönderildi; yanıtlamanız gerekmez.',
     yon: 'ltr',
@@ -249,10 +256,9 @@ const OTO_YANIT = {
   en: {
     konu: 'We received your message',
     baslik: 'Your message has reached us',
-    metin: (ad) => [
-      `Hello ${ad},`,
-      'Thank you for writing to Koçum.Net. We have received your message and will get back to you as soon as possible, usually within one business day.',
-      'A copy of your message is below.',
+    metin: [
+      'Your message has reached us; we will get back to you as soon as possible.',
+      'A message was sent with this address through the Koçum.Net contact form. If it was not you, you can ignore this email.',
     ],
     dipnot: 'This is an automated message; no reply is needed.',
     yon: 'ltr',
@@ -260,27 +266,25 @@ const OTO_YANIT = {
   ar: {
     konu: 'لقد تلقّينا رسالتك',
     baslik: 'وصلتنا رسالتك',
-    metin: (ad) => [
-      `مرحباً ${ad}،`,
-      'شكراً لتواصلك مع Koçum.Net. تلقّينا رسالتك وسنعود إليك في أقرب وقت ممكن، عادةً خلال يوم عمل واحد.',
-      'تجد أدناه نسخة من رسالتك.',
+    metin: [
+      'وصلتنا رسالتك، وسنعود إليك في أقرب وقت ممكن.',
+      'أُرسلت رسالة بهذا العنوان عبر نموذج التواصل في Koçum.Net. إن لم تكن أنت المرسِل، يمكنك تجاهل هذه الرسالة.',
     ],
     dipnot: 'هذه رسالة تلقائية؛ لا حاجة للرد عليها.',
     yon: 'rtl',
   },
 };
 
-/** Gönderene otomatik yanıt — formun dilinde. */
-async function sendContactAutoReply(kayit) {
-  const d = OTO_YANIT[kayit.locale] || OTO_YANIT.tr;
+/** Gönderene otomatik yanıt — formun dilinde; yalnızca adres ve dil alır. */
+async function sendContactAutoReply({ email, locale }) {
+  const d = OTO_YANIT[locale] || OTO_YANIT.tr;
   const { html, text } = renderMail({
     baslik: d.baslik,
-    metin: d.metin(kayit.name),
-    kutu: kayit.message,
+    metin: d.metin,
     dipnot: d.dipnot,
     yon: d.yon,
   });
-  return sendMail({ to: kayit.email, subject: `${d.konu} · ${MARKA}`, html, text });
+  return sendMail({ to: email, subject: `${d.konu} · ${MARKA}`, html, text });
 }
 
 function adSoyad(user) {

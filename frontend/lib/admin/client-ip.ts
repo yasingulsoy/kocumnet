@@ -1,14 +1,14 @@
 import "server-only";
-import { isIP } from "node:net";
 import { headers } from "next/headers";
+import { istemciIpBelirle } from "./client-ip-kurali";
 
 /**
- * İsteği yapan tarayıcının IP'si (sunucu tarafı).
+ * İsteği yapan tarayıcının IP'si (sunucu tarafı). Bulunamazsa ya da
+ * geçersizse null.
  *
- * Önümüzde TEK bir güvenilir vekil varsayılır (Dokploy/Traefik): onun
- * yazdığı `x-real-ip`, yoksa `x-forwarded-for`'un SON öğesi (vekilin
- * eklediği). İlk öğe kullanılmaz: istemci başlığı kendisi gönderip
- * istediği IP'yi yazabilir. Bulunamazsa ya da geçersizse null.
+ * Kural client-ip-kurali.ts'te: Traefik'in yazdığı x-real-ip; o adres
+ * Cloudflare'in kenar sunucusuysa cf-connecting-ip. x-forwarded-for
+ * kullanılmaz: Traefik onu da kenar sunucusunun adresiyle yeniden yazıyor.
  */
 export async function istemciIp(): Promise<string | null> {
   let h: Awaited<ReturnType<typeof headers>>;
@@ -17,10 +17,5 @@ export async function istemciIp(): Promise<string | null> {
   } catch {
     return null; // istek bağlamı dışı (ör. derleme sırasında)
   }
-  const xff = (h.get("x-forwarded-for") ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const ip = (h.get("x-real-ip") ?? "").trim() || xff[xff.length - 1] || "";
-  return isIP(ip) ? ip : null;
+  return istemciIpBelirle(h.get("x-real-ip"), h.get("cf-connecting-ip"));
 }

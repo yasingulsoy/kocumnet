@@ -11,6 +11,7 @@ const { requestLogger } = require('./middleware/requestLogger');
 const { clientIp, BFF_AKTIF } = require('./middleware/clientIp');
 const { eskiDenetimKayitlariniSil } = require('./utils/audit');
 const { sahipsizMedyaTemizligi } = require('./utils/blogMedia');
+const { iletisimMesajlariniAnonimlestir } = require('./utils/contactMessages');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -152,6 +153,12 @@ async function start() {
     sahipsizMedyaTemizligi().catch((e) => console.error('Sahipsiz görsel temizliği yapılamadı:', e.message));
   medyaTemizligi();
   setInterval(medyaTemizligi, 24 * 60 * 60 * 1000).unref();
+  // İletişim mesajlarının saklama süresi (CONTACT_RETENTION_DAYS, spam 90 gün):
+  // süresi dolan kapalı mesajların kişisel alanları boşaltılır; bekleyenlere dokunulmaz.
+  const mesajSaklama = () =>
+    iletisimMesajlariniAnonimlestir().catch((e) => console.error('İletişim mesajları anonimleştirilemedi:', e.message));
+  mesajSaklama();
+  setInterval(mesajSaklama, 24 * 60 * 60 * 1000).unref();
   server = app.listen(PORT, () => {
     console.log(`🚀 Kocumnet API http://127.0.0.1:${PORT}  (${IS_PRODUCTION ? 'üretim' : 'geliştirme'})`);
     console.log(`   Site yönetimi istemci IP'si (BFF_SHARED_SECRET): ${BFF_AKTIF ? 'açık' : 'kapalı — sunucu IP\'siyle sayılıyor'}`);

@@ -108,6 +108,12 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
                 {h.heroCtaSecondary}
               </ButtonLink>
             </div>
+            {/* EN ve AR ziyaretçi Türkçe bir uygulamaya gidiyor: önceden söyle. TR'de metin boş. */}
+            {CHECKUP_URL && h.checkupLangNote ? (
+              <p className={`mt-3 text-theme-sm text-gray-500 ${HERO_GIRIS}`} style={{ animationDelay: "150ms" }}>
+                {h.checkupLangNote}
+              </p>
+            ) : null}
             <ul
               className={`mt-9 flex flex-wrap gap-x-6 gap-y-3 text-theme-sm text-gray-600 ${HERO_GIRIS}`}
               style={{ animationDelay: "200ms" }}

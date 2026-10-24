@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { createSession, currentSessionHash, destroySession, requireUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { sendPasswordChangedMail } from "@/lib/mailer";
-import { sinirAsildi } from "@/lib/rate-limit";
+import { sinirAsildiKullanici } from "@/lib/rate-limit";
 import { GUNLUK_HEDEF_SECENEKLERI } from "@/lib/seri";
 
 export interface ProfileState {
@@ -86,7 +86,7 @@ export async function changePasswordAction(
   if (yeni.length < 8) return { fields: { next: "Yeni parola en az 8 karakter olmalı." } };
   if (yeni === mevcut) return { fields: { next: "Yeni parola eskisiyle aynı olamaz." } };
   // Mevcut parolayı deneme alanı olarak kullanmak isteyene sınır.
-  if (await sinirAsildi("parola-degistir", 10, 10 * 60_000)) {
+  if (await sinirAsildiKullanici(user.id, "parola-degistir", 10, 10 * 60_000)) {
     return { error: "Çok fazla deneme. 10 dakika sonra tekrar dene." };
   }
 
@@ -144,10 +144,23 @@ export async function deleteAccountAction(
    * ve sıfırlama jetonları kullanıcıyla birlikte gider (şemada Cascade).
    * Kalanlar kimliksiz toplamlar: sorulardaki gösterim/doğru sayaçları ve
    * şıkların seçilme sayıları — aydınlatma metninde yazdığımız gibi.
+   *
+   * Hata bildirimleri (QuestionNote, STUDENT_REPORT) BİLEREK kalır: sorudaki
+   * hatanın kaydı içerik ekibinin işi, öğrenci gidince silinmemeli. İlişki
+   * SetNull ile kopuyor; ama öğrencinin yazdığı açıklama serbest metin ve
+   * kendini tanıtan bir şey içerebilir ("ben 8-B'den Ayşe…"). Bu yüzden aynı
+   * işlemde açıklama boşaltılır; oturum kimliği de silinen oturumu gösterdiği
+   * için temizlenir. Sebep ve soru kalır. Cascade'e çevirmeyin.
    */
   // Önce silme, sonra çerez: silme başarısız olursa öğrenci boş yere
   // oturumdan atılmasın. (Oturum satırı zaten zincirleme siliniyor.)
-  await prisma.user.delete({ where: { id: user.id } });
+  await prisma.$transaction([
+    prisma.questionNote.updateMany({
+      where: { reportedById: user.id, kind: "STUDENT_REPORT" },
+      data: { body: "", sessionId: null },
+    }),
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
   await destroySession();
 
   redirect("/?hesap-silindi=1");

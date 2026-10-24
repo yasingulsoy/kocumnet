@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthError, requireUser } from "@/lib/auth";
 import { cevaplariOkundu, kocaSoruSor } from "@/lib/koca-soru";
-import { sinirAsildi } from "@/lib/rate-limit";
+import { sinirAsildiKullanici } from "@/lib/rate-limit";
 import { BildirimHatasi, KOCA_SORU_SINIRI } from "@/lib/bildirim-kurallari";
 
 /**
@@ -34,7 +34,7 @@ export async function kocaSorAction(
   }
   const parsed = soruSemasi.safeParse(input);
   if (!parsed.success) return { ok: false, error: `Sorun en fazla ${KOCA_SORU_SINIRI} karakter olabilir.` };
-  if (await sinirAsildi("koca-sor", 20, 10 * 60_000)) {
+  if (await sinirAsildiKullanici(userId, "koca-sor", 20, 10 * 60_000)) {
     return { ok: false, error: "Çok fazla deneme. Biraz sonra tekrar dene." };
   }
 

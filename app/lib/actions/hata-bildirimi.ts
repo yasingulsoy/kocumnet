@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import { AuthError, requireUser } from "@/lib/auth";
 import { hataBildir } from "@/lib/hata-bildirimi";
-import { sinirAsildi } from "@/lib/rate-limit";
+import { sinirAsildiKullanici } from "@/lib/rate-limit";
 import { BildirimHatasi, RAPOR_ACIKLAMA_SINIRI, RAPOR_SEBEP_DEGERLERI } from "@/lib/bildirim-kurallari";
 
 /**
@@ -36,8 +36,8 @@ export async function hataBildirAction(
   }
   const parsed = bildirimSemasi.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Bir sebep seç." };
-  // Veritabanındaki günlük sınırın önünde kaba bir kalkan: aynı adresten istek seli.
-  if (await sinirAsildi("hata-bildir", 30, 10 * 60_000)) {
+  // Veritabanındaki günlük sınırın önünde kaba bir kalkan: aynı hesaptan istek seli.
+  if (await sinirAsildiKullanici(userId, "hata-bildir", 30, 10 * 60_000)) {
     return { ok: false, error: "Çok fazla deneme. Biraz sonra tekrar dene." };
   }
 

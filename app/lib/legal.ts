@@ -12,7 +12,16 @@
  * hukukçuyla netleşmeden ücretli satışa açılmamalı.
  */
 
-export const LAST_UPDATED = "10 Ekim 2026";
+export const LAST_UPDATED = "22 Ekim 2026";
+
+/**
+ * 18 yaş altı beyanı: kayıt kutusu (app/(auth)/kayit/RegisterForm.tsx) ve
+ * gizlilik sayfası AYNI cümleyi kullanır; ikisi ayrı yazıldığında biri "veli
+ * onayı", öbürü "velimin bilgisi dahilinde" diyordu.
+ * HUKUK: bu yalnızca beyan, onay kaydı değil. Velinin açık rızasının nasıl
+ * alınıp saklanacağı hukukçuyla netleşmeli (yol haritası E16).
+ */
+export const VELI_ONAYI_METNI = "18 yaşından küçüksem velimin bilgisi ve onayıyla kayıt oluyorum.";
 
 export interface DataItem {
   field: string;
@@ -49,11 +58,57 @@ export const COLLECTED_DATA: DataItem[] = [
     purpose: "Bağlantılarınızı yönetebilmeniz ve velinizin açıp açmadığını görebilmeniz",
     required: false,
   },
+  // 21 Ekim 2026 turu: hedefler, öğrenme döngüsü, koçluk, deneme.
+  {
+    field: "Hedef net, sınav yılı, haftalık test ve günlük soru hedefi",
+    purpose: "Haftalık planı ve günlük hedef kartını size göre kurmak",
+    required: false,
+  },
+  {
+    field: "Alıştırmalar, ipucu kullanımı ve yanlış defteri",
+    purpose: "Yanlış yaptığınız soruları tekrar zamanında önünüze getirmek",
+    required: false,
+  },
+  {
+    field: "Haftalık plan ve koç notu",
+    purpose:
+      "Haftanın çalışma planı; koçunuzun (ya da planı kuran sistemin) plan kartına yazdığı kısa not",
+    required: false,
+  },
+  {
+    field: "Koça yazdığınız sorular ve koçun cevapları",
+    purpose: "Sorunuzu yetkili koçun görüp cevaplayabilmesi",
+    required: false,
+  },
+  {
+    field: "Hata bildirimleriniz (seçtiğiniz sebep ve yazdığınız açıklama)",
+    purpose:
+      "Sorudaki hatanın içerik ekibince düzeltilmesi ve bildiriminizin incelendiğini size gösterebilmek",
+    required: false,
+  },
+  {
+    field: "Grup üyeliği ve ödevler",
+    purpose:
+      "Koçunuzun sizi bir gruba ekleyip ödev verebilmesi ve takip etmesi. Ödevi tamamlayıp tamamlamadığınız ayrıca kaydedilmez, çözdüğünüz testlerden hesaplanır",
+    required: false,
+  },
+  {
+    field: "Otomatik takip uyarıları (ör. 14 gündür giriş ya da test yok, son iki testte düşüş)",
+    purpose:
+      "Koçunuzun kime destek gerektiğini görebilmesi. Ayrıca saklanmaz; giriş ve test kayıtlarınızdan hesaplanır ve yalnızca yetkili koçlar görür",
+    required: true,
+  },
+  {
+    field: "Deneme karşılaştırması",
+    purpose:
+      "Denemedeki yerinizi yüzdelik olarak göstermek. Diğer öğrencilerin kimliği gösterilmez; sizin o denemedeki ilk sonucunuz da başkalarının karşılaştırmasına kimliksiz katılır. Karşılaştırma en az 10 kişi çözünce açılır",
+    required: false,
+  },
 ];
 
 /** Toplamadığımız şeyler — bunu söylemek de bilgidir. */
 export const NOT_COLLECTED = [
-  "IP adresiniz kalıcı olarak kaydedilmez (yalnızca kötüye kullanım sınırlaması için geçici olarak bellekte tutulur)",
+  "Uygulama IP adresinizi kalıcı olarak kaydetmez (yalnızca kötüye kullanım sınırlaması için kısa süre bellekte tutulur)",
   "Reklam veya izleme çerezi kullanılmaz; tek çerez oturumunuzu açık tutar",
   "Konum, rehber, kamera veya mikrofon erişimi istenmez",
   "Verileriniz reklam amacıyla üçüncü taraflarla paylaşılmaz",

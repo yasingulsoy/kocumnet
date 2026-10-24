@@ -1,4 +1,4 @@
-import { getSiteUrl } from "@/lib/site";
+import { CHECKUP_URL, getSiteUrl } from "@/lib/site";
 import { SITE_BRAND } from "@/lib/site-brand";
 import { fetchBlogs } from "@/lib/api";
 import type { BlogPost } from "@/lib/blog";
@@ -45,6 +45,15 @@ export async function GET() {
 
   const guncelleme = new Date().toISOString().slice(0, 10);
 
+  // Sitedeki kuralla aynı: adres tanımlı değilse (uygulama yayında değilse) anılmaz.
+  const checkupBolumu = CHECKUP_URL
+    ? `
+## Matematik Check-up
+
+- [Matematik Check-up](${CHECKUP_URL}) — LGS, TYT, AYT, KPSS, DGS ve ALES için ücretsiz matematik seviye testi. Kısa bir test sonunda konu konu seviye haritası, yanlışların arkasındaki hata türü (hata teşhisi) ve o haftanın çalışma planı verir. Uygulama Türkçedir; ayrı bir adreste (${CHECKUP_URL.replace(/^https?:\/\//, "")}) çalışır.
+`
+    : "";
+
   const govde = `# Koçum.Net
 
 > Sınav hazırlık koçluğu: öğrencinin okul ve kurs sonrasındaki kontrolsüz zamanını sistemli tekrar ve birebir takiple yöneterek, öğrendiği bilgilerin sınava kadar aklında kalmasını sağlayan Türkiye merkezli dijital eğitim ve koçluk markası.
@@ -84,7 +93,7 @@ Koçum.Net'in çözdüğü üç temel sorun şudur:
 Koçum.Net, TYT/AYT için tamamı özgün, ÖSYM kalibresinde sorular ve adım adım PDF çözümlü yeni nesil çalışma setleri (A4 tel dikişli fasiküller) üretir. Tüm ürünler: ${url(localizedPath("products", "tr"))}
 
 ${urunSatirlari}
-
+${checkupBolumu}
 ## Ana sayfalar (Türkçe)
 
 - [Ana Sayfa](${url(localizedPath("home", "tr"))}) — Koçum.Net'in yaklaşımı: plan, sistemli tekrar ve birebir takip.
@@ -93,6 +102,7 @@ ${urunSatirlari}
 - [Ürünlerimiz](${url(localizedPath("products", "tr"))}) — TYT/AYT hazırlık yayınları: problemler, branş denemeleri ve soru bankaları.
 - [Blog](${url(localizedPath("blog", "tr"))}) — Sınav hazırlık, çalışma teknikleri ve öğrenci koçluğu yazıları.
 - [İletişim](${url(localizedPath("contact", "tr"))}) — E-posta ve sosyal medya üzerinden ulaşım.
+- [Gizlilik](${url(localizedPath("privacy", "tr"))}) — İletişim formunun topladığı veriler, saklama süresi ve çerezler.
 
 ## Ana sayfalar (English)
 
@@ -139,7 +149,7 @@ ${blogSatirlari(arBlogs, "ar")}
 ## Kapsam ve sınırlar
 
 - Hizmetler Türkiye genelinde **tamamen online** yürütülür; fiziksel şube yoktur.
-- Odak: YKS ve ÖSYM formatındaki sınavlara hazırlık; 9-12. sınıf ve mezun öğrenciler.
+- Odak: LGS ve ÖSYM sınavlarına (YKS: TYT ve AYT; KPSS, DGS, ALES) hazırlık. Koçluk hizmetleri 9-12. sınıf ve mezun öğrencilere yöneliktir; Matematik Check-up LGS'ye hazırlanan öğrencileri de kapsar.
 - Psikolojik destek ve beslenme danışmanlığı, sınav sürecine yönelik destek hizmetleridir; tıbbi teşhis veya tedavi yerine geçmez.
 
 ## İletişim

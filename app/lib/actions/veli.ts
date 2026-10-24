@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { appUrl } from "@/lib/mailer";
-import { sinirAsildi } from "@/lib/rate-limit";
+import { sinirAsildiKullanici } from "@/lib/rate-limit";
 import { veliSuresiMi } from "@/lib/veli";
 import { veliBaglantisiOlustur, veliBaglantisiniKaldir } from "@/lib/veli-raporu";
 
@@ -24,7 +24,7 @@ export async function veliBaglantisiOlusturAction(gun: unknown): Promise<VeliOlu
   const user = await requireUser();
   if (!veliSuresiMi(gun)) return { error: "Bağlantının ne kadar açık kalacağını seç." };
   // Oluştur-kaldır döngüsüyle satır üretilmesin.
-  if (await sinirAsildi("veli-olustur:" + user.id, 10, 60 * 60_000)) {
+  if (await sinirAsildiKullanici(user.id, "veli-olustur", 10, 60 * 60_000)) {
     return { error: "Kısa sürede çok fazla bağlantı oluşturdun. Bir saat sonra tekrar dene." };
   }
   try {
