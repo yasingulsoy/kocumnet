@@ -30,7 +30,7 @@ import { SERVICES, ilkCumle } from "@/lib/services";
 import { PRODUCTS } from "@/lib/products";
 // Check-up uygulamasının adresi: tanımlı değilse check-up bölümü HİÇ ÇIKMAZ
 // (ana sayfada 404'e giden bir düğme, hiç düğme olmamasından kötü).
-import { CHECKUP_URL } from "@/lib/site";
+import { checkupAdresi } from "@/lib/site";
 
 /**
  * Hero CSS animasyonuyla belirir (tokens.css `rise`), framer-motion ile DEĞİL.
@@ -54,6 +54,9 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   if (!isLocale(lang)) notFound();
   const t = await getDictionary(lang);
   const h = t.home;
+  // Kaynak etiketi (?k=): panel hangi düğmenin kayıt getirdiğini toplam olarak sayar.
+  const checkupHero = checkupAdresi("hero");
+  const checkupBolum = checkupAdresi("bolum");
   const s = t.services;
 
   const problems = [
@@ -95,8 +98,8 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
               {h.heroSubtitle}
             </p>
             <div className={`mt-9 flex flex-wrap items-center gap-3 ${HERO_GIRIS}`} style={{ animationDelay: "150ms" }}>
-              {CHECKUP_URL ? (
-                <ExternalButton href={CHECKUP_URL} newTabLabel={t.nav.opensInNewTab} size="md" endIcon={OK}>
+              {checkupHero ? (
+                <ExternalButton href={checkupHero} newTabLabel={t.nav.opensInNewTab} size="md" endIcon={OK}>
                   {h.checkupCta}
                 </ExternalButton>
               ) : (
@@ -109,7 +112,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
               </ButtonLink>
             </div>
             {/* EN ve AR ziyaretçi Türkçe bir uygulamaya gidiyor: önceden söyle. TR'de metin boş. */}
-            {CHECKUP_URL && h.checkupLangNote ? (
+            {checkupHero && h.checkupLangNote ? (
               <p className={`mt-3 text-theme-sm text-gray-500 ${HERO_GIRIS}`} style={{ animationDelay: "150ms" }}>
                 {h.checkupLangNote}
               </p>
@@ -141,7 +144,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
 
       {/* ── Check-up ────────────────────────────────────────── */}
       {/* Lacivert kart (brand-950 + ızgara): kitin giriş sayfasındaki marka paneli. */}
-      {CHECKUP_URL ? (
+      {checkupBolum ? (
         <Section>
           <Container>
             <Reveal>
@@ -151,7 +154,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
                   <div>
                     <SectionHead dark eyebrow={h.checkupEyebrow} title={h.checkupTitle} description={h.checkupDesc} />
                     <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-                      <ExternalButton href={CHECKUP_URL} newTabLabel={t.nav.opensInNewTab} variant="outline" size="md" endIcon={OK}>
+                      <ExternalButton href={checkupBolum} newTabLabel={t.nav.opensInNewTab} variant="outline" size="md" endIcon={OK}>
                         {h.checkupCta}
                       </ExternalButton>
                       <p className="text-theme-sm font-medium tracking-wide text-gray-300">{h.checkupNote}</p>

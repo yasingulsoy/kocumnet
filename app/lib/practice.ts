@@ -38,6 +38,7 @@ import { raporDurumlari } from "@/lib/hata-bildirimi";
 import { kocaSoruDurumlari } from "@/lib/koca-soru";
 import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
 import { baslatmaKilidi } from "@/lib/kullanici-kilidi";
+import { soruIsleriniKapat } from "@/lib/plan-ilerleme";
 
 /** Prisma istemcisi ya da işlem: aynı sorgu kilitten önce ve sonra çalışabilsin. */
 type Db = Prisma.TransactionClient;
@@ -1244,6 +1245,8 @@ export async function answerPractice(args: {
       sourceQuestionId: true,
       answer: { select: { id: true } },
       session: { select: { kind: true, status: true, expiresAt: true, practiceMode: true, startedAt: true } },
+      // Planın soru işi bu konunun alıştırma cevaplarını sayar (lib/plan-ilerleme.ts).
+      question: { select: { topicId: true } },
     },
   });
 
@@ -1311,6 +1314,19 @@ export async function answerPractice(args: {
     } catch (e) {
       // Cevap kaydedildi; defter bir sonraki tekrarda yine işlenir.
       console.error("Yanlış defteri ilerletilemedi:", e);
+    }
+  }
+
+  /*
+   * Haftalık planın soru işi ("Üçgenler 40 soru"): bu cevapla hedefe vardıysa
+   * iş kendiliğinden kapanır. "Bilmiyorum" sayılmaz. Hata cevabı bozmasın:
+   * cevap kaydedildi, iş sıradaki cevapta yine kapanır.
+   */
+  if (choiceId) {
+    try {
+      await soruIsleriniKapat(userId, item.question.topicId, now);
+    } catch (e) {
+      console.error("Plan işi kapatılamadı:", e);
     }
   }
 

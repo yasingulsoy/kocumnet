@@ -7,6 +7,7 @@ import { onizleyiciMi } from "@/lib/veli";
 import { goruntulenmeKaydet, veliBaglantisiniCoz, veliRaporu } from "@/lib/veli-raporu";
 import { BasariEgilimi } from "@/components/BasariGrafikleri";
 import { VeliDurumu, VeliKabugu, VeliRaporuGorunumu } from "@/components/VeliRaporu";
+import { VeliOdevleri } from "@/components/VeliOdevleri";
 
 /*
  * Başlık ve önizleme GENEL: öğrencinin adı burada geçmez (WhatsApp ve
@@ -69,15 +70,19 @@ export default async function VeliRaporuSayfasi({ params }: PageProps<"/veli/[to
 
   return (
     <VeliKabugu>
-      <VeliRaporuGorunumu
-        rapor={rapor}
-        bitis={erisim.expiresAt}
-        grafik={
-          rapor.egilim.length >= 2 ? (
-            <BasariEgilimi noktalar={rapor.egilim} ariaLabel="Check-up başarı oranı, eskiden yeniye" />
-          ) : null
-        }
-      />
+      <div className="space-y-4 md:space-y-6">
+        <VeliRaporuGorunumu
+          rapor={rapor}
+          bitis={erisim.expiresAt}
+          grafik={
+            rapor.egilim.length >= 2 ? (
+              <BasariEgilimi noktalar={rapor.egilim} ariaLabel="Check-up başarı oranı, eskiden yeniye" />
+            ) : null
+          }
+        />
+        {/* Ödevin adı, son tarihi ve tamamlandı mı; soru ve sonuç yok (lib/veli-raporu.ts VeliOdevi). */}
+        <VeliOdevleri odevler={rapor.odevler} now={new Date()} />
+      </div>
     </VeliKabugu>
   );
 }

@@ -15,6 +15,7 @@ import {
 import { requirePageUser } from "@/lib/auth";
 import { seviyeKarnesi, seviyeOzeti, sonrakiAdim } from "@/lib/level-report";
 import { examShort } from "@/lib/exams";
+import { hataMesaji } from "@/lib/hata-kodlari";
 import { seviyeBaslatAction, telafiBaslatAction } from "@/lib/actions/levels";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { SeviyeSeridi } from "@/components/SeviyeSeridi";
@@ -57,7 +58,8 @@ export default async function SeviyePage({
 }: PageProps<"/seviye/[runId]">) {
   const { runId } = await params;
   const sp = await searchParams;
-  const hata = typeof sp.hata === "string" ? sp.hata : null;
+  // Adreste yalnızca kod; cümle sabit tablodan, bilinmeyen kod gösterilmez (lib/hata-kodlari.ts).
+  const hata = hataMesaji(sp.hata);
 
   const user = await requirePageUser();
   const [karne, adim] = await Promise.all([

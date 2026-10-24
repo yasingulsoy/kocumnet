@@ -15,8 +15,22 @@
  * `parti`: toplu içe aktarma kimliği (İçe aktarma geçmişi → "Soruları aç").
  * `not`: "acik" — çözülmemiş inceleme notu ya da öğrenci bildirimi olanlar.
  * `bildirim`: "acik" — çözülmemiş öğrenci bildirimi olanlar. `icerik`: ipucu, video, adımlı çözüm.
+ * `yazan`: soruyu yazan personelin kimliği (e-posta değil). `seviye`: L1_TEMEL, L2_ORTA, L3_ANALIZ.
  */
-const LISTE_ANAHTARLARI = ["ara", "konu", "durum", "eksik", "icerik", "kazanim", "parti", "not", "bildirim", "sayfa"] as const;
+const LISTE_ANAHTARLARI = [
+  "ara",
+  "konu",
+  "durum",
+  "eksik",
+  "icerik",
+  "kazanim",
+  "parti",
+  "not",
+  "bildirim",
+  "yazan",
+  "seviye",
+  "sayfa",
+] as const;
 
 /** Ham sorgu dizesinden yalnızca liste süzgeçlerini süzer. */
 export function listeSorgusu(raw: string | null | undefined): string {

@@ -8,6 +8,7 @@ import { SEVIYELI_HAZIR_DEGIL, aktifKosu } from "@/lib/level-run";
 import { seviyeliHazirlik } from "@/lib/level-selection";
 import { ayarGetir, type Seviye } from "@/lib/levels";
 import { EXAMS, examShort, isExamScope } from "@/lib/exams";
+import { hataMesaji } from "@/lib/hata-kodlari";
 import { seviyeliBaslatAction } from "@/lib/actions/levels";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Alert } from "@/components/tailadmin/ui/Alert";
@@ -23,7 +24,8 @@ export const metadata: Metadata = { title: "Seviyeli check-up" };
 export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyeli">) {
   const user = await requirePageUser();
   const sp = await searchParams;
-  const hata = typeof sp.hata === "string" ? sp.hata : null;
+  // Adreste yalnızca kod; cümle sabit tablodan, bilinmeyen kod gösterilmez (lib/hata-kodlari.ts).
+  const hata = hataMesaji(sp.hata);
 
   const sinav = isExamScope(user.targetExam) ? user.targetExam : null;
   if (!sinav) redirect("/tanisma");

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { isaretsiz } from "@/lib/insights";
+import { isaretsiz, yarimKaldi } from "@/lib/insights";
 import { tekrarSonrasi, yanlisKarari, yanlisSonrasi } from "@/lib/review";
 
 /**
@@ -13,7 +13,8 @@ import { tekrarSonrasi, yanlisKarari, yanlisSonrasi } from "@/lib/review";
 const OLCUM_TURLERI = new Set(["PACKAGE", "TOPIC_RETEST", "LEVEL_STAGE"]);
 
 /**
- * Puanlanan ölçümün yanlış ve boşlarını deftere yazar.
+ * Puanlanan ölçümün yanlış ve boşlarını deftere yazar. Yarım kalan testte
+ * (lib/insights.ts yarimKaldi) yalnızca işaretlenip yanlış yapılanları.
  *
  * Yeni soru → yeni madde, ilk aralık sonra. Defterde olan soru (açık ya da
  * çıkmış) → başa döner. İDEMPOTENT: aynı oturum ikinci kez işlenirse hiçbir
@@ -29,6 +30,7 @@ export async function defteriGuncelle(sessionId: string): Promise<{ yeni: number
       userId: true,
       kind: true,
       status: true,
+      endedBy: true,
       expiresAt: true,
       submittedAt: true,
       package: { select: { examScope: true } },
@@ -55,13 +57,29 @@ export async function defteriGuncelle(sessionId: string): Promise<{ yeni: number
   const yanlis = s.items.filter((i) => i.answer?.isCorrect === false).length;
   if (isaretsiz({ correctCount: dogru, wrongCount: yanlis })) return { yeni: 0, sifirlanan: 0 };
 
+  /*
+   * Yarım kalan test (süre doldu ya da yeniden başlatıldı, yarısından azı
+   * işaretli): boşlar "bilmiyorum" değil "hiç bakmadım". 24 sorunun 2'sini
+   * çözüp bırakan öğrencinin 22 boşu deftere girince bugünkü tekrar hiç
+   * görmediği sorularla doluyordu. İşaretleyip yanlış yaptığı soru ise
+   * gerçek bir yanlış: o girer. Tam testte boşlar girmeye devam eder.
+   */
+  const yarim = yarimKaldi({
+    correctCount: dogru,
+    wrongCount: yanlis,
+    blankCount: s.items.length - dogru - yanlis,
+    endedBy: s.endedBy,
+  });
+
   // Ölçümün GERÇEKTEN bittiği an: süresi dolup cron'la puanlanan testte
   // cevaplar süre dolmadan verilmişti.
   const bitis = s.submittedAt ?? new Date();
   const zaman = bitis.getTime() < s.expiresAt.getTime() ? bitis : s.expiresAt;
   const examScope = s.result?.examScope ?? s.package.examScope;
 
-  const yanlislar = s.items.filter((i) => i.answer?.isCorrect !== true);
+  const yanlislar = s.items.filter((i) =>
+    yarim ? i.answer?.isCorrect === false : i.answer?.isCorrect !== true
+  );
   if (yanlislar.length === 0) return { yeni: 0, sifirlanan: 0 };
 
   const mevcutlar = await prisma.notebookItem.findMany({

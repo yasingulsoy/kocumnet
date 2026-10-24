@@ -12,7 +12,7 @@
  * hukukçuyla netleşmeden ücretli satışa açılmamalı.
  */
 
-export const LAST_UPDATED = "22 Ekim 2026";
+export const LAST_UPDATED = "24 Ekim 2026";
 
 /**
  * 18 yaş altı beyanı: kayıt kutusu (app/(auth)/kayit/RegisterForm.tsx) ve
@@ -43,8 +43,9 @@ export const COLLECTED_DATA: DataItem[] = [
   { field: "Sınıf bilgisi", purpose: "Uygun paket önerisi", required: false },
   { field: "Hedef sınav (LGS, TYT, AYT, KPSS, DGS, ALES)", purpose: "Uygun paket önerisi", required: false },
   {
-    field: "Test cevaplarınız ve süreleriniz",
-    purpose: "Konu bazlı seviye haritası ve gelişim takibi",
+    field: "Test cevaplarınız, süreleriniz ve testin nasıl bittiği (siz mi bitirdiniz, süre mi doldu)",
+    purpose:
+      "Konu bazlı seviye haritası ve gelişim takibi. Süresi dolup yarısından azı işaretli kalan test ölçüme katılmaz; bunu ayırt etmek için testin nasıl bittiği kaydedilir",
     required: true,
   },
   {
@@ -98,6 +99,31 @@ export const COLLECTED_DATA: DataItem[] = [
       "Koçunuzun kime destek gerektiğini görebilmesi. Ayrıca saklanmaz; giriş ve test kayıtlarınızdan hesaplanır ve yalnızca yetkili koçlar görür",
     required: true,
   },
+  // 24 Ekim 2026 pilot turu: son etkinlik, kayıt kaynağı, zorluk dokunuşu, davetle katılma.
+  {
+    field: "Son etkinlik zamanı (uygulamayı en son ne zaman kullandığınız, saat duyarlığında)",
+    purpose:
+      "Koçunuzun uzun süredir uygulamaya girmeyen öğrenciyi görüp destek olabilmesi. En fazla saatte bir güncellenir; hangi sayfaya baktığınız kaydedilmez",
+    required: true,
+  },
+  {
+    field: "Kayıt kaynağı etiketi (kocum.net'te hangi bağlantıdan geldiğiniz, ör. \"blog\" ya da \"whatsapp\")",
+    purpose:
+      "Tanıtım yollarından hangisinin işe yaradığını toplam sayılarla görmek. Yalnızca sabit bir listedeki kısa etiket yazılır; çerez, IP adresi ya da geldiğiniz sayfanın adresi kaydedilmez",
+    required: false,
+  },
+  {
+    field: "Zorluk geri bildirimi (sonuç ekranındaki \"Kolay / Uygun / Zor\" dokunuşunuz)",
+    purpose:
+      "Testlerin zorluğunu ayarlamak: sizin hissinizi testin gerçek sonuçlarıyla karşılaştırmak. Dokunmak isteğe bağlıdır, sonradan değiştirebilirsiniz",
+    required: false,
+  },
+  {
+    field: "Davet bağlantısıyla gruba katılma (hangi gruba ve ne zaman katıldığınız)",
+    purpose:
+      "Koçunuzun gönderdiği bağlantıyla gruba kendiniz katılabilmeniz. Koçunuz gruba bağlantıyla katıldığınızı görür",
+    required: false,
+  },
   {
     field: "Deneme karşılaştırması",
     purpose:
@@ -106,10 +132,19 @@ export const COLLECTED_DATA: DataItem[] = [
   },
 ];
 
+/**
+ * Pilot değerlendirmesi: toplu sayıların ürün kararında kullanılması.
+ * HUKUK: işleme sebebi (KVKK m.5/2-f meşru menfaat mi, açık rıza mı) ve
+ * kimliksizleştirmenin yeterliliği hukukçuyla netleşmeli; metin yalnızca
+ * teknik olarak doğru olanı söylüyor (panel yalnızca toplamları gösteriyor).
+ */
+export const PILOT_DEGERLENDIRMESI =
+  "Pilot döneminde uygulamanın işe yarayıp yaramadığını anlamak için toplu sayılar kullanılır: kaç kişinin hangi bağlantıdan geldiği, testlerin kaçının yarım kaldığı, zorluk dokunuşlarının dağılımı, kaç öğrencinin hâlâ uygulamayı kullandığı. Bu sayılar ürün kararları (ör. test süresi, soru sayısı, hangi tanıtım yolunun sürdürüleceği) için kimliğinizden ayrı, toplam olarak değerlendirilir; tek tek öğrencinin kaydı bu amaçla kimseye gösterilmez.";
+
 /** Toplamadığımız şeyler — bunu söylemek de bilgidir. */
 export const NOT_COLLECTED = [
   "Uygulama IP adresinizi kalıcı olarak kaydetmez (yalnızca kötüye kullanım sınırlaması için kısa süre bellekte tutulur)",
-  "Reklam veya izleme çerezi kullanılmaz; tek çerez oturumunuzu açık tutar",
+  "Reklam veya izleme çerezi kullanılmaz; tek çerez oturumunuzu açık tutar (kayıt kaynağı için de çerez yok)",
   "Konum, rehber, kamera veya mikrofon erişimi istenmez",
   "Verileriniz reklam amacıyla üçüncü taraflarla paylaşılmaz",
 ];

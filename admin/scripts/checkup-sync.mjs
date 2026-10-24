@@ -52,6 +52,11 @@ const MODULLER = [
   // satırı betiği (app/scripts/import-questions.mts) ile panelin "Toplu içe
   // aktar" ekranı aynı kuralla reddetsin. Yukarıdaki modüllerden içe aktarıyor.
   "question-import.ts",
+  // "Yayına hazır mı" denetim listesi (çözüm, hata tipi, seviye, kazanım,
+  // formül, şıklar). Soru formu, toplu yayın, inceleme kuyruğu ve içe aktarma
+  // aynı kapıdan geçsin. question-content, question-markup, error-types ve
+  // katex paketini içe aktarıyor.
+  "question-readiness.ts",
   // Grup ödevinin tamamlanma kuralı (tamamladı / geç / başladı) ve son tarih
   // hesabı. Koçun ilerleme tablosu öğrencinin ödev ekranıyla aynı sonucu
   // versin: tamamlanma saklanmıyor, iki tarafta da kayıtlardan türetiliyor.
@@ -142,6 +147,36 @@ const kaynaklar = [
 const oku = (yol) => readFileSync(yol, "utf8").replace(/\r\n/g, "\n");
 const kontrol = process.argv.includes("--check");
 
+/*
+ * İçe aktarma ekranının indirme bağlantıları (Şablonu indir, Örnek dosya,
+ * örnek görsel) app/'teki belgeleri verir. Panel ayrı derlenip yayına
+ * alındığı için çalışırken app/ dizini olmayabilir: belgeler burada bir TS
+ * modülüne gömülür (metinler dize, görsel base64). Kaynak tek: belge
+ * değişince eşitleme ister, --check eskiyse hata verir.
+ */
+const BELGELER = [
+  { ad: "SORU_SABLONU", kaynak: "SORU-SABLONU.md", ikili: false },
+  { ad: "ORNEK_SORU_DOSYASI", kaynak: "scripts/fixtures/ornek-gorselli.md", ikili: false },
+  { ad: "ORNEK_SEKIL_PNG_BASE64", kaynak: "scripts/fixtures/gorseller/ornek-sekil.png", ikili: true },
+];
+kaynaklar.push({
+  kaynak: BELGELER.map((b) => resolve(APP, b.kaynak)),
+  hedef: resolve(ADMIN, "src/lib/checkup/shared/belgeler.ts"),
+  okuKaynak: () =>
+    BELGELER.map((b) => {
+      const yol = resolve(APP, b.kaynak);
+      return { ...b, deger: b.ikili ? readFileSync(yol).toString("base64") : oku(yol) };
+    }),
+  donustur(belgeler) {
+    return (
+      "// ⚠️ OTOMATİK KOPYA — ELLE DÜZENLEMEYİN.\n" +
+      "// Kaynak: kocumnet/app (" + BELGELER.map((b) => b.kaynak).join(", ") + ") · eşitlemek için: npm run checkup:sync\n" +
+      "// İçe aktarma ekranının indirme bağlantıları bunları verir (panel app/ olmadan da çalışsın).\n\n" +
+      belgeler.map((b) => `/** app/${b.kaynak} */\nexport const ${b.ad} = ${JSON.stringify(b.deger)};\n`).join("\n")
+    );
+  },
+});
+
 if (!existsSync(APP)) {
   const mesaj = "app/ dizini yok (deploy ortamı?) — check-up kopyaları denetlenmedi.";
   if (kontrol) {
@@ -153,8 +188,8 @@ if (!existsSync(APP)) {
 }
 
 const farkli = [];
-for (const { kaynak, hedef, donustur } of kaynaklar) {
-  const beklenen = donustur(oku(kaynak));
+for (const { kaynak, hedef, donustur, okuKaynak } of kaynaklar) {
+  const beklenen = donustur(okuKaynak ? okuKaynak() : oku(kaynak));
   const mevcut = existsSync(hedef) ? oku(hedef) : null;
   if (mevcut === beklenen) continue;
 

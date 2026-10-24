@@ -1,5 +1,4 @@
 import "server-only";
-import katex from "katex";
 import { db } from "./db";
 import type { ErrorType } from "./generated/client";
 import { QUESTION_LEVEL_LABEL } from "./format";
@@ -32,6 +31,7 @@ import {
   type IceAktarmaBaglami,
   type IceAktarmaKazanimi,
 } from "./shared/question-import";
+import { formulHatasi } from "./shared/question-readiness";
 
 /**
  * Toplu soru içe aktarma — panel tarafı (sunucu).
@@ -123,21 +123,6 @@ async function gorseliIsle(f: File): Promise<WebpGorsel | string> {
   return (await webpYap(Buffer.from(await f.arrayBuffer()))) ?? GORSEL_OKUNAMADI;
 }
 
-/**
- * Formül öğrencinin ekranında KaTeX'le çiziliyor (app/components/MathContent.tsx,
- * throwOnError: false → hatalı formül kırmızı kaynak metin olarak görünür).
- * Aynı seçeneklerle, hatayı yakalayarak deniyoruz: uyarı çıkan formül
- * öğrencide de kırmızı çıkar.
- */
-function formulHatasi(latex: string, blok: boolean): string | null {
-  try {
-    katex.renderToString(latex, { displayMode: blok, throwOnError: true, strict: "ignore", output: "html" });
-    return null;
-  } catch (e) {
-    return (e instanceof Error ? e.message : String(e)).replace(/^KaTeX parse error:\s*/, "");
-  }
-}
-
 // ─────────────────────────────────────────────────────────────
 // Denetim (Denetle ve Kaydet ortak)
 // ─────────────────────────────────────────────────────────────
@@ -178,10 +163,10 @@ export async function hazirla(y: Yuklenenler): Promise<{ ok: true; h: Hazirlik }
     }),
     // TÜM sorular: panelde elle girilen (kaynağı boş) sorunun metni de çift sayılır.
     db.question.findMany({ select: { id: true, sourceRef: true, fingerprint: true } }),
-    db.objective.findMany({ select: { id: true, code: true, topicId: true, name: true } }),
+    db.objective.findMany({ select: { id: true, code: true, topicId: true, name: true, status: true } }),
   ]);
   const kazanimlar = new Map<string, IceAktarmaKazanimi>(
-    kazanimSatirlari.map((k) => [k.code, { id: k.id, topicId: k.topicId, name: k.name }])
+    kazanimSatirlari.map((k) => [k.code, { id: k.id, topicId: k.topicId, name: k.name, arsivde: k.status === "ARCHIVED" }])
   );
   const b: IceAktarmaBaglami = {
     konular: new Map(konular.map((k) => [k.slug, { id: k.id, examScope: k.examScope, examScopes: k.examScopes }])),
@@ -272,6 +257,8 @@ function raporOlustur(
           }
         : null,
       cift: s.cift ?? null,
+      // "Doğrudan yayına al"da bu soru İncelemede girer (shared/question-readiness.ts).
+      yayinEksikleri: h ? h.yayinEksikleri.map((e) => e.mesaj) : [],
       onizleme: {
         soru: q.alanlar["soru metni"] ?? "",
         secenekler: q.secenekler.map((x) => ({ harf: x.harf, metin: x.metin, dogru: x.isaretli })),
@@ -294,6 +281,7 @@ function raporOlustur(
       yeniKazanim: yeniKazanimlar.size,
       ipuclu: sonuc.hazir.filter((h) => h.hints).length,
       videolu: sonuc.hazir.filter((h) => h.videoUrl).length,
+      yayinaHazir: sonuc.hazir.filter((h) => h.yayinEksikleri.length === 0).length,
     },
     genelUyarilar,
     sorular,
@@ -306,8 +294,12 @@ function raporOlustur(
 
 /**
  * Geçerli soruları TEK partide, tek işlemde yazar (komut satırıyla aynı
- * kurallar: kazanım yoksa açılır, görseller MediaAsset olur, soru taslak ya
- * da yayında). Reddedilenler atlanır ve partinin hata listesine yazılır.
+ * kurallar: kazanım yoksa açılır, görseller MediaAsset olur). Reddedilenler
+ * atlanır ve partinin hata listesine yazılır.
+ *
+ * Durum: taslak; `yayinla` ile "yayına hazır mı" listesinden geçen yayında
+ * (yayına alan ve zamanı yazılır), geçmeyen İncelemede (raporda eksikleri
+ * yazılı). Panelde yayına almanın her yolu aynı kapıdan geçer.
  */
 export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Promise<KayitYaniti> {
   const { sonuc, rapor } = h;
@@ -323,6 +315,7 @@ export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Pro
 
   const kazanimlar = new Map(h.kazanimlar);
   const yeniKazanimlar: string[] = [];
+  const simdi = new Date();
   try {
     await db.$transaction(
       async (tx) => {
@@ -394,7 +387,8 @@ export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Pro
               videoUrl: q.videoUrl,
               difficulty: q.difficulty,
               targetTimeSeconds: q.targetTimeSeconds,
-              status: yayinla ? "PUBLISHED" : "DRAFT",
+              status: !yayinla ? "DRAFT" : q.yayinEksikleri.length ? "REVIEW" : "PUBLISHED",
+              ...(yayinla && q.yayinEksikleri.length === 0 ? { publishedAt: simdi, publishedByStaff: damga } : {}),
               sourceRef: q.sourceRef,
               importBatchId: parti.id,
               examScopes: q.examScopes,
@@ -459,6 +453,7 @@ export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Pro
     yazilan: hazir.length,
     atlanan: reddedilen.length,
     yayinda: yayinla,
+    incelemede: yayinla ? hazir.filter((q) => q.yayinEksikleri.length > 0).length : 0,
     yeniKazanimlar,
   };
 }

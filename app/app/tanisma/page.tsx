@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { availableExamScopes } from "@/lib/catalog";
 import { Wordmark } from "@/components/ui/logo";
 import { TanismaForm } from "./TanismaForm";
 
@@ -17,6 +18,11 @@ export const metadata: Metadata = { title: "Tanışalım" };
 export default async function TanismaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/giris");
+  /*
+   * Yayında testi olan sınavlar. Olmayan sınav "yakında" etiketiyle görünür
+   * ve seçilebilir: öğrenci bilerek seçsin, pano boş kalınca şaşırmasın.
+   */
+  const hazirSinavlar = await availableExamScopes();
 
   return (
     <div className="flex min-h-svh flex-col bg-gray-50">
@@ -38,6 +44,7 @@ export default async function TanismaPage() {
 
         <div className="mt-6">
           <TanismaForm
+            hazirSinavlar={hazirSinavlar}
             mevcutSinav={user.targetExam}
             mevcutSinif={user.grade}
             mevcutHedef={user.targetNet}

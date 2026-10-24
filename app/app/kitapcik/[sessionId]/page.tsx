@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CircleCheck } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, girisAdresi } from "@/lib/auth";
 import { CheckupError, getKitapcik } from "@/lib/checkup";
 import { cezaKurali, sonGunMetni } from "@/lib/deneme";
 import { examInfo, examShort } from "@/lib/exams";
@@ -48,7 +48,8 @@ function uygulamaAdresi() {
 export default async function KitapcikPage({ params }: PageProps<"/kitapcik/[sessionId]">) {
   const { sessionId } = await params;
   const user = await getCurrentUser();
-  if (!user) redirect("/giris");
+  // Girişten sonra bu sayfaya dönülsün (?sonra=, lib/auth.ts girisAdresi).
+  if (!user) redirect(await girisAdresi());
 
   let k;
   try {

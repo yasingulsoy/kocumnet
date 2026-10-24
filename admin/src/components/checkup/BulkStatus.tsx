@@ -1,15 +1,19 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { setQuestionsStatusAction } from "@/lib/checkup/actions/questions";
 import { QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
 import { KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
+import { listeAdresi, soruAdresi } from "@/lib/checkup/question-list";
+import { yayinOzeti, type AtlamaOzeti } from "@/lib/checkup/soru-akisi";
 import { cx } from "@/components/tailadmin/cx";
 import { Checkbox } from "@/components/tailadmin/form/Checkbox";
 import { useSidebar } from "@/components/tailadmin/layout/SidebarContext";
+import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Button, type ButtonVariant } from "@/components/tailadmin/ui/Button";
 import type { ConfirmOptions } from "@/components/tailadmin/ui/Dialogs";
 import { useOnay } from "./Onay";
@@ -45,7 +49,7 @@ const EYLEMLER: { status: string; etiket: string; variant: ButtonVariant; onay?:
     variant: "primary",
     onay: (n) => ({
       title: n + " soru yayına alınsın mı?",
-      description: "Öğrenci testlerine seçilmeye başlar.",
+      description: "Öğrenci testlerine seçilmeye başlar. Yayına hazır olmayanlar (çözüm, hata tipi, seviye…) atlanır; neden atlandıkları listede yazar.",
       confirmLabel: "Yayına al",
     }),
   },
@@ -71,22 +75,32 @@ const EYLEMLER: { status: string; etiket: string; variant: ButtonVariant; onay?:
  * `kilitliler`: yayındaki ve başlatılmış bir denemede olan sorular. Yayından
  * kaldıran toplu işlem onları ATLAR (sunucu da atlar ve sayısını döner);
  * onayda kaç tanesinin yayında kalacağı söylenir.
+ *
+ * Yayına alma "yayına hazır mı" kapısından geçer (sunucuda): hazır olmayanlar
+ * atlanır. Sonuç listenin üstünde kalıcı bir kutuda yazar ("12 soru yayına
+ * alındı, 3 soru atlandı: çözüm yok (2), hata tipi eksik (1)"); her eksik
+ * türü listenin `?eksik=` süzgecine bağlanır (`sorgu`: listenin süzgeci,
+ * bağlantı onu korur).
  */
 export function BulkProvider({
   ids,
   denemeleri = {},
   kilitliler = {},
+  sorgu = "",
   children,
 }: {
   ids: string[];
   denemeleri?: Record<string, string[]>;
   kilitliler?: Record<string, string[]>;
+  sorgu?: string;
   children: ReactNode;
 }) {
   const [ham, setHam] = useState<Set<string>>(() => new Set());
   const [pending, start] = useTransition();
   /** Hangi düğme çalışıyor: dönen halka yalnızca onda. */
   const [calisan, setCalisan] = useState<string | null>(null);
+  /** Son toplu yayının atlananları: kutu kapatılana ya da yeni işleme kadar durur. */
+  const [yayinSonucu, setYayinSonucu] = useState<{ metin: string; atlanan: AtlamaOzeti } | null>(null);
   const router = useRouter();
   const onayla = useOnay();
   // Sabit çubuk kenar çubuğunun yanından başlasın (geniş 290, dar 90 px).
@@ -154,12 +168,23 @@ export function BulkProvider({
       if (!evet) return;
     } else if (onay && !(await onayla(onay(liste.length)))) return;
     setCalisan(status);
+    setYayinSonucu(null);
     start(async () => {
       const res = await setQuestionsStatusAction(liste, status);
       if (!res.ok) {
         toast.error(res.error ?? "Durum değiştirilemedi.");
         return;
       }
+      if (status === "PUBLISHED" && res.atlanan?.toplam) {
+        // Atlanan var: özet kalıcı kutuda (bağlantılarıyla), bildirim kısa.
+        const metin = yayinOzeti(res.count ?? 0, res.atlanan);
+        setYayinSonucu({ metin, atlanan: res.atlanan });
+        toast(metin, { duration: 6000 });
+        setHam(new Set());
+        router.refresh();
+        return;
+      }
+      if (res.degisen) toast.error(res.degisen + " soru bu arada değiştiği için yayına alınmadı; yeniden dene.", { duration: 6000 });
       const degisen = res.count ?? 0;
       toast.success(
         degisen === 0
@@ -172,8 +197,50 @@ export function BulkProvider({
     });
   };
 
+  /** Atlananların süzgeci: listenin süzgeci korunur, `eksik` değişir, sayfa başa döner. */
+  const eksikAdresi = (suzgec: string) => {
+    const u = new URLSearchParams(sorgu);
+    u.set("eksik", suzgec);
+    u.delete("sayfa");
+    return listeAdresi(u.toString());
+  };
+
   return (
     <BulkCtx.Provider value={ctx}>
+      {yayinSonucu ? (
+        <Alert
+          variant="warning"
+          className="mb-4"
+          title={yayinSonucu.metin}
+          onClose={() => setYayinSonucu(null)}
+          closeLabel="Sonucu kapat"
+        >
+          <span className="block">Atlanan sorular yayına hazır değil. Eksiği gider, sonra yeniden yayına al:</span>
+          <span className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+            {yayinSonucu.atlanan.nedenler
+              .filter((n) => n.suzgec)
+              .map((n) => (
+                <Link key={n.kod} href={eksikAdresi(n.suzgec!)} className="font-medium text-gray-800 underline underline-offset-2">
+                  {n.etiket} ({n.sayi})
+                </Link>
+              ))}
+          </span>
+          {yayinSonucu.atlanan.sorular.length ? (
+            <span className="mt-1.5 block">
+              Süzgeci olmayan eksikler:{" "}
+              {yayinSonucu.atlanan.sorular.map((s, i) => (
+                <span key={s.id}>
+                  {i ? " · " : ""}
+                  <Link href={soruAdresi(s.id, sorgu)} className="font-medium text-gray-800 underline underline-offset-2" title={s.id}>
+                    #{s.id.slice(-6)}
+                  </Link>{" "}
+                  ({s.etiket})
+                </span>
+              ))}
+            </span>
+          ) : null}
+        </Alert>
+      ) : null}
       {children}
 
       {/* Sabit çubuk sayfa sonunu (sayfalama) örtmesin. */}

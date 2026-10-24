@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChartColumn, CircleCheck, ClipboardList, Users, UsersRound } from "lucide-react";
+import { ChartColumn, CircleCheck, ClipboardList, Printer, Users, UsersRound } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { LEVEL_LABEL, examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
 import { RAPOR_GUN, grupRaporu, odevKayitlari, odevOrani, oranaSayilir } from "@/lib/checkup/gruplar";
+import { davetBaglantisi, davetleKatildi } from "@/lib/checkup/davet";
+import { uygulamaAdresi } from "@/lib/checkup/uygulama";
 import { HARITA_EN_AZ_SORU, HARITA_GUCLU_ORAN, HARITA_ORTA_ORAN } from "@/lib/checkup/shared/insights";
 import {
   ODEV_DURUM_ETIKETI,
@@ -20,14 +22,16 @@ import { soruSinavdaKosulu } from "@/lib/checkup/shared/exam-scope";
 import { damgaAdi } from "@/lib/checkup/question-note";
 import { ODEV_DURUMLARI, enGecSonTarih, kalanGunMetni, tamamlandiMi, trTarih, varsayilanSonTarih } from "@/lib/checkup/shared/odev";
 import { GateNotice } from "@/components/checkup/GateNotice";
+import { GrupDavet } from "@/components/checkup/GrupDavet";
 import { GrupArsivDugmesi, GrupDuzenleDugmesi } from "@/components/checkup/GrupFormu";
 import { GrupIsiHaritasi } from "@/components/checkup/GrupIsiHaritasi";
-import { UyeCikarDugmesi, UyeEkle } from "@/components/checkup/GrupUyeleri";
+import { TopluUyeEkle, UyeCikarDugmesi, UyeEkle } from "@/components/checkup/GrupUyeleri";
 import { OdevIptalDugmesi, OdevUzatDugmesi, YeniOdevDugmesi, type OdevKonusu, type OdevPaketi } from "@/components/checkup/OdevFormu";
 import { Meter, levelColor, qs } from "@/components/checkup/ui";
 import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Avatar } from "@/components/tailadmin/ui/Avatar";
 import { Badge } from "@/components/tailadmin/ui/Badge";
+import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
 import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
@@ -63,6 +67,7 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
       examScope: true,
       note: true,
       archivedAt: true,
+      joinCode: true,
       createdByStaff: true,
       createdAt: true,
       members: {
@@ -255,6 +260,9 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
         }
         actions={
           <>
+            <ButtonLink href={"/checkup/gruplar/" + grup.id + "/yazdir"} variant="outline" size="xs" startIcon={<Printer />}>
+              Yazdır
+            </ButtonLink>
             <GrupDuzenleDugmesi
               grup={{ id: grup.id, name: grup.name, examScope: grup.examScope ?? "", note: grup.note ?? "" }}
             />
@@ -291,7 +299,7 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
           label={`Son ${RAPOR_GUN} gün`}
           value={trNumber(rapor.sonucSayisi)}
           icon={<ChartColumn />}
-          hint="üyelerin puanlanmış testi"
+          hint="üyelerin sayılan testi (boş ve yarım hariç)"
         />
       </div>
 
@@ -408,13 +416,29 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
           desc="Öğrenci yalnızca kendi ödevlerini görür; grubun öbür üyelerini görmez."
           flush
         >
+          <div className="border-t border-gray-100 px-5 py-4 sm:px-6">
+            <h3 className="mb-3 text-theme-sm font-semibold text-gray-800">Davet bağlantısı</h3>
+            {/* key: eylemden sonra sayfa yeni kodla çizilince bileşen de baştan kurulsun. */}
+            <GrupDavet
+              key={grup.joinCode ?? "kapali"}
+              groupId={grup.id}
+              kod={grup.joinCode}
+              baglanti={grup.joinCode ? davetBaglantisi(uygulamaAdresi(), grup.joinCode) : null}
+              arsivde={arsivde}
+            />
+          </div>
           {!arsivde ? (
-            <div className="border-t border-gray-100 px-5 py-4 sm:px-6">
+            <div className="space-y-2 border-t border-gray-100 px-5 py-4 sm:px-6">
               <UyeEkle groupId={grup.id} />
+              <TopluUyeEkle groupId={grup.id} />
             </div>
           ) : null}
           {grup.members.length === 0 ? (
-            <EmptyState icon={<UsersRound />} title="Grupta üye yok" description={arsivde ? undefined : "Yukarıdan ad ya da e-postayla ara, ekle."} />
+            <EmptyState
+              icon={<UsersRound />}
+              title="Grupta üye yok"
+              description={arsivde ? undefined : "Davet bağlantısını gönder ya da yukarıdan ad veya e-postayla ekle."}
+            />
           ) : (
             <ul className="divide-y divide-gray-100 border-t border-gray-100">
               {grup.members.map((m) => {
@@ -422,6 +446,7 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
                 const ayrinti = [gradeLabel(m.user.grade), m.user.targetExam ? examLabel(m.user.targetExam) : null]
                   .filter(Boolean)
                   .join(" · ");
+                const davetle = davetleKatildi(m.addedByStaff);
                 return (
                   <li key={m.userId} className="relative flex items-center gap-3 px-5 py-3 transition hover:bg-gray-50 sm:px-6">
                     <Avatar name={m.user.name} size="small" decorative />
@@ -433,8 +458,15 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
                         {m.user.name}
                       </Link>
                       <span className="block truncate text-theme-xs text-gray-500">{m.user.email}</span>
-                      <span className="block truncate text-theme-xs text-gray-500" title={"Ekleyen " + damgaAdi(m.addedByStaff)}>
-                        {[ayrinti, "eklendi " + relativeDay(m.createdAt, now), oz.sayilan > 0 ? `${oz.biten}/${oz.sayilan} ödev` : null]
+                      <span
+                        className="block truncate text-theme-xs text-gray-500"
+                        title={davetle ? "Davet bağlantısıyla kendisi katıldı" : "Ekleyen " + damgaAdi(m.addedByStaff)}
+                      >
+                        {[
+                          ayrinti,
+                          (davetle ? "davetle katıldı " : "eklendi ") + relativeDay(m.createdAt, now),
+                          oz.sayilan > 0 ? `${oz.biten}/${oz.sayilan} ödev` : null,
+                        ]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
@@ -536,6 +568,14 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
                               boş gönderildi
                             </span>
                           ) : null}
+                          {i.yarimKaldi ? (
+                            <span
+                              className="mt-1 block text-theme-xs"
+                              title="Bitirmeden kapanan ve soruların yarısından azı işaretli test ödevi tamamlamaz"
+                            >
+                              yarım kaldı
+                            </span>
+                          ) : null}
                         </TableCell>
                         <TableCell align="end" nowrap className="tabular">
                           {secili.kind === "PACKAGE" ? (
@@ -565,7 +605,7 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
           className="col-span-12"
           title="Grup raporu"
           desc={
-            `Son ${RAPOR_GUN} günün puanlanmış testleri` +
+            `Son ${RAPOR_GUN} günün puanlanmış testleri (boş gönderilen ve yarım kalanlar hariç)` +
             (grup.examScope ? ` · yalnızca ${examLabel(grup.examScope)}` : "") +
             `. Oran ve seviye öğrenci panosundaki kuralla: en az ${HARITA_EN_AZ_SORU} soru, ${percent(HARITA_GUCLU_ORAN)} güçlü, ${percent(HARITA_ORTA_ORAN)} orta.`
           }

@@ -7,27 +7,34 @@ import { CheckupError } from "@/lib/checkup";
 import { asamaAc, kosuyuBirak, seviyeliSinavBaslat, telafiyiAc } from "@/lib/level-run";
 import { isExamScope } from "@/lib/exams";
 import type { Seviye } from "@/lib/levels";
+import { hataAdresi, seviyeliHataKodu } from "@/lib/hata-kodlari";
 
 /**
  * Seviyeli check-up'ın sunucu eylemleri.
  *
  * Hepsi aynı deseni izliyor: başarılıysa test ekranına yönlendir,
- * başarısızsa deneme sayfasına hata mesajıyla dön. `redirect()` her zaman
+ * başarısızsa deneme sayfasına hata KODUYLA dön (lib/hata-kodlari.ts):
+ * adrese metin yazılmaz, sayfa sabit cümleyi tablodan okur. `redirect()` her zaman
  * try/catch DIŞINDA — içeride olsaydı fırlattığı özel hata yakalanır ve
  * yönlendirme hiç gerçekleşmezdi.
  */
 
+/** Deneme sayfasının yolu; kimlik formdan geldiği için kaçışlanır. */
+function denemeYolu(runId: string): string {
+  return `/seviye/${encodeURIComponent(runId)}`;
+}
+
 export async function seviyeliBaslatAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const sinav = String(formData.get("examScope") ?? "");
-  if (!isExamScope(sinav)) redirect("/seviyeli?hata=" + encodeURIComponent("Sınav seçilmedi."));
+  if (!isExamScope(sinav)) redirect(hataAdresi("/seviyeli", "sinav-secilmedi"));
 
   let sonuc: { runId: string; sessionId: string | null };
   try {
     sonuc = await seviyeliSinavBaslat(user.id, sinav);
   } catch (e) {
     if (e instanceof CheckupError) {
-      redirect("/seviyeli?hata=" + encodeURIComponent(e.message));
+      redirect(hataAdresi("/seviyeli", seviyeliHataKodu(e.message)));
     }
     throw e;
   }
@@ -47,7 +54,7 @@ export async function telafiBaslatAction(formData: FormData): Promise<void> {
     sessionId = await telafiyiAc(runId, user.id);
   } catch (e) {
     if (e instanceof CheckupError) {
-      redirect(`/seviye/${runId}?hata=` + encodeURIComponent(e.message));
+      redirect(hataAdresi(denemeYolu(runId), seviyeliHataKodu(e.message)));
     }
     throw e;
   }
@@ -84,7 +91,7 @@ export async function seviyeBaslatAction(formData: FormData): Promise<void> {
   const seviye = Number(formData.get("seviye"));
 
   if (![1, 2, 3].includes(seviye)) {
-    redirect(`/seviye/${runId}?hata=` + encodeURIComponent("Geçersiz seviye."));
+    redirect(hataAdresi(denemeYolu(runId), "seviye-gecersiz"));
   }
 
   let sessionId: string;
@@ -94,13 +101,13 @@ export async function seviyeBaslatAction(formData: FormData): Promise<void> {
       m.prisma.levelRun.findUnique({ where: { id: runId }, select: { userId: true } })
     );
     if (!run || run.userId !== user.id) {
-      redirect(`/seviye/${runId}?hata=` + encodeURIComponent("Deneme bulunamadı."));
+      redirect(hataAdresi(denemeYolu(runId), "deneme-yok"));
     }
     const sonuc = await asamaAc(runId, seviye as Seviye, "MAIN");
     sessionId = sonuc.sessionId;
   } catch (e) {
     if (e instanceof CheckupError) {
-      redirect(`/seviye/${runId}?hata=` + encodeURIComponent(e.message));
+      redirect(hataAdresi(denemeYolu(runId), seviyeliHataKodu(e.message)));
     }
     throw e;
   }

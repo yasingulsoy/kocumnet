@@ -276,8 +276,8 @@ export async function kontrolTestiSinavi(
 
 /**
  * "Planı oluştur"un kaynağı: eğilime giren son ölçüm (lib/insights.ts
- * egilimeGirer) — paket testi, işaretli, hedef sınavdan. Sınavı yazmayan
- * eski kayıtta sınav paketten okunur.
+ * egilimeGirer) — paket testi, işaretli, yarım kalmamış, hedef sınavdan.
+ * Sınavı yazmayan eski kayıtta sınav paketten okunur.
  *
  * Eskiden en son HER sonuç alınıyordu: 5 soruluk kontrol testinden, boş
  * gönderilmiş testten (her konu "zayıf") ya da öğrencinin bıraktığı
@@ -312,12 +312,18 @@ export async function planKaynagi(
       },
     },
     orderBy: { submittedAt: "desc" },
-    take: 5,
+    // Yarım kalan testler süzgeçte elenir; birkaç tanesi üst üste gelse de
+    // ondan önceki tam ölçüm bulunsun.
+    take: 10,
     select: {
       id: true,
       kind: true,
+      // Yarım test kuralı (yarimKaldi) için endedBy ve blankCount şart.
+      endedBy: true,
       package: { select: { examScope: true } },
-      result: { select: { topicBreakdown: true, correctCount: true, wrongCount: true, examScope: true } },
+      result: {
+        select: { topicBreakdown: true, correctCount: true, wrongCount: true, blankCount: true, examScope: true },
+      },
     },
   });
   for (const s of adaylar) {
@@ -327,7 +333,15 @@ export async function planKaynagi(
     // için süzgeç de ona baksın (yoksa eski bir TYT sonucundan ALES adayına
     // TYT planı kurulurdu).
     const sinav = r.examScope ?? s.package.examScope;
-    if (!egilimeGirer({ kind: s.kind, correctCount: r.correctCount, wrongCount: r.wrongCount, examScope: sinav }, hedef)) {
+    const kayit = {
+      kind: s.kind,
+      correctCount: r.correctCount,
+      wrongCount: r.wrongCount,
+      blankCount: r.blankCount,
+      endedBy: s.endedBy,
+      examScope: sinav,
+    };
+    if (!egilimeGirer(kayit, hedef)) {
       continue;
     }
     return { sessionId: s.id, examScope: sinav, breakdown: r.topicBreakdown as unknown as TopicBreakdown };

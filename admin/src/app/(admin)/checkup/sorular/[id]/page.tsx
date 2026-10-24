@@ -7,7 +7,8 @@ import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checku
 import { QUESTION_STATUS_LABEL, trDate } from "@/lib/checkup/format";
 import { loadQuestionAnalysis } from "@/lib/checkup/item-analysis";
 import { BULGU_SIRASI } from "@/lib/checkup/item-flags";
-import { bulgularNotu } from "@/lib/checkup/question-note";
+import { bulgularNotu, damgaAdi } from "@/lib/checkup/question-note";
+import { kuyrukAdresi, kuyrukSorgusu } from "@/lib/checkup/soru-akisi";
 import { soruNotlari } from "@/lib/checkup/question-notes";
 import { soruBildirimleri } from "@/lib/checkup/student-reports";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
@@ -43,9 +44,12 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
   const geri = listeSorgusu(listeden ? (sp.geri as string) : "");
   // "Kaydet ve sonrakine geç"ten gelindiyse kaydedilen önceki soru.
   const kaydedilen = typeof sp.kaydedildi === "string" ? sp.kaydedildi.slice(0, 64) : "";
+  // İnceleme kuyruğundan "Düzenle" ile gelindiyse kuyruğun süzgeci: kaydedince kuyruğa dönülür.
+  const kuyruk = typeof sp.kuyruk === "string" ? kuyrukSorgusu(sp.kuyruk) : undefined;
   const crumbs = [
     { href: "/checkup", label: "Check-up" },
     { href: listeAdresi(geri), label: "Sorular" },
+    ...(kuyruk !== undefined ? [{ href: kuyrukAdresi(kuyruk, { id }), label: "İnceleme kuyruğu" }] : []),
   ];
 
   const [question, topics, objectives, notlar, bildirimler, denemeBaglari] = await Promise.all([
@@ -71,6 +75,8 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
         updatedAt: true,
         createdByStaff: true,
         updatedByStaff: true,
+        publishedAt: true,
+        publishedByStaff: true,
         choices: {
           orderBy: { sortOrder: "asc" },
           select: { id: true, content: true, isCorrect: true, errorType: true, label: true },
@@ -191,6 +197,10 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     "eklendi " + trDate(question.createdAt) + (question.createdByStaff ? " · " + question.createdByStaff : ""),
     question.updatedByStaff && question.updatedAt.getTime() !== question.createdAt.getTime()
       ? "son düzenleme " + trDate(question.updatedAt) + " · " + question.updatedByStaff
+      : null,
+    // Son yayına alan (yayından çıkınca silinmez; yeniden yayına alınana kadar son onayı gösterir).
+    question.publishedAt
+      ? "yayına alan: " + damgaAdi(question.publishedByStaff) + ", " + trDate(question.publishedAt, { time: true })
       : null,
   ]
     .filter(Boolean)
@@ -321,7 +331,8 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
         }))}
         question={initial}
         returnQuery={listeden ? geri : undefined}
-        sonrakiId={komsu?.sonraki ?? null}
+        sonrakiId={kuyruk !== undefined ? null : (komsu?.sonraki ?? null)}
+        kuyrukSorgusu={kuyruk}
       />
     </>
   );

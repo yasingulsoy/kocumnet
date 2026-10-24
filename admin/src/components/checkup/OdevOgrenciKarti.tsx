@@ -25,7 +25,9 @@ function OdevSatiri({ o, now }: { o: OgrencininOdevi; now: Date }) {
         ? `${trNumber(i.net, 2)} net`
         : i.bosGonderildi
           ? "boş gönderildi"
-          : null;
+          : i.yarimKaldi
+            ? "yarım kaldı"
+            : null;
   return (
     <li className="relative flex items-start justify-between gap-3 px-5 py-3 transition hover:bg-gray-50 sm:px-6">
       <div className="min-w-0">

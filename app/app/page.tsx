@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { kayitKaynagi, kimlikAdresi } from "@/lib/hesap-kurallari";
 import { SITE_URL } from "@/lib/products";
 import { KATALOG_TURLERI } from "@/lib/catalog";
 import { EXAMS, SECILEBILIR_SINAVLAR, examShort } from "@/lib/exams";
@@ -69,6 +70,16 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;
   const yil = new Date().getFullYear();
 
+  /*
+   * Kayıt kaynağı: kocum.net bağlantıları `?k=<etiket>` taşıyor. İzin
+   * listesinden geçirip (lib/hesap-kurallari.ts) kayıt ve giriş
+   * bağlantılarına ekliyoruz; hesap açılınca User.signupSource'a yazılır.
+   * Çerez yok: öğrenci sayfadan çıkıp başka yoldan dönerse kaynak bilinmez.
+   */
+  const k = kayitKaynagi(sp.k);
+  const kayit = kimlikAdresi("/kayit", { k });
+  const giris = kimlikAdresi("/giris", { k });
+
   // Yalnızca katalog paketleri: seviyeli (117 dk) ve gizli tekrar paketleri
   // "her biri 15-30 dakika" başlığının altında listeleniyordu.
   const paketler = await prisma.package.findMany({
@@ -99,10 +110,10 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
             <Wordmark className="max-sm:hidden" />
           </Link>
           <div className="flex items-center gap-2">
-            <ButtonLink href="/giris" variant="ghost" size="xs">
+            <ButtonLink href={giris} variant="ghost" size="xs">
               Giriş yap
             </ButtonLink>
-            <ButtonLink href="/kayit" size="xs">
+            <ButtonLink href={kayit} size="xs">
               Ücretsiz başla
             </ButtonLink>
           </div>
@@ -145,10 +156,10 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
                 ))}
               </ul>
               <div className="mt-8 flex flex-wrap gap-3">
-                <ButtonLink href="/kayit" size="md" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+                <ButtonLink href={kayit} size="md" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
                   Ücretsiz dene
                 </ButtonLink>
-                <ButtonLink href="/giris" variant="outline" size="md">
+                <ButtonLink href={giris} variant="outline" size="md">
                   Hesabım var
                 </ButtonLink>
               </div>
@@ -249,14 +260,14 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
                     Neyi ölçmek istiyorsan onu seç.{sureAraligi ? ` Her biri ${sureAraligi} dakika.` : ""}
                   </p>
                 </div>
-                <ButtonLink href="/kayit" variant="soft" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+                <ButtonLink href={kayit} variant="soft" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
                   Hepsini gör
                 </ButtonLink>
               </div>
 
               <div className="mt-8 grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
                 {paketler.map((p) => (
-                  <Link key={p.slug} href="/kayit" className="group block rounded-2xl">
+                  <Link key={p.slug} href={kayit} className="group block rounded-2xl">
                     <Card className="flex h-full items-center justify-between gap-4 p-4 transition group-hover:border-gray-300 group-hover:shadow-theme-md sm:p-5">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -296,7 +307,7 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
             </p>
             <div className="mt-8 flex justify-center">
               <ButtonLink
-                href="/kayit"
+                href={kayit}
                 variant="outline"
                 size="md"
                 endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}

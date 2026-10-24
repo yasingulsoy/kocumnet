@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/checkup/db";
+import { DAVET_KODU_DENEME, davetBaglantisi, davetKoduUret } from "@/lib/checkup/davet";
 import { EXAM_SCOPES } from "@/lib/checkup/format";
+import { uygulamaAdresi } from "@/lib/checkup/uygulama";
 import { MANAGE_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
 import {
   ARAMA_EN_AZ,
@@ -13,7 +15,10 @@ import {
   ODEV_BASLIGI_SINIRI,
   ODEV_NOTU_SINIRI,
   ODEV_PAKET_TURLERI,
+  TOPLU_EKLEME_SINIRI,
+  TOPLU_METIN_SINIRI,
   cokSatir,
+  epostaListesiAyristir,
   odevKonuSinavi,
   tekSatir,
 } from "@/lib/checkup/grup-kurallari";
@@ -99,7 +104,9 @@ export async function grupKaydetAction(girdi: unknown): Promise<Yanit<{ id: stri
 
 /**
  * Arşivle (arsivle=true) ya da geri al. Arşivdeki grubun ödevleri öğrenciden
- * kalkar (lib/odev.ts ogrenciGorur); üyeler ve ödevler silinmez.
+ * kalkar (lib/odev.ts ogrenciGorur); üyeler ve ödevler silinmez. Arşivlerken
+ * davet bağlantısı da kapanır: dağıtılmış bir bağlantıyla kapalı gruba
+ * katılım olmasın. Arşivden alınca davet kapalı kalır, koç yenisini açar.
  */
 export async function grupArsivAction(id: unknown, arsivle: unknown): Promise<Yanit> {
   const auth = await staffForAction(MANAGE_ROLES);
@@ -110,7 +117,7 @@ export async function grupArsivAction(id: unknown, arsivle: unknown): Promise<Ya
   // Koşul güncellemenin içinde: ilk arşivleme anı ikinci basışta ezilmesin.
   const r = await db.studyGroup.updateMany({
     where: { id: k.data, archivedAt: arsivle ? null : { not: null } },
-    data: { archivedAt: arsivle ? new Date() : null },
+    data: arsivle ? { archivedAt: new Date(), joinCode: null } : { archivedAt: null },
   });
   if (r.count === 0 && !(await db.studyGroup.findUnique({ where: { id: k.data }, select: { id: true } }))) {
     return { ok: false, error: "Grup bulunamadı." };
@@ -201,6 +208,75 @@ export async function uyeEkleAction(groupId: unknown, userId: unknown): Promise<
   return { ok: true };
 }
 
+export interface TopluEklemeSonucu {
+  eklendi: number;
+  zatenUye: number;
+  /** Kayıtlı öğrenci bulunamayan e-postalar (koçun yapıştırdığı liste; yeni kişisel veri değil). */
+  kayitYok: string[];
+  /** "@" içeren ama e-posta olmayan parçalar: yazım hatası. */
+  gecersiz: string[];
+}
+
+/**
+ * Toplu ekleme: yapıştırılan e-posta listesinden kayıtlı öğrencileri gruba
+ * ekler. Kayıtlı olmayanlar eklenmez, listelenir: koç onlara davet
+ * bağlantısını gönderir. Öğrenci olmayan hesap (personel) "kayıt yok" sayılır.
+ * Tek sorguyla bulunur, tek sorguyla eklenir (skipDuplicates: aynı anda
+ * davetle katılan öğrenci çakışma hatası vermesin).
+ */
+export async function topluUyeEkleAction(groupId: unknown, metin: unknown): Promise<Yanit<TopluEklemeSonucu>> {
+  const auth = await staffForAction(MANAGE_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const g = KIMLIK.safeParse(groupId);
+  if (!g.success || typeof metin !== "string") return { ok: false, error: "Geçersiz istek." };
+  if (metin.length > TOPLU_METIN_SINIRI) {
+    return { ok: false, error: "Liste çok uzun; bir seferde en çok " + TOPLU_EKLEME_SINIRI + " e-posta yapıştır." };
+  }
+
+  const { gecerli, gecersiz } = epostaListesiAyristir(metin);
+  if (gecerli.length === 0) {
+    return {
+      ok: false,
+      error: gecersiz.length ? "Listede geçerli e-posta yok: " + gecersiz.slice(0, 3).join(", ") : "Listede e-posta yok.",
+    };
+  }
+  if (gecerli.length > TOPLU_EKLEME_SINIRI) {
+    return { ok: false, error: "Bir seferde en çok " + TOPLU_EKLEME_SINIRI + " e-posta; listede " + gecerli.length + " var." };
+  }
+
+  const grup = await db.studyGroup.findUnique({ where: { id: g.data }, select: { archivedAt: true } });
+  if (!grup) return { ok: false, error: "Grup bulunamadı." };
+  if (grup.archivedAt) return { ok: false, error: "Arşivdeki gruba üye eklenmez; önce arşivden al." };
+
+  const ogrenciler = await db.user.findMany({
+    where: { role: "STUDENT", email: { in: gecerli, mode: "insensitive" } },
+    select: { id: true, email: true, groupMemberships: { where: { groupId: g.data }, select: { id: true } } },
+  });
+  const bulunan = new Set(ogrenciler.map((u) => u.email.toLowerCase()));
+  const yeni = ogrenciler.filter((u) => u.groupMemberships.length === 0);
+
+  const damga = staffStamp(auth.staff);
+  const r =
+    yeni.length > 0
+      ? await db.groupMember.createMany({
+          data: yeni.map((u) => ({ groupId: g.data, userId: u.id, addedByStaff: damga })),
+          skipDuplicates: true,
+        })
+      : { count: 0 };
+  if (r.count > 0) {
+    console.info("[checkup] gruba toplu üye eklendi — grup " + g.data + " · " + r.count + " öğrenci · " + damga);
+  }
+  tazele(g.data);
+  return {
+    ok: true,
+    eklendi: r.count,
+    // Bu arada davetle katılan da "zaten üye" sayılır.
+    zatenUye: ogrenciler.length - r.count,
+    kayitYok: gecerli.filter((e) => !bulunan.has(e)),
+    gecersiz,
+  };
+}
+
 /** Üyeyi çıkar. Öğrencinin oturumları ve sonuçları durur; yalnızca grubun ödevlerini görmez olur. */
 export async function uyeCikarAction(groupId: unknown, userId: unknown): Promise<Yanit> {
   const auth = await staffForAction(MANAGE_ROLES);
@@ -215,6 +291,67 @@ export async function uyeCikarAction(groupId: unknown, userId: unknown): Promise
   }
   tazele(g.data);
   return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Davet bağlantısı
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Davet bağlantısını aç ("olustur"), yenile ya da kapat. Biçim ve neden
+ * davet.ts'te; öğrencinin katılması uygulamada (app/lib/grup-katilim.ts).
+ * Yetki grup yönetimiyle aynı (MANAGE).
+ *
+ *  - olustur: kod zaten varsa aynısı döner (iki kez basmak bağlantıyı
+ *    değiştirmesin; dağıtılmış bağlantı bozulmasın).
+ *  - yenile:  yeni kod; eski bağlantı artık çalışmaz (yanlış yere gitti).
+ *  - kapat:   kod silinir, davet kapanır; üyeler kalır.
+ *
+ * Kod benzersiz (@unique): çakışırsa (2^40 olasılıkta pratikte olmaz) yeniden üretilir.
+ */
+export async function davetAction(
+  groupId: unknown,
+  islem: unknown
+): Promise<Yanit<{ kod: string | null; baglanti: string | null }>> {
+  const auth = await staffForAction(MANAGE_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const g = KIMLIK.safeParse(groupId);
+  if (!g.success || (islem !== "olustur" && islem !== "yenile" && islem !== "kapat")) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+
+  const grup = await db.studyGroup.findUnique({ where: { id: g.data }, select: { archivedAt: true, joinCode: true } });
+  if (!grup) return { ok: false, error: "Grup bulunamadı." };
+  const damga = staffStamp(auth.staff);
+
+  if (islem === "kapat") {
+    if (grup.joinCode) {
+      await db.studyGroup.update({ where: { id: g.data }, data: { joinCode: null } });
+      console.info("[checkup] grup daveti kapatıldı — " + g.data + " · " + damga);
+    }
+    tazele(g.data);
+    return { ok: true, kod: null, baglanti: null };
+  }
+
+  if (grup.archivedAt) return { ok: false, error: "Arşivdeki grubun daveti açılmaz; önce arşivden al." };
+  if (islem === "olustur" && grup.joinCode) {
+    return { ok: true, kod: grup.joinCode, baglanti: davetBaglantisi(uygulamaAdresi(), grup.joinCode) };
+  }
+
+  for (let deneme = 0; deneme < DAVET_KODU_DENEME; deneme++) {
+    const kod = davetKoduUret();
+    try {
+      await db.studyGroup.update({ where: { id: g.data }, data: { joinCode: kod } });
+    } catch (e) {
+      if ((e as { code?: unknown } | null)?.code === "P2002") continue;
+      throw e;
+    }
+    // Kodun kendisi günlüğe yazılmaz: günlüğü okuyan gruba katılamasın.
+    console.info("[checkup] grup daveti " + (islem === "yenile" ? "yenilendi" : "açıldı") + " — " + g.data + " · " + damga);
+    tazele(g.data);
+    return { ok: true, kod, baglanti: davetBaglantisi(uygulamaAdresi(), kod) };
+  }
+  return { ok: false, error: "Davet kodu üretilemedi; bir kez daha dene." };
 }
 
 // ─────────────────────────────────────────────────────────────

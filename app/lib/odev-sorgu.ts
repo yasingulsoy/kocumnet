@@ -10,6 +10,7 @@ import {
   type OdevOturumu,
   type OdevTuru,
 } from "@/lib/odev";
+import { yarimKaldi } from "@/lib/insights";
 
 /**
  * Öğrencinin ödevleri — veritabanı tarafı. Kural lib/odev.ts'te (saf,
@@ -124,7 +125,9 @@ export async function ogrenciOdevleri(userId: string, now = new Date()): Promise
             startedAt: true,
             submittedAt: true,
             expiresAt: true,
-            result: { select: { netScore: true, correctCount: true, wrongCount: true } },
+            // Yarım test kuralı (lib/insights.ts yarimKaldi) endedBy ve blankCount ister.
+            endedBy: true,
+            result: { select: { netScore: true, correctCount: true, wrongCount: true, blankCount: true } },
             // Boş gönderilen oturum ödevi tamamlamaz (lib/odev.ts isaretli). Sonuç
             // varsa doğru + yanlış; sonucu yazılamamış oturumda işaretli cevap sayısı.
             _count: { select: { items: { where: { answer: { choiceId: { not: null } } } } } },
@@ -153,6 +156,9 @@ export async function ogrenciOdevleri(userId: string, now = new Date()): Promise
       expiresAt: s.expiresAt,
       net: s.result ? Number(s.result.netScore) : null,
       isaretli: s.result ? s.result.correctCount + s.result.wrongCount > 0 : s._count.items > 0,
+      // Yarım kalan test ödevi tamamlamaz (lib/odev.ts yarim). Sonucu yazılamamış
+      // oturumda soru sayısı okunmuyor; o nadir durumda kural işlemez (eskisi gibi).
+      yarim: s.result ? yarimKaldi({ ...s.result, endedBy: s.endedBy }) : false,
     })),
     cevaplar: cevaplar.flatMap((c) =>
       c.sessionItem.session.focusTopicId

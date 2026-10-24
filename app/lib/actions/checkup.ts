@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { AuthError, requireUser } from "@/lib/auth";
 import {
+  bitirmeSebebi,
   startCheckup,
   saveAnswer,
   submitCheckup,
   getSessionState,
+  zorlukGeriBildirimiYaz,
   CheckupError,
   type CheckupErrorCode,
   type SessionState,
@@ -133,10 +135,17 @@ const timesSchema = z
   .record(z.string().min(1), z.number().int().min(0).max(6 * 3600_000))
   .refine((r) => Object.keys(r).length <= 60, "Çok fazla kayıt.");
 
-/** Testi bitirir ve sonuç ekranına yönlendirir. */
+/**
+ * Testi bitirir ve sonuç ekranına yönlendirir.
+ *
+ * `bitiren`: sınav ekranının sözü. "STUDENT" öğrenci "Bitir"e bastı,
+ * "TIMEOUT" sayaç sıfıra indi ve ekran kendisi bitirdi. Yarım test kuralı
+ * buna bakıyor (lib/checkup.ts bitirmeSebebi); verilmezse saate bakılır.
+ */
 export async function submitCheckupAction(
   sessionId: string,
-  times?: Record<string, number>
+  times?: Record<string, number>,
+  bitiren?: "STUDENT" | "TIMEOUT"
 ): Promise<{ error: string; kod?: SinavHataKodu } | never> {
   let user: Awaited<ReturnType<typeof requireUser>>;
   try {
@@ -152,8 +161,15 @@ export async function submitCheckupAction(
   // Süre haritası bozuksa testi bitirmeyi engellemez: yoksayıp devam ederiz.
   const sureler = times ? (timesSchema.safeParse(times).data ?? undefined) : undefined;
 
+  // Bilinmeyen değer "söylenmedi" sayılır; o zaman saat karar verir.
+  const istek = bitiren === "STUDENT" || bitiren === "TIMEOUT" ? bitiren : undefined;
+  const bitis = istek
+    ? null
+    : await prisma.checkupSession.findUnique({ where: { id: sessionId }, select: { expiresAt: true } });
+  const sebep = bitirmeSebebi(istek, bitis?.expiresAt ?? new Date(), new Date());
+
   try {
-    await submitCheckup(sessionId, user.id, sureler);
+    await submitCheckup(sessionId, user.id, sureler, sebep);
   } catch (e) {
     if (e instanceof CheckupError) return { error: e.message, kod: e.code };
     throw e;
@@ -180,4 +196,21 @@ export async function submitCheckupAction(
   revalidatePath("/panel");
   revalidatePath("/gelisim");
   redirect(`/sonuc/${sessionId}`);
+}
+
+/**
+ * Sonuç ekranındaki "Bu test sana nasıl geldi?" dokunuşu (1 kolay, 2 uygun,
+ * 3 zor). Yalnızca kendi oturumuna ve sorulan teste yazar; kurallar
+ * lib/checkup.ts zorlukGeriBildirimiYaz'da.
+ */
+export async function zorlukAction(sessionId: unknown, deger: unknown): Promise<{ ok: boolean }> {
+  let userId: string;
+  try {
+    userId = (await requireUser()).id;
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false };
+    throw e;
+  }
+  if (typeof sessionId !== "string" || sessionId.length === 0 || sessionId.length > 64) return { ok: false };
+  return { ok: await zorlukGeriBildirimiYaz(sessionId, userId, deger) };
 }

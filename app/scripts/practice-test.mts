@@ -714,11 +714,18 @@ async function main() {
   console.log("\nYanlış defteri — süresi dolan test (cron):");
   const cronSinav = await startCheckup(user.id, PAKET);
   const cronOturum = await getStudentSession(cronSinav, user.id);
-  const cronSoru = cronOturum.questions[0];
-  const cronYanlis = (
-    await prisma.choice.findFirstOrThrow({ where: { questionId: cronSoru.id, isCorrect: false }, select: { id: true } })
-  ).id;
-  await saveAnswer({ sessionId: cronSinav, userId: user.id, questionId: cronSoru.id, choiceId: cronYanlis, timeSpentMs: 5_000 });
+  /*
+   * Soruların yarısından fazlası yanlış işaretli: tek işaretle süresi dolan
+   * test artık YARIM sayılıyor ve deftere yalnızca işaretli yanlışı yazıyor
+   * (lib/insights.ts yarimKaldi; hesap-test denetler). Burada sınanan, cron'un
+   * puanladığı gerçek bir ölçümün yanlış ve boşlarıyla deftere girmesi.
+   */
+  for (const cronSoru of cronOturum.questions.slice(0, Math.floor(cronOturum.questions.length / 2) + 1)) {
+    const cronYanlis = (
+      await prisma.choice.findFirstOrThrow({ where: { questionId: cronSoru.id, isCorrect: false }, select: { id: true } })
+    ).id;
+    await saveAnswer({ sessionId: cronSinav, userId: user.id, questionId: cronSoru.id, choiceId: cronYanlis, timeSpentMs: 5_000 });
+  }
   const cronBitis = new Date(Date.now() - 2 * 60_000);
   await prisma.checkupSession.update({ where: { id: cronSinav }, data: { expiresAt: cronBitis } });
   await expireStaleSessions();

@@ -1,13 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, type FocusEvent, type RefObject } from "react";
 import { ArrowDown, ArrowUp, Lightbulb, Plus, Save, Trash2 } from "lucide-react";
 import {
   createQuestionAction,
   updateQuestionAction,
   videoBaglantisiAction,
+  yayinHazirligiAction,
   type QuestionFormState,
 } from "@/lib/checkup/actions/questions";
+import type { KontrolMaddesi } from "@/lib/checkup/shared/question-readiness";
+import { FORMUL_PARCALARI, blokEkle, formulEkle, kuyrukAdresi, type FormulParcasi } from "@/lib/checkup/soru-akisi";
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
 import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import { HEDEF_SURE_SINIRI, IPUCU_SINIRI, KAYNAK_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
@@ -26,8 +29,9 @@ import { Button, ButtonLink } from "@/components/tailadmin/ui/Button";
 import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { Badge } from "@/components/tailadmin/ui/Badge";
 import { ContentPreview } from "./ContentPreview";
-import { ImageUploader } from "./ImageUploader";
+import { ImageUploader, panodakiGorsel, type GorselYukleyiciTutamagi } from "./ImageUploader";
 import { CozumOnizleme, VideoBaglantisi, cozumAdimlari } from "./SolutionPreview";
+import { YayinListesi } from "./YayinListesi";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 import { CODE, MONO } from "./ui";
 
@@ -111,6 +115,38 @@ const BOS: QuestionInitial = {
 const PREVIEW_BOX = "rounded-xl border border-gray-200 bg-gray-50 p-4";
 const PREVIEW_LABEL = "mb-2 text-theme-xs font-semibold tracking-wide text-gray-500 uppercase";
 
+/** Formül düğmesinin yazacağı alan: DOM öğesi ve o alanın durumunu güncelleyen fonksiyon. */
+interface YaziAlani {
+  el: HTMLInputElement | HTMLTextAreaElement;
+  yaz: (deger: string) => void;
+}
+
+/**
+ * Formül düğmeleri (kesir, kök, üs, çarpı, ≤, ≥, π, derece, mutlak değer).
+ * İmlecin olduğu yere `$…$` yazımına uygun parça ekler (soru-akisi.ts
+ * formulEkle). Fareyle basınca odak alandan kaçmasın diye mousedown durdurulur.
+ */
+function FormulAraclari({ ekle }: { ekle: (p: FormulParcasi) => void }) {
+  return (
+    <div role="toolbar" aria-label="Formül ekle" className="flex flex-wrap items-center gap-1">
+      <span className="me-1 text-theme-xs text-gray-500">Formül:</span>
+      {FORMUL_PARCALARI.map((p) => (
+        <button
+          key={p.ad}
+          type="button"
+          title={p.baslik}
+          aria-label={p.baslik + " ekle"}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => ekle(p)}
+          className="min-w-8 cursor-pointer rounded-md border border-gray-200 bg-white px-2 py-1 text-theme-xs font-medium text-gray-700 transition hover:border-brand-300 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500"
+        >
+          {p.etiket}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function QuestionForm({
   topics,
   objectives = [],
@@ -121,7 +157,13 @@ export function QuestionForm({
   sonrakiId = null,
   maxIpucu,
   denemeler = [],
+  kuyrukSorgusu,
 }: {
+  /**
+   * İnceleme kuyruğundan "Düzenle" ile gelindiyse kuyruğun süzgeci: kaydedince
+   * ve vazgeçince kuyruğa, aynı soruya dönülür (soru-akisi.ts kuyrukAdresi).
+   */
+  kuyrukSorgusu?: string;
   /** En fazla ipucu: shared/question-content.ts MAX_HINTS (sayfa geçirir; modül istemciye alınamıyor). */
   maxIpucu: number;
   /** Sorunun yer aldığı denemeler: yayından kaldırırken uyarılır. */
@@ -236,6 +278,64 @@ export function QuestionForm({
   /** Gönderim sürerken ayrılma uyarısı ve kısayollar devre dışı. */
   const gonderiliyor = useRef(false);
 
+  // ── Formül düğmeleri ve şekil: imlecin yerine ekleme ──────────
+  const stemAlani = useRef<HTMLTextAreaElement>(null);
+  const cozumAlani = useRef<HTMLTextAreaElement>(null);
+  const stemKap = useRef<HTMLDivElement>(null);
+  const sikKap = useRef<HTMLDivElement>(null);
+  const ipucuKap = useRef<HTMLOListElement>(null);
+  /** Son odaklanılan yazı alanı: düğme onun imlecine yazar. */
+  const sonAlan = useRef<YaziAlani | null>(null);
+  /** Soru metnine hiç girildi mi: girilmediyse şekil eskisi gibi sona eklenir. */
+  const stemOdaklandi = useRef(false);
+  const yukleyici = useRef<GorselYukleyiciTutamagi>(null);
+
+  const odak = (yaz: (deger: string) => void) => (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    sonAlan.current = { el: e.currentTarget, yaz };
+  };
+
+  /**
+   * Bir kartın formül düğmesi (yalnızca tıklamada çalışır; ref'ler çizimde
+   * okunmaz): son odaklanılan alan o karttaysa ona, değilse kartın ilk
+   * alanına yazar (şıklarda A, ipuçlarında 1. ipucu).
+   */
+  const formulBas = (kart: "stem" | "sik" | "cozum" | "ipucu", p: FormulParcasi) => {
+    const kaplar: Record<"stem" | "sik" | "ipucu", RefObject<HTMLElement | null>> = { stem: stemKap, sik: sikKap, ipucu: ipucuKap };
+    const varsayilan = (): YaziAlani | null => {
+      if (kart === "stem") return stemAlani.current ? { el: stemAlani.current, yaz: setStem } : null;
+      if (kart === "cozum") return cozumAlani.current ? { el: cozumAlani.current, yaz: setSolution } : null;
+      const el = kaplar[kart].current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        kart === "sik" ? 'input[name="choice_0"]' : 'textarea[name="hint"]'
+      );
+      if (!el) return null;
+      return { el, yaz: kart === "sik" ? (v) => setChoice(0, v) : (v) => ipucuYaz(0, v) };
+    };
+    const son = sonAlan.current;
+    // Çözüm kartında tek yazı alanı var: düğme hep ona yazar.
+    const a = kart !== "cozum" && son && kaplar[kart].current?.contains(son.el) ? son : varsayilan();
+    if (!a) return;
+    const bas = a.el.selectionStart ?? a.el.value.length;
+    const r = formulEkle(a.el.value, bas, a.el.selectionEnd ?? bas, p);
+    a.yaz(r.metin);
+    // React değeri yazınca imleç sona kaçar; çizimden sonra yerine konur.
+    requestAnimationFrame(() => {
+      a.el.focus();
+      a.el.setSelectionRange(r.imlec, r.imlec);
+    });
+  };
+
+  /** Yüklenen şekil soru metninde imlecin satırına girer (soru-akisi.ts blokEkle). */
+  const sekilEkle = (markup: string) => {
+    const el = stemAlani.current;
+    const r = blokEkle(el?.value ?? stem, el && stemOdaklandi.current ? el.selectionStart : null, markup);
+    setStem(r.metin);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(r.imlec, r.imlec);
+    });
+  };
+
   useEffect(() => {
     const f = formRef.current;
     if (!f) return;
@@ -268,6 +368,44 @@ export function QuestionForm({
     const ilk = formRef.current?.querySelector('[data-alan-hatasi], [aria-invalid="true"]') ?? formRef.current;
     ilk?.scrollIntoView({ block: "center" });
   }, [state]);
+
+  // ── Yayın denetim listesi (canlı) ─────────────────────────────
+  /*
+   * Kural shared/question-readiness.ts'te ve istemciye alınamıyor (parmak izi
+   * node:crypto kullanıyor): form yazdıkça gecikmeli olarak sunucuya sorar.
+   * Kayıt aynı kuralı ayrıca uygular; liste gecikse de kapı açılmaz.
+   */
+  const hazirlikGirdisi = JSON.stringify({
+    stem,
+    solution,
+    choices,
+    correctIndex,
+    errorTypes,
+    level,
+    objectiveId,
+    topicId,
+    examScopes: hedefSinavlar,
+    hints: ipuclari.map((h) => h.metin),
+  });
+  const [hazirlik, setHazirlik] = useState<{ girdi: string; hazir: boolean; maddeler: KontrolMaddesi[] } | null>(null);
+  useEffect(() => {
+    let iptal = false;
+    const t = setTimeout(() => {
+      yayinHazirligiAction(JSON.parse(hazirlikGirdisi))
+        .then((r) => {
+          if (!iptal && r.ok) setHazirlik({ girdi: hazirlikGirdisi, hazir: r.hazir, maddeler: r.maddeler });
+        })
+        // Ağ hatası: liste eskisi gibi kalır, kayıt kendi denetimini yapar.
+        .catch(() => undefined);
+    }, 500);
+    return () => {
+      iptal = true;
+      clearTimeout(t);
+    };
+  }, [hazirlikGirdisi]);
+  const listeBekleniyor = hazirlik !== null && hazirlik.girdi !== hazirlikGirdisi;
+  // Yayına GİRİŞ kapısı: zaten yayında olan soru için seçenek kapanmaz (sunucu yalnızca yeni eksik açılmasını engeller).
+  const yayinKapali = Boolean(hazirlik && !hazirlik.hazir && mevcut.status !== "PUBLISHED");
 
   // ── Kaydedilmemiş değişiklik ─────────────────────────────────
   const ozet = JSON.stringify([
@@ -344,7 +482,8 @@ export function QuestionForm({
 
   const doluSikSayisi = choices.filter((c) => c.trim()).length;
   const hataSayisi = Object.keys(state.fields ?? {}).length;
-  const geriAdres = listeAdresi(returnQuery ?? "");
+  const geriAdres =
+    kuyrukSorgusu !== undefined && duzenleme ? kuyrukAdresi(kuyrukSorgusu, { id: mevcut.id }) : listeAdresi(returnQuery ?? "");
 
   // Dolu şıktan önce boş şık: sunucu reddediyor (etiketler kayar, anahtar başka
   // şıkka geçerdi). Yazar kaydetmeden önce görsün.
@@ -364,6 +503,7 @@ export function QuestionForm({
       {duzenleme ? <input type="hidden" name="id" value={mevcut.id} /> : null}
       {returnQuery !== undefined ? <input type="hidden" name="geri" value={returnQuery} /> : null}
       {duzenleme && sonrakiId ? <input type="hidden" name="sonrakiId" value={sonrakiId} /> : null}
+      {duzenleme && kuyrukSorgusu !== undefined ? <input type="hidden" name="kuyruk" value={kuyrukSorgusu} /> : null}
       <input type="hidden" name="correctIndex" value={correctIndex} />
       {errorTypes.map((value, i) => (
         <input key={i} type="hidden" name={"errorType_" + i} value={value} />
@@ -416,17 +556,36 @@ export function QuestionForm({
               </>
             }
           >
-            <Field label="Metin" error={state.fields?.stem}>
-              <TextArea
-                name="stem"
-                required
-                rows={7}
-                value={stem}
-                onChange={(e) => setStem(e.target.value)}
-                className={cx(MONO, "leading-relaxed")}
-                placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
-              />
-            </Field>
+            <div ref={stemKap} className="space-y-2">
+              {canEdit ? (
+                <FormulAraclari ekle={(p) => formulBas("stem", p)} />
+              ) : null}
+              <Field label="Metin" error={state.fields?.stem}>
+                <TextArea
+                  ref={stemAlani}
+                  name="stem"
+                  required
+                  rows={7}
+                  // Yeni soruda imleç doğrudan soru metninde başlar (kaydet ve yenisinde de).
+                  autoFocus={!duzenleme && canEdit}
+                  value={stem}
+                  onChange={(e) => setStem(e.target.value)}
+                  onFocus={(e) => {
+                    stemOdaklandi.current = true;
+                    odak(setStem)(e);
+                  }}
+                  onPaste={(e) => {
+                    // Ekran görüntüsü: metne değil şekil yükleyicisine gider (alt metni zorunlu).
+                    const f = canEdit ? panodakiGorsel(e.clipboardData) : null;
+                    if (!f) return;
+                    e.preventDefault();
+                    yukleyici.current?.dosyaVer(f);
+                  }}
+                  className={cx(MONO, "leading-relaxed")}
+                  placeholder="Bir otomobil $60$ km/sa hızla $3$ saat yol alıyor. Kaç km yol gitmiştir?"
+                />
+              </Field>
+            </div>
             {govdedeAyirici && !state.fields?.stem ? (
               <Alert variant="warning" compact>
                 Soru metninde tek başına <code className={CODE}>---</code> satırı var. Bu, çözümdeki adım ayırıcı; soru
@@ -452,8 +611,13 @@ export function QuestionForm({
                   Gerçek dolar işareti: <code className={CODE}>\$</code>
                 </li>
                 <li>
-                  Şekil: aşağıdaki yükleyiciyi kullan — metne <code className={CODE}>![alt](kimlik)</code> eklenir. Tek
-                  başına bir satırdaysa ortalanmış şekil, cümle içindeyse satır içi simge olur.
+                  Ondalık sayı: <code className={CODE}>$3,5$</code> — bitişik görünür. Boşluklu{" "}
+                  <code className={CODE}>$3, 5$</code> liste ya da koordinattır.
+                </li>
+                <li>
+                  Şekil: aşağıdaki yükleyiciyi kullan ya da ekran görüntüsünü metne <kbd className={CODE}>Ctrl</kbd> +{" "}
+                  <kbd className={CODE}>V</kbd> ile yapıştır — imlecin satırına <code className={CODE}>![alt](kimlik)</code>{" "}
+                  eklenir. Tek başına bir satırdaysa ortalanmış şekil, cümle içindeyse satır içi simge olur.
                 </li>
                 <li>Boş satır yeni paragraf açar.</li>
                 <li>
@@ -472,13 +636,9 @@ export function QuestionForm({
             </details>
 
             {canEdit ? (
-              <ImageUploader
-                onInsert={(markup) =>
-                  // Ayrı bir satır olarak ekliyoruz: tek başına duran ![...](...)
-                  // blok görsel olur, paragraf içine karışırsa satır içi simge.
-                  setStem((prev) => (prev.trimEnd() ? prev.trimEnd() + "\n\n" : "") + markup + "\n")
-                }
-              />
+              // Ayrı bir satır olarak, imlecin satırına: tek başına duran ![...](...)
+              // blok görsel olur, paragraf içine karışırsa satır içi simge.
+              <ImageUploader ref={yukleyici} onInsert={sekilEkle} />
             ) : null}
 
             <div className={PREVIEW_BOX}>
@@ -511,14 +671,17 @@ export function QuestionForm({
 
           <ComponentCard
             title="Şıklar"
-            desc="Doğru şıkkı harfe tıklayarak seç. Hata tipi, öğrenci o çeldiriciyi seçtiğinde hangi hatayı yaptığını kaydeder."
+            desc="Doğru şıkkı harfe tıklayarak seç. Hata tipi, öğrenci o çeldiriciyi seçtiğinde hangi hatayı yaptığını kaydeder: taslakta boş kalabilir, yayına almak için her yanlış şıkta gerekli."
             actions={
               <span className="tabular text-theme-xs text-gray-500">
                 {doluSikSayisi} şık · doğru: <strong className="text-success-700">{LABELS[correctIndex]}</strong>
               </span>
             }
           >
-            <div className="space-y-3">
+            <div ref={sikKap} className="space-y-3">
+              {canEdit ? (
+                <FormulAraclari ekle={(p) => formulBas("sik", p)} />
+              ) : null}
               {state.fields?.choices ? (
                 <div data-alan-hatasi>
                   <Alert variant="error" compact>
@@ -573,6 +736,7 @@ export function QuestionForm({
                           name={"choice_" + i}
                           value={value}
                           onChange={(e) => setChoice(i, e.target.value)}
+                          onFocus={odak((v) => setChoice(i, v))}
                           aria-label={LABELS[i] + " şıkkı"}
                           className={MONO}
                           placeholder={i === 4 ? "$180$  (boş bırakılırsa 4 şıklı soru)" : "$180$"}
@@ -592,7 +756,7 @@ export function QuestionForm({
                               wrapperClassName="w-full sm:w-auto sm:max-w-64"
                               aria-label={LABELS[i] + " şıkkının hata tipi"}
                             >
-                              <option value="">Hata tipi (isteğe bağlı)</option>
+                              <option value="">Hata tipi seç (yayın için gerekli)</option>
                               {Object.entries(ERROR_TYPE_LABELS).map(([k, v]) => (
                                 <option key={k} value={k}>
                                   {v}
@@ -618,6 +782,8 @@ export function QuestionForm({
               </>
             }
           >
+            {/* Kartta tek yazı alanı (çözüm): düğme hep ona yazar. */}
+            {canEdit ? <FormulAraclari ekle={(p) => formulBas("cozum", p)} /> : null}
             <Field
               label="Adım adım çözüm"
               error={state.fields?.solution}
@@ -629,10 +795,12 @@ export function QuestionForm({
               }
             >
               <TextArea
+                ref={cozumAlani}
                 name="solution"
                 rows={6}
                 value={solution}
                 onChange={(e) => setSolution(e.target.value)}
+                onFocus={odak(setSolution)}
                 className={cx(MONO, "leading-relaxed")}
                 placeholder={"Pisagor bağıntısından:\n\n$$|AC|^2 = |AB|^2 + |BC|^2$$\n\n---\n\n$|AC| = 20$ bulunur."}
               />
@@ -702,12 +870,15 @@ export function QuestionForm({
                 </Alert>
               </div>
             ) : null}
+            {canEdit && ipuclari.length > 0 ? (
+              <FormulAraclari ekle={(p) => formulBas("ipucu", p)} />
+            ) : null}
             {ipuclari.length === 0 ? (
               <p className="text-theme-sm text-gray-500">
                 İpucu yok{canEdit ? ` — en fazla ${maxIpucu} tane ekleyebilirsin. Boş bırakılan kutu kaydedilmez.` : "."}
               </p>
             ) : (
-              <ol className="space-y-4">
+              <ol ref={ipucuKap} className="space-y-4">
                 {ipuclari.map((h, i) => (
                   <li key={h.key} className="rounded-xl border border-gray-200 p-3">
                     <Field
@@ -755,6 +926,7 @@ export function QuestionForm({
                         rows={2}
                         value={h.metin}
                         onChange={(e) => ipucuYaz(i, e.target.value)}
+                        onFocus={odak((v) => ipucuYaz(i, v))}
                         className={cx(MONO, "leading-relaxed")}
                         placeholder={i === 0 ? "Hız ile süre çarpılınca ne bulunur?" : "Bir adım daha: $x = v \\cdot t$"}
                       />
@@ -843,17 +1015,33 @@ export function QuestionForm({
               <Field
                 label="Durum"
                 error={state.fields?.status}
-                hint={durumKilitli ? "Kilitli: soru başlatılmış bir denemede, yayında kalmalı." : "Yalnızca “Yayında” olan sorular teste seçilir."}
+                hint={
+                  durumKilitli
+                    ? "Kilitli: soru başlatılmış bir denemede, yayında kalmalı."
+                    : "Yalnızca “Yayında” olan sorular teste seçilir. Yayına almak için aşağıdaki liste tamam olmalı."
+                }
               >
                 <Select aria-label="Durum" value={status} onChange={(e) => setStatus(e.target.value)}>
                   {(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"] as const).map((s) => (
-                    <option key={s} value={s} disabled={durumKilitli && s !== "PUBLISHED"}>
+                    <option
+                      key={s}
+                      value={s}
+                      disabled={(durumKilitli && s !== "PUBLISHED") || (s === "PUBLISHED" && yayinKapali && status !== "PUBLISHED")}
+                    >
                       {QUESTION_STATUS_LABEL[s] ?? s}
                       {durumKilitli && s !== "PUBLISHED" ? " — denemede kilitli" : ""}
+                      {s === "PUBLISHED" && yayinKapali ? " — önce eksikleri tamamla" : ""}
                     </option>
                   ))}
                 </Select>
               </Field>
+              {status === "PUBLISHED" && yayinKapali && !state.fields?.status ? (
+                <Alert variant="warning" compact>
+                  Eksikler tamamlanmadan yayına alınamaz; böyle kaydedersen kayıt reddedilir. Taslak ya da İncelemede
+                  kaydedebilirsin.
+                </Alert>
+              ) : null}
+              <YayinListesi maddeler={hazirlik?.maddeler ?? null} bekleniyor={listeBekleniyor} />
               {denemeUyarisi ? (
                 // Yalnızca BAŞLATILMAMIŞ denemeler: orada liste değişebilir, yerine soru konabilir.
                 <Alert variant="warning" compact>

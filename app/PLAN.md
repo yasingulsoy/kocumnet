@@ -417,6 +417,16 @@ adımı olmayan plan yapılacaklar listesidir ve yapılacaklar listeleri terk ed
 Diğer işler silinebilir: koç da "bu hafta vaktim yok" itirazını dinler.
 Dayatılan plan duvar kâğıdı olur.
 
+**Soru işi uygulamada yapılır (2026-10-24).** "40 soru" işi eskiden yalnızca
+"Yaptım" ile kapanıyordu; öğrenci soruları nerede çözeceğini bilmiyordu. Artık
+"Bugün" kartı planın kurulduğu testin konusundan 5 soruluk alıştırma açıyor ve
+"bu hafta bu konuda 12/40 soru" sayıyor: bu Türkiye haftasında o konudan
+alıştırmada cevaplanan soru, "Bilmiyorum" hariç, sınav soruları hariç.
+Hedefe varınca iş kendiliğinden kapanır (doneAt'ı sistem yazar,
+lib/plan-ilerleme.ts); kitaptan çözen için "Yaptım" duruyor. Uygulamada sayma
+kuralı hocaya soruldu (`SORU_ISI_UYGULAMADA`, varsayılan açık). Konu tekrarı
+işinde önerilen yayın ve (defterde varsa) kazanım özetleri bağlantısı var.
+
 ### 11.4 Konu tekrar testi — erişim kuralı
 
 `startTopicRetest` bir paket satın alımına bakmaz. Denetimsiz bırakılsaydı
@@ -514,7 +524,7 @@ kopyala). Kurallar README'de ("Veli bağlantısı").
 
 ### 13.1 Neden yalnızca genel tablo
 
-Hocaya sorduk (HOCAYA-SORULAR 10.10): veli genel tabloyu mu, soru soru ayrıntıyı mı
+Hocaya sorduk (Hocaya sorular: motivasyon.veli-kapsam): veli genel tabloyu mu, soru soru ayrıntıyı mı
 görsün? Cevap gelene kadar dar olanı seçtik: ilk ad, hedef sınav, son ölçüm ve eğilim,
 güçlü/zayıf konular, son 5 check-up, bu haftanın plan tamamlaması, açık defter sayısı.
 Kullanıcıların çoğu 18 yaş altı ve bağlantıyı bilen herkes sayfayı görür; soru, cevap
@@ -533,3 +543,91 @@ açılır (en fazla 3 etkin, 7/30/90 gün).
 - Hukukçu: `/gizlilik`'teki "Veli bağlantısı" paragrafı TASLAK. 18 yaş altı için velinin
   açık rızası sorusu (lib/legal.ts başındaki not) bu özellikten bağımsız değil.
 - Hoca: 10.10'un cevabına göre rapora soru soru ayrıntı eklenecek mi.
+
+---
+
+## 14. Pilot turu: ölçüm doğruluğu, hesap, gruba katılım (2026-10-24)
+
+5 haftalık sınıf pilotu öncesi. Şema: migration `20261024150000_pilot_olcum`.
+
+### 14.1 Yarım test ölçüm değil
+
+Telefonda kesinti olağan: 24 sorunun 2'sini çözüp bırakan öğrencinin testi süre dolunca
+puanlanıyordu; boşlar "sorulmuş" sayıldığı için bütün konular zayıf çıkıyor, grafik %8'e
+düşüyor, haftanın planı bu testten kuruluyor, deftere 22 hiç bakılmamış soru giriyordu.
+
+- Her kapanış `CheckupSession.endedBy`'a yazılır: öğrencinin "Bitir"i `STUDENT`, süre
+  bitince ekranın kendiliğinden bitirmesi ve bakım işi `TIMEOUT`, aynı testi yeniden
+  başlatınca eskinin kapanması `RESTART`. Ekran "Bitir"i mi süreyi mi söyler
+  (`submitCheckupAction`'ın üçüncü parametresi); söylemezse saat karar verir
+  (`bitirmeSebebi`). Boş = eski kayıt, öğrenci bitirmiş sayılır.
+- **Kural** (`lib/insights.ts yarimKaldi`): öğrenci bitirmedi VE işaretli pay
+  `YARIM_TEST_ESIGI`'nin (0,5) altında. Öğrencinin kendi bitirdiği test ne kadar boş olursa
+  olsun ölçümdür (bilerek boş bırakmak da cevap). `olcumDisi = isaretsiz || yarimKaldi`.
+- Yarım test: eğilime, tahmini nete, konu haritasına, deneme havuzuna ve yüzdeliğe girmez;
+  plan kurmaz, kontrol testi işini kapatmaz; deftere yalnızca işaretleyip yanlış yaptığı
+  sorular girer (boşlar "bilmiyorum" değil "bakmadım"). Seviyeli aşamanın kapısı yine
+  değerlendirilir. Sonuç ekranı karar ve öncelik yerine "Bu test yarım kaldı … ölçüm
+  sayılmadı" kutusu ve "Yeniden çöz" gösterir; gelişim listesinde "yarım" rozeti.
+- ⚠️ Bu kurala giden her sorgu `blankCount` (sonuç) ve `endedBy` (oturum) seçmeli; seçmezse
+  kural sessizce işlemez.
+
+### 14.2 Kayan oturum
+
+Sabit 30 günlük oturum, her gün çalışan öğrenciyi pilotun 5. haftasında girişe düşürürdü.
+Kalan süre 15 günün altına inince `getCurrentUser` veritabanındaki bitişi 30 güne uzatır
+(koşullu `updateMany`, çoğu istekte sorgu yok). Çerezi `proxy.ts` yeniler: Server Component
+çerez yazamıyor; proxy her GET sayfa isteğinde aynı jetonu 30 günlük süreyle yeniden yazar
+(veritabanına bakmaz, geçerliliği veritabanı söyler). POST'ta yazmaz: giriş ve çıkış çerezi
+kendileri yazıyor, aynı yanıtta iki Set-Cookie sıraya kalırdı. Sonuç: en az 15 gün hiç
+girmeyen öğrencinin oturumu kapanır. Parola sıfırlamada bütün oturumların silinmesi değişmedi
+(silinmiş satır uzatılamaz).
+
+Son etkinlik `User.lastSeenAt`: kayıtta ve girişte, sonra oturumla gelen isteklerde en fazla
+saatte bir. `lastLoginAt` kayıtta da yazılır.
+
+### 14.3 Girişten sonra istenen sayfaya dönüş
+
+`proxy.ts` her sayfa isteğine istenen yolu başlıkla ekler; giriş isteyen sayfa
+`/giris?sonra=/yol`'a gönderir (`girisAdresi`), giriş ve kayıt o yola döner. Yalnızca bu
+sitedeki göreli yol kabul edilir (`lib/hesap-kurallari.ts guvenliSonra`: `/` ile başlar,
+`//` ve `/\` ile başlamaz, kontrol karakteri ve ters bölü yok, çözülünce köken değişmez).
+
+### 14.4 Kayıt sınırı sınıfı kilitlemesin
+
+Eskiden IP başına saatte 10 kayıt ve "e-posta zaten var" denemeleri de sayılıyordu; tek
+Wi-Fi'daki 30 kişilik sınıfın üçte biri kayıt ekranında kalırdı. Şimdi IP başına saatte 40
+açılan hesap, ayrıca saatte 20 "zaten kayıtlı" denemesi (adres taraması sınırlı kalsın).
+Biçim hataları sayılmaz.
+
+### 14.5 Davet bağlantısıyla gruba katılma
+
+Koç panelde grubun davet kodunu üretir (`StudyGroup.joinCode`), öğrenci `/katil/<kod>`'a
+dokunur: girişsizse "Hesap aç" (kayıt formu kodu gizli alanla taşır, hesap açılınca gruba
+girer) ya da "Giriş yap"; girişliyse grubun adı ve "Gruba katıl". Kural ve kod biçimi
+`lib/grup-katilim.ts`'te (paylaşılabilir: veritabanı parametre, yalnızca Prisma tipi):
+
+- Kod 8 karakter, `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (0/O ve 1/I yok), büyük harfe
+  çevrilip boşluk ve tire atılarak karşılaştırılır (`kodNormalize`, `kodGecerliMi`,
+  `kodUret`).
+- Arşivdeki grup ya da boş kod: katılım yok; kapalı, yenilenmiş ve hiç olmamış kod aynı
+  "geçersiz ya da kapatılmış" sayfasını görür.
+- Kendi katılanın `GroupMember.addedByStaff` damgası `DAVET_DAMGASI` = "davet bağlantısı".
+- Yalnızca geçersiz kod denemeleri sayılır: girişsizde IP başına, girişlide öğrenci başına
+  saatte 20 / 10. Girişsiz ziyaretçiye grubun adı gösterilmez.
+
+### 14.6 Kayıt kaynağı ve zorluk geri bildirimi
+
+- kocum.net bağlantıları `?k=<etiket>` taşır; tanıtım, giriş ve kayıt sayfaları etiketi
+  izin listesinden (`KAYIT_KAYNAKLARI`: ust, hero, bolum, altbilgi, blog, iletisim, whatsapp,
+  instagram, diger) geçirip taşır, hesap açılınca `User.signupSource`'a yazılır. Listede
+  olmayan "diger", boş boş kalır. Çerez yok.
+- Paket testi sonucunda isteğe bağlı "Bu test sana nasıl geldi? Kolay / Uygun / Zor"
+  (`CheckupSession.perceivedDifficulty`, değiştirilebilir). Yarım ve işaretsiz testte, kontrol
+  testinde sorulmaz; yalnızca kendi oturumuna yazılır.
+
+### 14.7 Hocaya sorulacaklar
+
+1. Yarım test eşiği %50 (`YARIM_TEST_ESIGI`) uygun mu?
+2. Yarım kalan denemede öğrencinin ikinci oturumu yüzdeliğe girmeli mi? Şimdilik hayır:
+   deneme havuzu kişinin ilk oturumunu sayar, ilk oturum yarımsa kişi havuzda yok.

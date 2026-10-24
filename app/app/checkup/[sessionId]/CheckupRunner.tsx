@@ -547,7 +547,12 @@ export function CheckupRunner({
   // ── bitir ──────────────────────────────────────────────────
   const gonderiliyorRef = useRef(false);
 
-  const doSubmit = useCallback(() => {
+  /*
+   * `bitiren`: öğrenci "Bitir"e bastıysa STUDENT, süre bittiği için ekran
+   * kendisi bitiriyorsa TIMEOUT. Yarım kalan test (süre doldu, yarısından azı
+   * işaretli) ölçüm sayılmıyor; ayrımı sunucu buradan öğreniyor.
+   */
+  const doSubmit = useCallback((bitiren: "STUDENT" | "TIMEOUT") => {
     // Süre bitişi ile "Bitir" düğmesi aynı anda gelirse ikinci gönderim olmasın.
     if (gonderiliyorRef.current) return;
     gonderiliyorRef.current = true;
@@ -577,7 +582,7 @@ export function CheckupRunner({
 
         depoSil(sessionId);
         try {
-          const res = await submitCheckupAction(sessionId, { ...spentRef.current });
+          const res = await submitCheckupAction(sessionId, { ...spentRef.current }, bitiren);
           // Yönlendirme olduysa buraya hiç gelinmez.
           if (res?.error) {
             depoyuYaz();
@@ -609,14 +614,14 @@ export function CheckupRunner({
   useEffect(() => {
     if (!kapandi || autoSubmittedRef.current) return;
     autoSubmittedRef.current = true;
-    doSubmit();
+    doSubmit("TIMEOUT");
   }, [kapandi, doSubmit]);
 
   // Süre dolduktan sonra bitirme bağlantı yüzünden kaldıysa, bağlantı
   // gelince kendiliğinden tekrar dene.
   useEffect(() => {
     if (!kapandi || !bitirHatasi || oturumYok) return;
-    const tekrar = () => doSubmit();
+    const tekrar = () => doSubmit("TIMEOUT");
     window.addEventListener("online", tekrar);
     return () => window.removeEventListener("online", tekrar);
   }, [kapandi, bitirHatasi, oturumYok, doSubmit]);
@@ -851,7 +856,7 @@ export function CheckupRunner({
                 saklı; giriş yapınca kaldığın yerden devam edersin.
               </p>
               <Link
-                href="/giris"
+                href={`/giris?sonra=${encodeURIComponent(`/checkup/${sessionId}`)}`}
                 className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-error-700 ring-1 ring-error-200 ring-inset"
               >
                 <LogIn className="size-3.5" /> Giriş yap
@@ -1250,7 +1255,7 @@ export function CheckupRunner({
           <Button ref={bitirDevamRef} variant="outline" onClick={() => setBitirAcik(false)} className="flex-1">
             Devam et
           </Button>
-          <Button onClick={doSubmit} loading={submitting} startIcon={<Flag />} className="flex-1">
+          <Button onClick={() => doSubmit("STUDENT")} loading={submitting} startIcon={<Flag />} className="flex-1">
             {submitting ? "Hesaplanıyor…" : "Bitir"}
           </Button>
         </div>
@@ -1310,11 +1315,11 @@ export function CheckupRunner({
             </p>
             <div className="mt-6 flex gap-2.5">
               {oturumYok ? (
-                <ButtonLink href="/giris" className="flex-1" startIcon={<LogIn />}>
+                <ButtonLink href={`/giris?sonra=${encodeURIComponent(`/checkup/${sessionId}`)}`} className="flex-1" startIcon={<LogIn />}>
                   Giriş yap
                 </ButtonLink>
               ) : (
-                <Button onClick={doSubmit} loading={submitting} startIcon={<RefreshCw />} className="flex-1">
+                <Button onClick={() => doSubmit("TIMEOUT")} loading={submitting} startIcon={<RefreshCw />} className="flex-1">
                   Tekrar dene
                 </Button>
               )}

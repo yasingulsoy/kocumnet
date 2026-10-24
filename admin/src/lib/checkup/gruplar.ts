@@ -1,8 +1,16 @@
 import "server-only";
 import { db } from "./db";
 import type { ExamScope } from "./generated/client";
-import { aggregateTopics, type AggregateTopic, type ResultLike } from "./shared/insights";
-import { odevIlerlemesi, type OdevCevabi, type OdevIlerlemesi, type OdevKurali, type OdevOturumu } from "./shared/odev";
+import { oranaSayilir } from "./grup-kurallari";
+import { aggregateTopics, konuHaritasinaGirer, yarimKaldi, type AggregateTopic, type ResultLike } from "./shared/insights";
+import {
+  odevIlerlemesi,
+  type OdevCevabi,
+  type OdevDurumu,
+  type OdevIlerlemesi,
+  type OdevKurali,
+  type OdevOturumu,
+} from "./shared/odev";
 import type { TopicBreakdown } from "./shared/scoring";
 
 /**
@@ -60,7 +68,9 @@ export async function odevKayitlari(
             startedAt: true,
             submittedAt: true,
             expiresAt: true,
-            result: { select: { netScore: true, correctCount: true, wrongCount: true } },
+            // Yarım test kuralı (shared/insights.ts yarimKaldi) endedBy ve blankCount ister.
+            endedBy: true,
+            result: { select: { netScore: true, correctCount: true, wrongCount: true, blankCount: true } },
             // Boş gönderilen oturum ödevi tamamlamaz (shared/odev.ts isaretli). Sonuç
             // varsa doğru + yanlış; sonucu yazılamamış oturumda işaretli cevap sayısı.
             _count: { select: { items: { where: { answer: { choiceId: { not: null } } } } } },
@@ -98,6 +108,9 @@ export async function odevKayitlari(
       expiresAt: s.expiresAt,
       net: s.result ? Number(s.result.netScore) : null,
       isaretli: s.result ? s.result.correctCount + s.result.wrongCount > 0 : s._count.items > 0,
+      // Yarım kalan test ödevi tamamlamaz (shared/odev.ts yarim). Öğrencinin ekranıyla
+      // aynı (app/lib/odev-sorgu.ts): sonucu yazılamamış oturumda kural işlemez.
+      yarim: s.result ? yarimKaldi({ ...s.result, endedBy: s.endedBy }) : false,
     });
   }
   for (const c of cevaplar) {
@@ -107,13 +120,8 @@ export async function odevKayitlari(
   return sonuc;
 }
 
-/**
- * Bir üye bu ödevin oranına sayılır mı: son tarihten SONRA gruba katılan
- * öğrenci o ödevi hiç görmeden "yapmadı" sayılmasın.
- */
-export function oranaSayilir(uye: { createdAt: Date }, odev: { dueAt: Date }): boolean {
-  return uye.createdAt.getTime() <= odev.dueAt.getTime();
-}
+/** Kural saf modülde (grup-kurallari.ts; risk kuralları da kullanıyor). */
+export { oranaSayilir };
 
 export interface OdevOrani {
   /** Tamamlayan (geç dahil) / sayılan üye. Sayılan üye yoksa null. */
@@ -229,9 +237,18 @@ export interface GrupRaporu {
   konular: RaporKonusu[];
   /** Hücreler: userId → topicId → üyenin o konudaki toplamı. */
   hucreler: Map<string, Map<string, AggregateTopic>>;
-  /** Grubun en zayıf (seviyesi ölçülebilmiş) 3 konusu. */
+  /** Grubun en zayıf (seviyesi ölçülebilmiş) ZAYIF_KONU_SAYISI konusu. */
   enZayif: RaporKonusu[];
+  /** Rapora giren (ölçüm sayılan) sonuç. */
   sonucSayisi: number;
+}
+
+/** Grup sayfasındaki "en zayıf konular" kartı; yazdırma görünümü 5 gösterir. */
+export const ZAYIF_KONU_SAYISI = 3;
+
+/** Seviyesi ölçülebilmiş konulardan en zayıf `n` tanesi (konular zaten en zayıftan sıralı). */
+export function enZayifKonular(konular: readonly RaporKonusu[], n: number): RaporKonusu[] {
+  return konular.filter((k) => k.level !== null).slice(0, n);
 }
 
 /**
@@ -239,9 +256,15 @@ export interface GrupRaporu {
  * konu × öğrenci haritası. Oran ve seviye eşikleri öğrenci panosunun
  * (shared/insights.ts aggregateTopics, eşikler HARITA_*) aynısı.
  *
+ * Hangi sonuçlar: öğrenci panosunun ve öğrenci ayrıntısının konu haritasıyla
+ * AYNI süzgeç (shared/insights.ts konuHaritasinaGirer). Paket, kontrol testi
+ * (o konunun gerçek ölçümü) ve seviyeli aşama girer; boş gönderilen ve yarım
+ * kalan test girmez: 24 sorunun 2'sini işaretleyip bırakan öğrenci grubun
+ * bütün konularını "zayıf" gösteriyordu. Kural yarım testi `endedBy` ve
+ * `blankCount`'tan anlar; ikisi de seçiliyor.
+ *
  * Grubun sınavı belliyse yalnızca o sınavın sonuçları (ve sınavı yazılmamış
  * eski kayıtlar): LGS ve TYT konu oranlarını tek hücrede toplamak anlamsız.
- * Kontrol testleri girer (o konunun gerçek ölçümü); alıştırma sonuç üretmez.
  */
 export async function grupRaporu(userIds: readonly string[], examScope: string | null, now: Date): Promise<GrupRaporu> {
   const bos: GrupRaporu = { konular: [], hucreler: new Map(), enZayif: [], sonucSayisi: 0 };
@@ -263,7 +286,8 @@ export async function grupRaporu(userIds: readonly string[], examScope: string |
       totalTimeMs: true,
       computedAt: true,
       topicBreakdown: true,
-      session: { select: { userId: true } },
+      examScope: true,
+      session: { select: { userId: true, kind: true, endedBy: true } },
     },
   });
 
@@ -272,6 +296,15 @@ export async function grupRaporu(userIds: readonly string[], examScope: string |
   for (const r of sonuclar) {
     const tb = r.topicBreakdown as unknown as TopicBreakdown | null;
     if (!tb || !Array.isArray(tb.topics)) continue;
+    const olcum = {
+      kind: r.session.kind,
+      endedBy: r.session.endedBy,
+      examScope: r.examScope,
+      correctCount: r.correctCount,
+      wrongCount: r.wrongCount,
+      blankCount: r.blankCount,
+    };
+    if (!konuHaritasinaGirer(olcum, examScope)) continue;
     const satir: ResultLike = {
       correctCount: r.correctCount,
       wrongCount: r.wrongCount,
@@ -312,7 +345,7 @@ export async function grupRaporu(userIds: readonly string[], examScope: string |
   return {
     konular,
     hucreler,
-    enZayif: konular.filter((k) => k.level !== null).slice(0, 3),
+    enZayif: enZayifKonular(konular, ZAYIF_KONU_SAYISI),
     sonucSayisi: hepsi.length,
   };
 }
@@ -399,4 +432,78 @@ export async function ogrencininGruplari(
       .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime()),
     son: satirlar.filter((o) => o.dueAt.getTime() < now.getTime()).slice(0, SON_ODEV_SAYISI),
   };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Koçun haftalık bakışı: öğrencilerin yakın tarihli ödevleri (toplu)
+// ─────────────────────────────────────────────────────────────
+
+export interface YakinOdev {
+  id: string;
+  groupId: string;
+  title: string;
+  dueAt: Date;
+  durum: OdevDurumu;
+  /** Öğrencinin gruba katıldığı an (oranaSayilir için). */
+  katildi: Date;
+}
+
+/**
+ * Öğrencilerin ETKİN gruplarındaki, iptal edilmemiş ve son tarihi `enErken`
+ * ile sonrası olan ödevler ve her öğrencinin o ödevdeki durumu: süresi yeni
+ * dolanlar ("Ödevi yapmadı", risk.ts) ve açık olanlar (Bu hafta ekranı).
+ * Kapsam `userIds` (null = bütün öğrenciler). Toplam üç sorgu: ödevler ve
+ * üyeler tek sorguda, kayıtlar odevKayitlari'nin iki sorgusunda; öğrenci
+ * başına sorgu yok.
+ */
+export async function yakinOdevDurumlari(
+  userIds: readonly string[] | null,
+  enErken: Date
+): Promise<Map<string, YakinOdev[]>> {
+  const sonuc = new Map<string, YakinOdev[]>();
+  if (userIds !== null && userIds.length === 0) return sonuc;
+
+  const odevler = await db.assignment.findMany({
+    where: {
+      cancelledAt: null,
+      dueAt: { gte: enErken },
+      group: userIds
+        ? { archivedAt: null, members: { some: { userId: { in: [...userIds] } } } }
+        : { archivedAt: null },
+    },
+    orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+    take: 500,
+    select: {
+      id: true,
+      groupId: true,
+      kind: true,
+      packageId: true,
+      topicId: true,
+      questionCount: true,
+      title: true,
+      startsAt: true,
+      dueAt: true,
+      group: {
+        select: {
+          members: {
+            where: userIds ? { userId: { in: [...userIds] } } : {},
+            select: { userId: true, createdAt: true },
+          },
+        },
+      },
+    },
+  });
+  if (odevler.length === 0) return sonuc;
+
+  const uyeler = [...new Set(odevler.flatMap((o) => o.group.members.map((m) => m.userId)))];
+  const kayitlar = await odevKayitlari(uyeler, odevler);
+  for (const o of odevler) {
+    for (const m of o.group.members) {
+      const i = odevIlerlemesi(o, kayitlar.get(m.userId) ?? { oturumlar: [], cevaplar: [] });
+      const l = sonuc.get(m.userId) ?? [];
+      l.push({ id: o.id, groupId: o.groupId, title: o.title, dueAt: o.dueAt, durum: i.durum, katildi: m.createdAt });
+      sonuc.set(m.userId, l);
+    }
+  }
+  return sonuc;
 }

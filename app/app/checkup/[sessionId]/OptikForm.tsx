@@ -245,7 +245,8 @@ export function OptikForm({
 
   // ── gönder ─────────────────────────────────────────────────
   const gonderiliyorRef = useRef(false);
-  const gonder = useCallback(() => {
+  // `bitiren`: öğrenci "Gönder"e bastıysa STUDENT, işleme süresi dolduysa TIMEOUT (CheckupRunner ile aynı).
+  const gonder = useCallback((bitiren: "STUDENT" | "TIMEOUT") => {
     if (gonderiliyorRef.current) return;
     gonderiliyorRef.current = true;
     setBitirHatasi(null);
@@ -264,7 +265,7 @@ export function OptikForm({
         }
         depoSil(sessionId);
         try {
-          const res = await submitCheckupAction(sessionId);
+          const res = await submitCheckupAction(sessionId, undefined, bitiren);
           if (res?.error) {
             depoYaz(sessionId, BOS_KUME, k.bekleyenler);
             if (res.kod === "OTURUM") setOturumYok(true);
@@ -285,7 +286,7 @@ export function OptikForm({
   useEffect(() => {
     if (!kapandi || otomatikRef.current) return;
     otomatikRef.current = true;
-    gonder();
+    gonder("TIMEOUT");
   }, [kapandi, gonder]);
 
   // ── türetilenler ───────────────────────────────────────────
@@ -352,7 +353,7 @@ export function OptikForm({
                 yapınca kaldığın yerden devam edersin.
               </p>
               <Link
-                href="/giris"
+                href={`/giris?sonra=${encodeURIComponent(`/checkup/${sessionId}`)}`}
                 className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 text-[12px] font-semibold text-error-700 ring-1 ring-error-200 ring-inset"
               >
                 <LogIn className="size-3.5" /> Giriş yap
@@ -523,7 +524,7 @@ export function OptikForm({
           <Button variant="outline" onClick={() => setGonderAcik(false)} className="flex-1">
             Vazgeç
           </Button>
-          <Button onClick={gonder} loading={submitting} startIcon={<Send />} className="flex-1">
+          <Button onClick={() => gonder("STUDENT")} loading={submitting} startIcon={<Send />} className="flex-1">
             {submitting ? "Hesaplanıyor…" : "Gönder"}
           </Button>
         </div>
@@ -545,11 +546,11 @@ export function OptikForm({
             </Alert>
             <div className="mt-6 flex gap-2.5">
               {oturumYok ? (
-                <ButtonLink href="/giris" className="flex-1" startIcon={<LogIn />}>
+                <ButtonLink href={`/giris?sonra=${encodeURIComponent(`/checkup/${sessionId}`)}`} className="flex-1" startIcon={<LogIn />}>
                   Giriş yap
                 </ButtonLink>
               ) : (
-                <Button onClick={gonder} loading={submitting} startIcon={<RefreshCw />} className="flex-1">
+                <Button onClick={() => gonder("TIMEOUT")} loading={submitting} startIcon={<RefreshCw />} className="flex-1">
                   Tekrar dene
                 </Button>
               )}

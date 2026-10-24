@@ -9,7 +9,7 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { isLocale } from "@/lib/i18n/config";
 import { sayfaMetadata } from "@/lib/seo";
 import { languageAlternates, localizedPath } from "@/lib/routes";
-import { CHECKUP_URL } from "@/lib/site";
+import { checkupAdresi } from "@/lib/site";
 import { SITE_BRAND } from "@/lib/site-brand";
 
 export async function generateMetadata({
@@ -78,6 +78,8 @@ export default async function PrivacyPage({ params }: { params: Promise<{ lang: 
   if (!isLocale(lang)) notFound();
   const t = await getDictionary(lang);
   const p = t.privacy;
+  // Pazarlama bölümü değil: kayıt kaynağında "diğer" sayılır.
+  const checkupGizlilik = checkupAdresi("diger", "/gizlilik");
 
   return (
     <main>
@@ -134,11 +136,11 @@ export default async function PrivacyPage({ params }: { params: Promise<{ lang: 
             <h2 className={BASLIK}>{p.checkupTitle}</h2>
             <p className={METIN}>
               {p.checkupBody}
-              {CHECKUP_URL ? (
+              {checkupGizlilik ? (
                 <>
                   {" "}
                   <a
-                    href={`${CHECKUP_URL}/gizlilik`}
+                    href={checkupGizlilik}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`inline-flex items-center gap-1 ${BAGLANTI}`}

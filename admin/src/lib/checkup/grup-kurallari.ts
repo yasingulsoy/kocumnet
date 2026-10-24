@@ -27,6 +27,50 @@ export const ARAMA_SONUC_SINIRI = 10;
  */
 export const ODEV_PAKET_TURLERI = ["STANDARD", "INTRO", "MOCK"] as const;
 
+/**
+ * Bir üye bu ödevin oranına sayılır mı: son tarihten SONRA gruba katılan
+ * öğrenci o ödevi hiç görmeden "yapmadı" sayılmasın. Saf (risk kuralları da
+ * kullanıyor: risk.ts "Ödevi yapmadı"); gruplar.ts buradan yeniden ihraç eder.
+ */
+export function oranaSayilir(uye: { createdAt: Date }, odev: { dueAt: Date }): boolean {
+  return uye.createdAt.getTime() <= odev.dueAt.getTime();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Toplu üye ekleme: yapıştırılan e-posta listesi
+// ─────────────────────────────────────────────────────────────
+
+/** Tek seferde en çok kaç e-posta: bir sınıf ya da iki; yanlışlıkla bütün rehber yapıştırılmasın. */
+export const TOPLU_EKLEME_SINIRI = 200;
+/** Yapıştırılan metnin üst sınırı (karakter): sınırın 200 adresine fazlasıyla yeter. */
+export const TOPLU_METIN_SINIRI = 20_000;
+
+const EPOSTA = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Yapıştırılan metinden e-postalar. Satır, virgül, noktalı virgül ya da
+ * boşlukla ayrılmış olabilir; Excel'den, WhatsApp'tan ya da "Ad Soyad
+ * <ali@ornek.com>" biçimli bir listeden gelebilir. Bu yüzden ayıraçla bölüp
+ * "@" içeren parçalara bakıyoruz: ad, soyad gibi parçalar sessizce atlanır,
+ * "@" içerip e-posta olmayanlar (ali@ornek, ali@@x.com) ayrıca listelenir ki
+ * koç yazım hatasını görsün.
+ *
+ * Küçük harfe çevrilir (öğrenci uygulaması e-postayı küçük harfle saklıyor),
+ * tekrarlar atılır, sıra korunur.
+ */
+export function epostaListesiAyristir(metin: string): { gecerli: string[]; gecersiz: string[] } {
+  const gecerli = new Set<string>();
+  const gecersiz = new Set<string>();
+  for (const parca of metin.normalize("NFC").split(/[\s,;]+/)) {
+    // Çevreleyen ayraçlar: <ali@x.com>, (ali@x.com), "ali@x.com", sondaki nokta.
+    const p = parca.replace(/^[<("'[]+|[>)"'\].:]+$/g, "").toLowerCase();
+    if (!p.includes("@")) continue;
+    if (p.length <= 254 && EPOSTA.test(p)) gecerli.add(p);
+    else gecersiz.add(p.slice(0, 80));
+  }
+  return { gecerli: [...gecerli], gecersiz: [...gecersiz] };
+}
+
 /** Grup adı, ödev başlığı: tek satır, boşluklar tekil. */
 export function tekSatir(ham: string): string {
   return ham

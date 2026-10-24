@@ -343,7 +343,7 @@ const ondalik = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",
 
 /**
  * "Dağılıma göre doldur"un yanındaki uyarılar. Sayılar NORMALLEŞTİRİLMEZ:
- * ağırlıklar hocanın işi (HOCAYA-SORULAR 12.2), panel yalnızca söyler.
+ * ağırlıklar hocanın işi (Hocaya sorular: deneme.agirlik-temel ve deneme.agirlik-ayt-lgs), panel yalnızca söyler.
  *  · Sınavda ağırlığı olmayan yaprak konular: doldurma onlardan soru koymaz.
  *  · Ağırlık toplamı sınavın matematik soru sayısından farklıysa: hedef
  *    dağılım yine soru sayısına ölçeklenir ama oranlar gerçek sınavı tutmayabilir.

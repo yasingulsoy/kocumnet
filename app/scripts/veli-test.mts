@@ -264,7 +264,7 @@ async function main() {
   check(
     "rapor alanları beklenen liste",
     Object.keys(rapor).sort().join(",") ===
-      "acikDefter,ad,egilim,gucluKonular,olcumSayisi,plan,sinav,sonOlcum,sonTestler,zayifKonular",
+      "acikDefter,ad,egilim,gucluKonular,odevler,olcumSayisi,plan,sinav,sonOlcum,sonTestler,zayifKonular",
     Object.keys(rapor).join(",")
   );
   check(

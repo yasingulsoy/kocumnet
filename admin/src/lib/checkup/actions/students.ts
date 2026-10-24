@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/checkup/db";
+import {
+  SIFIRLAMA_GECERLILIK_SAAT,
+  SIFIRLAMA_SAATLIK_SINIR,
+  damgaKimligi,
+  sifirlamaBaglantisi,
+  sifirlamaJetonuOzeti,
+  sifirlamaJetonuUret,
+} from "@/lib/checkup/sifirlama";
 import { MANAGE_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
+import { uygulamaAdresi } from "@/lib/checkup/uygulama";
 
 export interface GrantState {
   error?: string;
@@ -97,4 +106,51 @@ export async function revokeEntitlementAction(id: string): Promise<{ ok: boolean
   revalidatePath("/checkup/ogrenciler");
   revalidatePath("/checkup/ogrenciler/" + hak.userId);
   return { ok: true };
+}
+
+/**
+ * Parola sıfırlama bağlantısı üret — e-posta altyapısı yokken parolasını
+ * unutan öğrenciye koç bağlantıyı WhatsApp'tan iletir. Yalnızca yönetici ve
+ * müdür. Jeton biçimi ve gerekçe lib/checkup/sifirlama.ts'te (app ile eşit).
+ *
+ *  - Tabloya jetonun kendisi değil özeti yazılır; bağlantı yalnızca bu
+ *    yanıtta, bir kez döner (sayfada saklanmaz, günlüğe yazılmaz).
+ *  - 24 saat geçerli, tek kullanımlık; kim ürettiyse createdByStaff'ta.
+ *  - Öğrencinin bekleyen BÜTÜN eski bağlantıları geçersiz olur (personelin
+ *    ürettikleri de öğrencinin e-postayla istediği de): uygulamanın kendi
+ *    kuralı gibi, aynı anda tek geçerli bağlantı dolaşsın.
+ *  - Personel başına saatte SIFIRLAMA_SAATLIK_SINIR bağlantı; sayaç tablodan.
+ */
+export async function sifirlamaBaglantisiAction(
+  userId: unknown
+): Promise<{ ok: true; baglanti: string; gecerlilik: Date } | { ok: false; error: string }> {
+  const auth = await staffForAction(MANAGE_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof userId !== "string" || !/^[a-z0-9]{6,64}$/i.test(userId)) return { ok: false, error: "Geçersiz istek." };
+
+  const ogrenci = await db.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
+  // Yalnızca öğrenci hesabı: panelden bir yönetici hesabının parolası sıfırlanamasın.
+  if (!ogrenci || ogrenci.role !== "STUDENT") return { ok: false, error: "Öğrenci bulunamadı." };
+
+  const now = new Date();
+  const sonSaat = await db.passwordResetToken.count({
+    where: { createdByStaff: { endsWith: damgaKimligi(auth.staff.id) }, createdAt: { gte: new Date(now.getTime() - 3_600_000) } },
+  });
+  if (sonSaat >= SIFIRLAMA_SAATLIK_SINIR) {
+    return { ok: false, error: "Son bir saatte " + SIFIRLAMA_SAATLIK_SINIR + " bağlantı ürettin. Biraz sonra tekrar dene." };
+  }
+
+  const jeton = sifirlamaJetonuUret();
+  const gecerlilik = new Date(now.getTime() + SIFIRLAMA_GECERLILIK_SAAT * 3_600_000);
+  const damga = staffStamp(auth.staff);
+  await db.$transaction([
+    db.passwordResetToken.updateMany({ where: { userId: ogrenci.id, usedAt: null }, data: { usedAt: now } }),
+    db.passwordResetToken.create({
+      data: { userId: ogrenci.id, tokenHash: sifirlamaJetonuOzeti(jeton), expiresAt: gecerlilik, createdByStaff: damga },
+    }),
+  ]);
+  // Bağlantı günlüğe yazılmaz: günlüğü okuyan parolayı değiştiremesin.
+  console.info("[checkup] parola sıfırlama bağlantısı üretildi — öğrenci " + ogrenci.id + " · " + damga);
+  revalidatePath("/checkup/ogrenciler/" + ogrenci.id);
+  return { ok: true, baglanti: sifirlamaBaglantisi(uygulamaAdresi(), jeton), gecerlilik };
 }

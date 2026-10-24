@@ -21,6 +21,14 @@
  * Ekim 2026 eklemeleri (şablon §2, §4): `İpucu` (en fazla 3, alan tekrar
  * yazılır), `Video` (YouTube/Vimeo) ve çözümde adım ayırıcı `---`.
  *
+ * Pilot (24 Ekim 2026) esnekliği, hocanın elle yazdığı dosyalar için:
+ * `- ` ile başlayan alan ve şık satırı, kalın yazının dışındaki iki nokta
+ * (`**Zorluk**: 2`), Türkçe hata tipi adı ("İşlem hatası" → ISLEM_HATASI).
+ * Alana benzeyip tanınmayan satır sessizce düşmez, satır numarasıyla uyarılır.
+ * Hata kodu taslak için isteğe bağlı (eksikse uyarı), yayın için zorunlu:
+ * her geçerli soruya "yayına hazır mı" listesi (./question-readiness) eklenir,
+ * "doğrudan yayına al" hazır olmayanı İncelemede yazar.
+ *
  * Uzunluk sınırları panelin soru formuyla ORTAK (./content-limits): form ile
  * içe aktarma ayrı sınır uygularsa içe aktarılan soru formda bir daha
  * kaydedilemez.
@@ -32,10 +40,11 @@ import {
   KAZANIM_ADI_SINIRI,
   SORU_METNI_EN_AZ,
 } from "./content-limits";
-import { ERROR_TYPES } from "./error-types";
+import { ERROR_TYPES, ERROR_TYPE_LABELS, type ErrorTypeValue } from "./error-types";
 import { konuSinavdaMi } from "./exam-scope";
 import { EXAM_SCOPES } from "./exams";
 import { markupToContent } from "./question-markup";
+import { etkinSinavlar, icerikFormulleri, sikSayisiSorunu, yayinaHazirMi, type Eksik } from "./question-readiness";
 import {
   CHOICE_LABELS,
   MAX_HINTS,
@@ -99,6 +108,9 @@ const IPUCU_ALANI = /^ipucu(?: [1-9])?$/;
 /** İpucu alanlarının iç anahtarı: `alanlar` sözlüğüne yazılmaz, `ipuclari` listesine gider. */
 const IPUCU = "\u0000ipucu";
 
+/** Çok satırlı METİN alanları: alana benzeyen satır bunların içindeyse metnin parçası kalır. */
+const METIN_ALANLARI = new Set(["soru metni", "cozum aciklamasi", "kazanim adi", IPUCU]);
+
 /** Tek başına çizgi: `---` (question-markup.ts'teki adım ayırıcıyla aynı desen). */
 const AYIRICI = /^-{3,}$/;
 
@@ -124,6 +136,12 @@ export interface HamSecenek {
 export interface HamSoru {
   /** `### …` başlığının satırı (1'den). */
   satir: number;
+  /**
+   * Çözümlemede okunamayan satırlar (satır numaralı uyarı): alana benzeyip
+   * tanınmayan satır, Seçenekler altında şık biçimine uymayan satır. Eskiden
+   * sessizce düşüyordu; hoca neden 4 şık kaldığını göremiyordu.
+   */
+  satirUyarilari: string[];
   baslik: string;
   /** İndirgenmiş alan adı → değer ("ideal sure" → "60"). */
   alanlar: Record<string, string>;
@@ -134,11 +152,27 @@ export interface HamSoru {
   ipuclari: { satir: number; metin: string }[];
 }
 
-/** `* **Alan:** değer` başlığını yakalar. Değer aynı satırda ya da sonraki satırlarda. */
-const ALAN = /^\*\s+\*\*([^*]+?):\*\*\s*(.*)$/;
-/** `  * [x] B) 18 (KOD: açıklama)` */
-const SECENEK = /^\s*\*\s+\[( |x|X)\]\s+([A-E])\)\s*(.*)$/;
-const HATA_KODU = /\(([A-Z_]+)(?::\s*([^)]*))?\)\s*$/;
+/**
+ * `* **Alan:** değer` başlığını yakalar. Değer aynı satırda ya da sonraki
+ * satırlarda. İki nokta kalının içinde ya da dışında (`**Alan**: değer`).
+ * İşaret `*`, `-` ya da hiç: `*` ile yazılan her ad alandır (tanınmayan ad
+ * uyarılır); `-` ile ya da işaretsiz yazılan satır YALNIZCA tanınan bir alan
+ * adıysa alandır, yoksa metnin parçası kalır: soru metnindeki öncül listesi
+ * de `- ` ile başlıyor, "- **Dikkat:** …" diye bir öncül alan sanılmasın.
+ */
+const ALAN = /^(?:([*-])\s+)?\*\*([^*]+?)(?::\*\*|\*\*\s*:)\s*(.*)$/;
+/** `  * [x] B) 18 (KOD: açıklama)`; `- [x] B) 18` de olur. */
+const SECENEK = /^\s*[*-]\s+\[( |x|X)\]\s+([A-E])\)\s*(.*)$/;
+/**
+ * Şıkkın sonundaki parantez: `(KOD: açıklama)`, `(KOD)` ya da Türkçe adıyla
+ * `(İşlem hatası: açıklama)`. İçi bir hata tipine çözülmüyorsa ve kod
+ * biçiminde de değilse (ör. "18 (cm)") şık metninin parçasıdır.
+ */
+const HATA_PARANTEZI = /\(([^():]+?)(?::\s*([^)]*))?\)\s*$/;
+/** Kod biçimi: büyük harf ve alt çizgi. Listede olmayan kod REDDEDİLİR (yazım hatası). */
+const KOD_BICIMI = /^[A-Z_]+$/;
+/** ALAN'a uymayan ama alana benzeyen satır: "Zorluk: 2", "* Zorluk: 2", "**Zorluk** 2:" gibi. */
+const ALANA_BENZER = /^(?:[*-]\s+)?(?:\*\*)?([^*:\n]{2,40}?)(?:\*\*)?\s*:/;
 /** `![alt](dosya)` — question-markup.ts'teki görsel belirteciyle aynı desen. */
 const GORSEL = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
 
@@ -157,6 +191,56 @@ const ad = (s: string) =>
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ");
+
+/** Tanınan alan adı mı (indirgenmiş): şablonun alanları, ipucu ve v2'den kalanlar. */
+const taninanAlan = (anahtar: string) =>
+  BILINEN_ALANLAR.has(anahtar) || IPUCU_ALANI.test(anahtar) || Object.hasOwn(ESKI_ALANLAR, anahtar);
+
+/** Hata tipi adını indirger: "İşlem hatası", "ISLEM_HATASI", "islem hatasi" → "islem hatasi". */
+const hataAdi = (s: string) => ad(s).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** İndirgenmiş ad → hata tipi: hem kodu (ISLEM_HATASI) hem panelde görünen adı (İşlem hatası). */
+const HATA_TIPLERI = new Map<string, ErrorTypeValue>([
+  ...ERROR_TYPES.map((k): [string, ErrorTypeValue] => [hataAdi(k), k]),
+  ...ERROR_TYPES.map((k): [string, ErrorTypeValue] => [hataAdi(ERROR_TYPE_LABELS[k]), k]),
+]);
+
+/**
+ * Şık sonundaki parantezden hata tipi. Tanınan ad ya da kod → kod; kod
+ * biçiminde ama listede olmayan → olduğu gibi (denetim "listede yok" der);
+ * ikisi de değilse null (parantez şıkkın metnidir).
+ */
+export function hataTipiCoz(ham: string): string | null {
+  const t = ham.trim();
+  const bilinen = HATA_TIPLERI.get(hataAdi(t));
+  if (bilinen) return bilinen;
+  return KOD_BICIMI.test(t) ? t : null;
+}
+
+/** Satır bir alan başlığı mı (bkz. ALAN): adı ve aynı satırdaki değeri. */
+function alanSatiri(s: string): { ad: string; deger: string } | null {
+  const m = s.match(ALAN);
+  if (!m) return null;
+  // `*` ile yazılan her ad alandır; `-` ile ya da işaretsiz yalnızca tanınan ad.
+  if (m[1] !== "*" && !taninanAlan(ad(m[2]))) return null;
+  return { ad: m[2], deger: m[3].trim() };
+}
+
+/**
+ * ALAN'a uymayan ama alana benzeyen satır: tanınan bir alan adıyla başlıyor
+ * ("Zorluk: 2", "* Zorluk: 2") ya da `- **Ad:**` biçiminde ama ad tanınmıyor.
+ * Doğru biçimde yazılacak adı döner; benzemiyorsa null.
+ */
+function alanaBenzer(s: string): string | null {
+  if (alanSatiri(s)) return null;
+  const kalin = s.match(ALAN);
+  if (kalin) return kalin[2].trim();
+  const m = s.match(ALANA_BENZER);
+  return m && taninanAlan(ad(m[1])) ? m[1].trim() : null;
+}
+
+/** Uyarıda alıntılanan satır: uzunsa kısaltılır. */
+const kisalt = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
 
 /** Dosya adının uzantısı, küçük harfle (".png"). Node'un extname'i gibi: ".png" adlı dosyanın uzantısı yok. */
 function uzanti(dosya: string): string {
@@ -190,6 +274,7 @@ export function dosyayiCozumle(metin: string): HamSoru[] {
       // Prototipsiz nesne: "__proto__" gibi bir alan adı prototipe yazılmasın.
       mevcut = {
         satir: i + 1,
+        satirUyarilari: [],
         baslik: baslik[1].trim(),
         alanlar: Object.create(null),
         alanBilgisi: Object.create(null),
@@ -222,17 +307,17 @@ export function dosyayiCozumle(metin: string): HamSoru[] {
       continue;
     }
 
-    const alan = s.match(ALAN);
-    if (alan && IPUCU_ALANI.test(ad(alan[1]))) {
+    const alan = alanSatiri(s);
+    if (alan && IPUCU_ALANI.test(ad(alan.ad))) {
       aktifAlan = IPUCU;
-      mevcut.ipuclari.push({ satir: i + 1, metin: alan[2].trim() });
+      mevcut.ipuclari.push({ satir: i + 1, metin: alan.deger });
       continue;
     }
     if (alan) {
-      aktifAlan = ad(alan[1]);
+      aktifAlan = ad(alan.ad);
       const onceki = mevcut.alanBilgisi[aktifAlan];
-      mevcut.alanBilgisi[aktifAlan] = { ad: alan[1].trim(), satir: i + 1, kez: (onceki?.kez ?? 0) + 1 };
-      mevcut.alanlar[aktifAlan] = alan[2].trim();
+      mevcut.alanBilgisi[aktifAlan] = { ad: alan.ad.trim(), satir: i + 1, kez: (onceki?.kez ?? 0) + 1 };
+      mevcut.alanlar[aktifAlan] = alan.deger;
       continue;
     }
 
@@ -241,14 +326,38 @@ export function dosyayiCozumle(metin: string): HamSoru[] {
       let govde = sec[3].trim();
       let hataKodu: string | null = null;
       let not: string | null = null;
-      const h = govde.match(HATA_KODU);
-      if (h) {
-        hataKodu = h[1];
+      const h = govde.match(HATA_PARANTEZI);
+      const kod = h ? hataTipiCoz(h[1]) : null;
+      if (h && kod) {
+        hataKodu = kod;
         not = h[2]?.trim() || null;
         govde = govde.slice(0, h.index).trim();
       }
       mevcut.secenekler.push({ satir: i + 1, isaretli: sec[1].toLowerCase() === "x", harf: sec[2], metin: govde, hataKodu, not });
       continue;
+    }
+
+    // Okunamayan satırlar: eskiden sessizce düşüyordu (Seçenekler altında) ya
+    // da metne karışıyordu (alan sanılan satır). Satır numarasıyla uyarılır.
+    const dolu = s.trim();
+    if (dolu && aktifAlan === "secenekler") {
+      mevcut.satirUyarilari.push(
+        `Satır ${i + 1} şık olarak okunamadı ("${kisalt(dolu)}"): şık satırı "* [ ] A) …" biçiminde yazılır, doğru şık [x].`
+      );
+      continue;
+    }
+    const benzer = dolu ? alanaBenzer(dolu) : null;
+    if (benzer) {
+      // Metin alanının (soru metni, çözüm, ipucu, kazanım adı) içindeyse metnin
+      // parçası kalır; tek satırlık alanın (Zorluk, İdeal Süre…) arkasına
+      // eklenseydi o alanı bozardı ("60\nKaynak: …" sayı değil): yok sayılır.
+      const metinde = aktifAlan !== null && METIN_ALANLARI.has(aktifAlan);
+      mevcut.satirUyarilari.push(
+        `Satır ${i + 1} alan gibi görünüyor ama tanınmadı ("${kisalt(dolu)}")` +
+          (metinde ? ", metnin parçası sayıldı. " : ", yok sayıldı. ") +
+          `Alan "* **${benzer}:** değer" biçiminde yazılır.`
+      );
+      if (!metinde) continue;
     }
 
     // Çok satırlı alan devamı (soru metni, çözüm, ipucu, kazanım adı…).
@@ -276,7 +385,7 @@ function alanDevamEdiyor(satirlar: readonly string[], i: number): boolean {
   for (let j = i + 1; j < satirlar.length; j++) {
     const t = satirlar[j].trim();
     if (!t) continue;
-    return !(/^#{1,6}\s/.test(t) || ALAN.test(t) || SECENEK.test(t) || AYIRICI.test(t) || t.startsWith("```"));
+    return !(/^#{1,6}\s/.test(t) || alanSatiri(t) || SECENEK.test(t) || AYIRICI.test(t) || t.startsWith("```"));
   }
   return false;
 }
@@ -315,6 +424,8 @@ export interface IceAktarmaKazanimi {
   topicId: string;
   /** Kayıtlı ad — dosyada farklı ad yazılırsa uyarmak için (isteğe bağlı). */
   name?: string;
+  /** Arşivdeki kazanım: seviye 1 onu sormaz, soru yayına hazır sayılmaz (isteğe bağlı). */
+  arsivde?: boolean;
 }
 
 /** Denetimin dış dünyadan bildikleri. Hepsini çağıran doldurur. */
@@ -363,6 +474,12 @@ export interface HazirSoru {
   sourceRef: string;
   /** Soru metninde anılan görseller (dosya adı + alternatif metin), yazım sırasıyla. */
   gorseller: { dosya: string; alt: string }[];
+  /**
+   * "Yayına hazır mı" listesinin eksikleri (./question-readiness). Boşsa
+   * "doğrudan yayına al" soruyu yayına alır; doluysa soru İncelemede girer.
+   * Taslak olarak içe aktarmada yalnızca bilgi.
+   */
+  yayinEksikleri: Eksik[];
 }
 
 export interface SoruRaporu {
@@ -393,24 +510,6 @@ interface DosyaIzleri {
   parmakIzleri: Map<string, number>;
   /** Kod → konusu ve (varsa) ilk yazılan adı. */
   kazanimlar: Map<string, { topicId: string; ad: string | null }>;
-}
-
-/** İçerikteki formüller (soru metni, şık, çözüm). */
-function formuller(icerik: QuestionContent): { latex: string; blok: boolean }[] {
-  const cikti: { latex: string; blok: boolean }[] = [];
-  const satirIci = (dugumler: InlineNode[]) => {
-    for (const d of dugumler) if (d.type === "math") cikti.push({ latex: d.latex, blok: false });
-  };
-  for (const b of icerik.blocks) {
-    if (b.type === "paragraph") satirIci(b.content);
-    else if (b.type === "math_block") cikti.push({ latex: b.latex, blok: true });
-    else if (b.type === "list") b.items.forEach(satirIci);
-    else if (b.type === "table") {
-      b.header?.forEach(satirIci);
-      b.rows.forEach((r) => r.forEach(satirIci));
-    }
-  }
-  return cikti;
 }
 
 /** Konunun geçtiği sınavlar (examScopes boşsa ana sınav). */
@@ -565,7 +664,9 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
         if (s.hataKodu) uyari(`Doğru şıkta (${s.harf}) hata kodu yazılmış; yok sayıldı.`);
         continue;
       }
-      if (!s.hataKodu) hata(`${s.harf} şıkkında hata kodu yok (satır ${s.satir}).`);
+      // Taslak için isteğe bağlı, yayın için zorunlu: eksik kod soruyu reddetmez,
+      // "yayına hazır mı" listesine düşer (doğrudan yayında soru İncelemede girer).
+      if (!s.hataKodu) uyari(`${s.harf} şıkkında hata kodu yok (satır ${s.satir}): soru taslak girer, yayına almadan önce yazılmalı.`);
       else if (!(ERROR_TYPES as readonly string[]).includes(s.hataKodu)) hata(`${s.harf} şıkkındaki hata kodu listede yok: ${s.hataKodu}.`);
       errorTypes.push(s.hataKodu);
     }
@@ -705,6 +806,7 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
   }
 
   // ── Uyarılar ───────────────────────────────────────────
+  for (const u of q.satirUyarilari) uyari(u);
   for (const [anahtar, bilgi] of Object.entries(q.alanBilgisi)) {
     // hasOwn: "constructor" diye yazılmış bir alan Object'in kendi alanına denk gelmesin.
     if (Object.hasOwn(ESKI_ALANLAR, anahtar)) uyari(ESKI_ALANLAR[anahtar]);
@@ -718,13 +820,10 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
     }
   }
   // Şık sayısı: LGS 4 şıklı (A–D), diğer sınavlar 5 şıklı (SORU-SABLONU §1).
-  if (konu && sinavlarGecerli && (secenekler.length === 4 || secenekler.length === 5)) {
-    const etkin = sinavlar.length ? sinavlar : konuSinavlari(konu);
-    if (etkin.length && etkin.every((s) => s === "LGS") && secenekler.length === 5) {
-      uyari("LGS sorusu 5 şıklı; LGS'de şıklar A–D.");
-    } else if (etkin.length && !etkin.includes("LGS") && secenekler.length === 4) {
-      uyari("4 şıklı soru; LGS dışındaki sınavlarda şıklar A–E.");
-    }
+  // Kural "yayına hazır mı" listesiyle ortak (./question-readiness).
+  if (konu && sinavlarGecerli) {
+    const sorun = sikSayisiSorunu(etkinSinavlar(sinavlar, konu), secenekler.length);
+    if (sorun) uyari(sorun);
   }
   // Formüller: KaTeX çizemiyorsa öğrenci kırmızı hata metni görür.
   if (b.formulHatasi) {
@@ -737,7 +836,7 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
     let sayi = 0;
     for (const [yer, icerik] of yerler) {
       if (!icerik) continue;
-      for (const f of formuller(icerik)) {
+      for (const f of icerikFormulleri(icerik)) {
         const sebep = b.formulHatasi(f.latex, f.blok);
         if (!sebep) continue;
         // Tek bozuk makro bütün raporu doldurmasın.
@@ -750,6 +849,19 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
   if (hatalar.length || !stem || !turetilen || !konu) {
     return { sira, satir: q.satir, baslik: q.baslik, id, hatalar, uyarilar, hazir: null, cift };
   }
+
+  // Yayın denetim listesi: panelin formuyla aynı kural. Yeni açılacak kazanım
+  // yayında açılır; kayıtlı kazanım arşivdeyse seviye 1 onu sormaz.
+  const hazirlik = yayinaHazirMi({
+    stem,
+    solution,
+    hints,
+    choices: drafts.map((d, i) => ({ content: d.content, isCorrect: d.isCorrect, errorType: errorTypes[i] })),
+    level,
+    kazanim: kazanimKodu ? { arsivde: Boolean(b.kazanimlar.get(kazanimKodu)?.arsivde) } : null,
+    examScopes: sinavlar,
+    konu,
+  });
 
   return {
     sira,
@@ -781,6 +893,7 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
       examScopes: sinavlar,
       sourceRef,
       gorseller,
+      yayinEksikleri: hazirlik.eksikler,
     },
   };
 }

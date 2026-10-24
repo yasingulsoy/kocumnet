@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   CircleCheck,
@@ -131,6 +131,29 @@ export function AnswerReview({
       document.getElementById("soru-" + order)?.scrollIntoView({ block: "start" });
     });
   }
+
+  /*
+   * Adresteki soru (`#soru-<sıra>`, yanlış defterinin "Testte gör" bağlantısı):
+   * açılışta o soru açılır ve oraya kaydırılır; doğru cevaplanmışsa "Tümü"
+   * gösterilir. Sıra 0'dan başlar (soru şeridindeki numaranın bir eksiği).
+   * Sayfa bileşeni (sonuc/page.tsx) bunu bilmiyor; iş tamamen burada.
+   */
+  const adrestekiSoruyuAc = useEffectEvent(() => {
+    const m = /^#soru-(\d{1,4})$/.exec(window.location.hash);
+    if (!m) return;
+    const order = Number(m[1]);
+    if (items.some((i) => i.order === order)) ac(order);
+  });
+  useEffect(() => {
+    // Bir kare sonra: istemci tarafı geçişte adres çizimden hemen sonra yazılıyor.
+    const kare = requestAnimationFrame(() => adrestekiSoruyuAc());
+    const degisti = () => adrestekiSoruyuAc();
+    window.addEventListener("hashchange", degisti);
+    return () => {
+      cancelAnimationFrame(kare);
+      window.removeEventListener("hashchange", degisti);
+    };
+  }, []);
 
   return (
     <section>

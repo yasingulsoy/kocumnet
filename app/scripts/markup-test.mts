@@ -4,7 +4,7 @@ import "./_koruma.mjs";
  * Round-trip bozulursa mevcut bir soruyu düzenlemek içerik siler.
  *   npm run test:markup
  */
-import { markupToContent, contentToMarkup } from "../lib/question-markup";
+import { contentToMarkup, latexCizimi, markupToContent } from "../lib/question-markup";
 import { extractText, safeParseQuestionContent } from "../lib/question-content";
 
 let failed = 0;
@@ -79,6 +79,16 @@ for (const m of ["Şekil:\n\n![Cember](med77)\n\nYarıçap $r$ ise alan?", "![a]
   check("görsel gidiş-dönüş sabit", geri === contentToMarkup(markupToContent(geri)), geri);
 }
 check("görsel içerik şemadan geçiyor", safeParseQuestionContent(g1).success && safeParseQuestionContent(g2).success);
+
+console.log("\nOndalık virgül (yalnızca çizimde; bkz. latexCizimi):");
+{
+  const ondalik = "Fiyat $3,5$ TL, nokta $A(3, 5)$.";
+  const icerik = markupToContent(ondalik);
+  const saklanan = JSON.stringify(icerik).includes('"latex":"3,5"');
+  check("kaynak olduğu gibi saklanır", saklanan, saklanan ? "" : JSON.stringify(icerik));
+  check("gidiş-dönüş sabit", contentToMarkup(icerik) === ondalik);
+  check("çizimde bitişir, boşluklu dokunulmaz", latexCizimi("3,5") === "3{,}5" && latexCizimi("3, 5") === "3, 5");
+}
 
 console.log(failed === 0 ? "\nTümü geçti.\n" : `\n${failed} kontrol BAŞARISIZ.\n`);
 process.exitCode = failed === 0 ? 0 : 1;

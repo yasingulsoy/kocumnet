@@ -2,23 +2,30 @@
  * Riskli öğrenci kuralları — eşiklerin TEK yeri. Saf modül: veri
  * risk-data.ts'te toplanır, burada yalnızca karar verilir. Liste koçun
  * "bu hafta kimi aramalıyım" sorusuna cevap: her bulgu bir eylem önerir.
+ * Aynı bulgular üç ekranda: Riskli öğrenciler, Bu hafta ve öğrenci ayrıntısı.
  *
  * Eşikler araç içindir, öğrenciye giden bir kural değildir. Hoca ya da koç
  * değiştirmek isterse yalnızca bu dosya değişir; ekrandaki açıklamalar da
- * buradan okunur.
+ * buradan okunur. Test: app/scripts/koc-panel-test.mts.
  */
+
+import { oranaSayilir } from "./grup-kurallari";
+import { tamamlandiMi, type OdevDurumu } from "./shared/odev";
 
 export const RISK_ESIK = {
   /**
    * Bu kadar gündür ne giriş ne test ne alıştırma: öğrenci kopmuş olabilir.
-   * Haftalık plan döngüsünün iki turu — iki pazartesi postasına rağmen
-   * dönmemiş demek. Etkinlik: son giriş, son biten test ve HER TÜRDEN
-   * oturumun son başlama anı (alıştırma, defter tekrarı dahil).
+   * Pilotta haftalık plan döngüsünün bir turu: pazartesi postasına ve
+   * haftanın ödevine rağmen bir hafta dönmemiş demek (önceden 14 gündü;
+   * pilotta iki hafta beklemek geç). Hocaya sorulacak. Etkinlik: son
+   * etkinlik (lastSeenAt), son giriş, son biten test ve HER TÜRDEN oturumun
+   * son başlama anı (alıştırma, defter tekrarı dahil).
    */
-  pasifGun: 14,
+  pasifGun: 7,
   /**
-   * Kayıttan bu kadar gün sonra hâlâ hiç test yok: tanışma testine bile
-   * başlamamış. Kayıt günü sayılmaz; hafta sonu kaydolana nefes payı.
+   * Kayıttan bu kadar gün sonra hâlâ ÖLÇÜM sayılan test yok: tanışma testine
+   * bile başlamamış ya da açıp boş/yarım kapatmış (shared/insights.ts
+   * olcumDisi). Kayıt günü sayılmaz; hafta sonu kaydolana nefes payı.
    */
   baslamadiGun: 3,
   /**
@@ -31,16 +38,22 @@ export const RISK_ESIK = {
   /**
    * Son iki PAKET testinin başarı oranı arasındaki düşüş (puan). Hangi testler:
    * öğrenci uygulamasının eğilim kuralı (app/lib/insights.ts egilimeGirer:
-   * paket testi, işaretli, öğrencinin sınavında; kâğıt dahil) ve ikisi AYNI
-   * paket türünden (STANDARD, INTRO, MOCK). Kontrol testleri (5 soru), seviyeli
-   * aşamalar ve boş gönderilmiş testler hariç; deneme ile kısa test de
-   * kıyaslanmaz: uzunluk ve zorlukları farklı, iki farklı türü kıyaslamak
-   * yanıltıcı. Sorgu risk-data.ts'te.
+   * paket testi, ölçüm sayılan (boş ve yarım değil), öğrencinin sınavında;
+   * kâğıt dahil) ve ikisi AYNI paket türünden (STANDARD, INTRO, MOCK).
+   * Kontrol testleri (5 soru), seviyeli aşamalar hariç; deneme ile kısa test
+   * de kıyaslanmaz: uzunluk ve zorlukları farklı. Sorgu risk-data.ts'te.
    */
   dususPuan: 10,
+  /**
+   * "Ödevi yapmadı": son bu kadar günde süresi dolan ve tamamlanmayan ödev
+   * (geç tamamlanan yapılmış sayılır). Bir hafta: ödevin varsayılan süresi
+   * (shared/odev.ts VARSAYILAN_SURE_GUN) ve koçun haftalık bakışı. Daha eski
+   * yapılmamış ödev listede birikmesin; koç onu grup sayfasında görür.
+   */
+  odevPencereGun: 7,
 } as const;
 
-export type RiskKey = "pasif" | "dusus" | "plan" | "baslamadi";
+export type RiskKey = "pasif" | "odev" | "dusus" | "plan" | "baslamadi";
 export type RiskTon = "bad" | "warn" | "info";
 
 /** Süzgeç sekmeleri, açıklama kutusu ve sıralama — ciddiyet sırasıyla. */
@@ -48,8 +61,14 @@ export const RISK_META: Record<RiskKey, { baslik: string; ton: RiskTon; aciklama
   pasif: {
     baslik: "Pasif",
     ton: "bad",
-    aciklama: RISK_ESIK.pasifGun + " gündür ne giriş yaptı ne test ya da alıştırma başlattı.",
+    aciklama: RISK_ESIK.pasifGun + " gündür ne uygulamaya girdi ne test ya da alıştırma başlattı.",
     eylem: "Ara ya da mesaj at; plan çok mu ağır geldi, sor.",
+  },
+  odev: {
+    baslik: "Ödevi yapmadı",
+    ton: "warn",
+    aciklama: "Son " + RISK_ESIK.odevPencereGun + " günde süresi dolan bir ödevi tamamlamadı.",
+    eylem: "Ödevi neden yapamadığını sor; gerekirse süresini uzat.",
   },
   dusus: {
     baslik: "Düşüşte",
@@ -68,29 +87,48 @@ export const RISK_META: Record<RiskKey, { baslik: string; ton: RiskTon; aciklama
   baslamadi: {
     baslik: "Hiç başlamadı",
     ton: "info",
-    aciklama: "Kayıttan " + RISK_ESIK.baslamadiGun + " gün geçti, hâlâ hiç test yok.",
-    eylem: "Tanışma check-up'ını hatırlat.",
+    aciklama:
+      "Kayıttan " +
+      RISK_ESIK.baslamadiGun +
+      " gün geçti, hâlâ sayılan bir testi yok. Boş ya da yarım bırakılan test sayılmaz.",
+    eylem: "Tanışma check-up'ını hatırlat; başlayıp bıraktıysa nedenini sor.",
   },
 };
 
 export const RISK_SIRASI = Object.keys(RISK_META) as RiskKey[];
 
+/** Öğrencinin bir ödevdeki durumu, karar için gereken kadarı (risk-data.ts doldurur). */
+export interface RiskOdevi {
+  title: string;
+  dueAt: Date;
+  durum: OdevDurumu;
+  /** Gruba katıldığı an: son tarihten sonra katıldıysa ödev ona sayılmaz. */
+  katildi: Date;
+}
+
 /** Bir öğrencinin karar için gereken özeti (risk-data.ts doldurur). */
 export interface RiskOzeti {
   createdAt: Date;
   lastLoginAt: Date | null;
-  /** Son tamamlanan testin bitişi (her tür). */
+  /** Son etkinlik (oturumla yapılan son istek; en fazla saatte bir yazılır). */
+  lastSeenAt: Date | null;
+  /** Son tamamlanan testin bitişi (her tür; boş gönderilen de: o da etkinlik). */
   sonTest: Date | null;
   /** Her türden oturumun (alıştırma dahil, bitmemiş de) son başlama anı. */
   sonBaslama: Date | null;
+  /** Ölçüm sayılan test (boş ve yarım hariç; shared/insights.ts olcumDisi). */
   testSayisi: number;
+  /** Kapanan (puanlanan) bütün testler, boş ve yarım dahil. */
+  kapananTest: number;
   /**
    * Son iki paket testinin başarı oranı (0-1): [son, önceki]. İkisi de aynı
-   * paket türünden, işaretli ve öğrencinin sınavında (risk-data.ts).
+   * paket türünden, ölçüm sayılan ve öğrencinin sınavında (risk-data.ts).
    */
   sonIkiPaket: [number | null, number | null];
   /** Geçen haftanın planı: tamamlanan / toplam iş. Plan yoksa null. */
   gecenHaftaPlan: { biten: number; toplam: number } | null;
+  /** Etkin gruplardaki, iptal edilmemiş, yakın tarihli (açık ya da yeni süresi dolan) ödevler. */
+  odevler: RiskOdevi[];
 }
 
 export interface RiskBulgusu {
@@ -103,11 +141,35 @@ export interface RiskBulgusu {
 
 const GUN = 86_400_000;
 
-/** Son etkinlik: son giriş, son test, son oturum başlangıcı ve kayıt tarihinin en yenisi. */
-export function sonEtkinlik(o: Pick<RiskOzeti, "createdAt" | "lastLoginAt" | "sonTest" | "sonBaslama">): Date {
-  return [o.createdAt, o.lastLoginAt, o.sonTest, o.sonBaslama]
+/** Son etkinlik: son görülme, son giriş, son test, son oturum başlangıcı ve kayıt tarihinin en yenisi. */
+export function sonEtkinlik(
+  o: Pick<RiskOzeti, "createdAt" | "lastLoginAt" | "lastSeenAt" | "sonTest" | "sonBaslama">
+): Date {
+  return [o.createdAt, o.lastLoginAt, o.lastSeenAt, o.sonTest, o.sonBaslama]
     .filter((d): d is Date => d instanceof Date)
     .reduce((a, b) => (b > a ? b : a));
+}
+
+/**
+ * "Ödevi yapmadı" sayılan ödevler: son tarihi son odevPencereGun gün içinde
+ * GEÇMİŞ, tamamlanmamış (geç tamamlanan yapılmış sayılır) ve öğrenciye
+ * sayılan (son tarihten önce katılmış; grup-kurallari.ts oranaSayilir).
+ * Süresi henüz dolmayan ödev bulgu değil: öğrencinin hâlâ vakti var.
+ * En yeni son tarih önce.
+ */
+export function yapilmayanOdevler<T extends RiskOdevi>(odevler: readonly T[], now: Date): T[] {
+  const alt = now.getTime() - RISK_ESIK.odevPencereGun * GUN;
+  return odevler
+    .filter((o) => {
+      const son = o.dueAt.getTime();
+      return son < now.getTime() && son >= alt && oranaSayilir({ createdAt: o.katildi }, o) && !tamamlandiMi(o.durum);
+    })
+    .sort((a, b) => b.dueAt.getTime() - a.dueAt.getTime());
+}
+
+/** Rozette uzun ödev başlığı satırı taşırmasın. */
+function kisalt(metin: string, n = 40): string {
+  return metin.length > n ? metin.slice(0, n - 1).trimEnd() + "…" : metin;
 }
 
 export function riskBulgulari(o: RiskOzeti, now: Date): RiskBulgusu[] {
@@ -118,6 +180,11 @@ export function riskBulgulari(o: RiskOzeti, now: Date): RiskBulgusu[] {
   const sessizGun = Math.floor((now.getTime() - sonEtkinlik(o).getTime()) / GUN);
   if (sessizGun >= RISK_ESIK.pasifGun) {
     ekle("pasif", sessizGun + " gündür etkinlik yok");
+  }
+
+  const yapilmayan = yapilmayanOdevler(o.odevler, now);
+  if (yapilmayan.length > 0) {
+    ekle("odev", yapilmayan.length === 1 ? kisalt(yapilmayan[0].title) : yapilmayan.length + " ödev");
   }
 
   const [son, onceki] = o.sonIkiPaket;
@@ -135,7 +202,9 @@ export function riskBulgulari(o: RiskOzeti, now: Date): RiskBulgusu[] {
 
   const kayitGun = Math.floor((now.getTime() - o.createdAt.getTime()) / GUN);
   if (o.testSayisi === 0 && kayitGun >= RISK_ESIK.baslamadiGun) {
-    ekle("baslamadi", "kayıt " + kayitGun + " gün önce");
+    // Açıp boş ya da yarım kapattıysa koç bunu bilsin: "hiç açmadı" ile "açıp bıraktı" ayrı konuşma.
+    const bos = o.kapananTest;
+    ekle("baslamadi", "kayıt " + kayitGun + " gün önce" + (bos > 0 ? " · " + bos + " test boş ya da yarım" : ""));
   }
 
   return out;

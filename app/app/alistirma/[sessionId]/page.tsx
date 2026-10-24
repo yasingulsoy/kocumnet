@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, girisAdresi } from "@/lib/auth";
 import { CheckupError } from "@/lib/checkup";
 import { alistirmaHakki, benzerDurumlari, getPracticeSession } from "@/lib/practice";
 import { examShort } from "@/lib/exams";
@@ -24,11 +24,13 @@ export const metadata: Metadata = { title: "Alıştırma" };
  * sorunun doğrusu ve çözümü bu sayfaya hiç girmez (lib/practice.ts); cevap
  * gönderilince eylem sayfayı yeniden çizdirir ve geri bildirim o zaman gelir.
  */
-export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[sessionId]">) {
+export default async function AlistirmaPage({ params, searchParams }: PageProps<"/alistirma/[sessionId]">) {
   const { sessionId } = await params;
+  const anaSayfadan = (await searchParams).donus === "panel";
 
   const user = await getCurrentUser();
-  if (!user) redirect("/giris");
+  // Girişten sonra bu sayfaya dönülsün (?sonra=, lib/auth.ts girisAdresi).
+  if (!user) redirect(await girisAdresi());
 
   const tur = await prisma.checkupSession.findUnique({
     where: { id: sessionId },
@@ -65,7 +67,9 @@ export default async function AlistirmaPage({ params }: PageProps<"/alistirma/[s
   const cikis =
     view.mode === "REVIEW"
       ? { href: "/defter", label: "Deftere dön" }
-      : view.sourceSessionId
+      : anaSayfadan
+        ? { href: "/panel", label: "Ana sayfaya dön" }
+        : view.sourceSessionId
         ? { href: `/sonuc/${view.sourceSessionId}`, label: "Sonuca dön" }
         : view.mode === "TOPIC"
           ? { href: "/odevler", label: "Ödevlere dön" }

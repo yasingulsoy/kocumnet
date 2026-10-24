@@ -4,7 +4,14 @@ import { ArrowRight, ChartLine, ClipboardList, Minus, Play, TrendingDown, Trendi
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
-import { HARITA_EN_AZ_SORU, aggregateTopics, egilimeGirer, konuHaritasinaGirer, type ResultLike } from "@/lib/insights";
+import {
+  HARITA_EN_AZ_SORU,
+  aggregateTopics,
+  egilimeGirer,
+  konuHaritasinaGirer,
+  yarimKaldi,
+  type ResultLike,
+} from "@/lib/insights";
 import { EXAMS, daysUntilExam, examShort, isExamScope, type ExamScopeValue } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { BasariEgilimi } from "@/components/BasariGrafikleri";
@@ -34,6 +41,8 @@ type Sonuc = ResultLike & {
   examScope: string;
   /** Oturum türü: eğilime yalnızca paket testi girer (egilimeGirer). */
   kind: string;
+  /** Test nasıl kapandı: yarım kalan test ölçüme girmez (lib/insights.ts yarimKaldi). */
+  endedBy: string | null;
   /** Satırın bağlantısı: seviyeli aşamanın sonuç ekranı yok, karnesi var. */
   href: string;
 };
@@ -77,6 +86,8 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
       session: {
         select: {
           kind: true,
+          // Yarım test kuralı: endedBy oturumda, blankCount sonuçta (ikisi de şart).
+          endedBy: true,
           levelRunId: true,
           stageLevel: true,
           stageKind: true,
@@ -142,6 +153,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
   const tumu: Sonuc[] = ham.map((r) => ({
     sessionId: r.sessionId,
     kind: r.session.kind,
+    endedBy: r.session.endedBy,
     packageName:
       r.session.kind === "TOPIC_RETEST" && r.session.focusTopic
         ? `${r.session.focusTopic.name} kontrol testi`
@@ -188,7 +200,8 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
    * kontrol testi ölçüm değil, doğrulama). Seviyeli aşamanın neti cezasız,
    * tahmini neti şişiriyordu; boş gönderilen test sıfır. Konu haritası
    * kontrol testini ve aşamayı da toplar (konuHaritasinaGirer); test listesi
-   * hepsini gösterir.
+   * hepsini gösterir. Yarım kalan test (süre doldu, yarısından azı işaretli)
+   * hiçbirine girmez; listede "yarım" rozetiyle durur.
    */
   const olcumler = sonuclar.filter((r) => egilimeGirer(r, secili));
 
@@ -315,7 +328,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           description={
             olcumler.length < 2
               ? "Grafik ikinci check-up'ından sonra anlam kazanır."
-              : "Her nokta bir check-up; kontrol testleri ve seviyeli aşamalar çizgiye girmez."
+              : "Her nokta bir check-up; kontrol testleri, seviyeli aşamalar ve yarım kalan testler çizgiye girmez."
           }
           actions={
             olcumler.length >= 2 ? (
@@ -384,6 +397,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
               <TableBody>
                 {[...sonuclar].reverse().map((r) => {
                   const o = oran(r);
+                  const yarim = yarimKaldi(r);
                   const dyb = `${r.correctCount}D ${r.wrongCount}Y ${r.blankCount}B`;
                   return (
                     <TableRow key={r.sessionId} hover className="relative">
@@ -408,9 +422,16 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
                         </span>
                       </TableCell>
                       <TableCell align="end">
-                        <Badge size="sm" color={bant(o)}>
-                          <span className="tabular">%{Math.round(o * 100)}</span>
-                        </Badge>
+                        {/* Yarım testin yüzdesi ölçüm gibi okunmasın: renkli bant yerine sade rozet. */}
+                        {yarim ? (
+                          <Badge size="sm" color="light">
+                            yarım
+                          </Badge>
+                        ) : (
+                          <Badge size="sm" color={bant(o)}>
+                            <span className="tabular">%{Math.round(o * 100)}</span>
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

@@ -3,7 +3,7 @@
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { useMemo } from "react";
-import { markupToContent } from "@/lib/checkup/shared/question-markup";
+import { latexCizimi, markupToContent } from "@/lib/checkup/shared/question-markup";
 import type { InlineNode } from "@/lib/checkup/shared/question-content";
 
 /**
@@ -20,7 +20,8 @@ import type { InlineNode } from "@/lib/checkup/shared/question-content";
 
 function renderLatex(latex: string, displayMode: boolean): string {
   try {
-    return katex.renderToString(latex, {
+    // Öğrenci tarafıyla aynı çizim dönüşümü (ondalık virgül bitişik); kaynak değişmez.
+    return katex.renderToString(latexCizimi(latex), {
       displayMode,
       throwOnError: false,
       // Ham hex yerine belirteç: KaTeX bunu satır içi style'a yazıyor, var() orada çalışır.

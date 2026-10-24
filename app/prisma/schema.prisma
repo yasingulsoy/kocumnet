@@ -84,6 +84,19 @@ enum SessionStatus {
   ABANDONED
 }
 
+/// Test nasıl kapandı. Süresi dolan test de puanlanıyor (SUBMITTED), ama
+/// öğrencinin kendi bitirdiği testle aynı ölçüm değil: 24 sorunun 2'sini
+/// işaretleyip telefonu bırakan öğrencinin bütün konuları "zayıf" çıkar.
+/// Yarım kalan test ölçüme girmez (lib/insights.ts yarimKaldi).
+enum SessionEndReason {
+  /// Öğrenci "Bitir"e bastı.
+  STUDENT
+  /// Süre doldu, bakım işi kapattı.
+  TIMEOUT
+  /// Öğrenci aynı testi yeniden başlattı; eskisi kapatılıp puanlandı.
+  RESTART
+}
+
 enum TopicLevel {
   STRONG
   MEDIUM
@@ -332,6 +345,12 @@ model Question {
   createdByStaff String?
   updatedByStaff String?
 
+  /// Soru en son ne zaman ve kim tarafından yayına alındı. updatedByStaff her
+  /// düzenlemede ilerliyor; "kim onayladı" bilgisi bu yüzden ayrı. Yayından
+  /// çıkınca silinmez: yeniden yayına alınana kadar son onayı gösterir.
+  publishedAt      DateTime?
+  publishedByStaff String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -520,6 +539,15 @@ model User {
 
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
+  /// Son etkinlik: oturumla yapılan son istek (en fazla saatte bir yazılır).
+  /// lastLoginAt yalnızca parolayla girişte ilerliyor; oturum 30 gün açık
+  /// kaldığı için her gün çalışan öğrenci panelde "hiç girmedi" görünüyordu.
+  lastSeenAt      DateTime?
+
+  /// Kayıt nereden geldi: kocum.net'teki bağlantının kısa etiketi (`?k=`),
+  /// izin listesinden (ör. "ust", "hero", "blog", "whatsapp"). Çerez, IP,
+  /// yönlendiren adres TUTULMAZ; panel yalnızca toplam sayıyı gösterir.
+  signupSource    String?
 
   /// Haftalık koçluk postasını (pazartesi planı) kapattı mı. Hizmet
   /// postaları (parola, kayıt) bundan etkilenmez.
@@ -594,6 +622,10 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  /// Bağlantıyı personel panelden ürettiyse kim (e-posta gelmeyen öğrenciye
+  /// koç WhatsApp'tan iletir). Boş = öğrenci e-postayla istedi.
+  createdByStaff String?
 
   @@index([userId])
   @@index([expiresAt])
@@ -759,6 +791,12 @@ model CheckupSession {
   relaxedExposureCount Int @default(0)
 
   status SessionStatus @default(IN_PROGRESS)
+  /// Nasıl kapandı. Eski kayıtlarda boş: öğrenci bitirmiş sayılır.
+  endedBy SessionEndReason?
+
+  /// Öğrencinin sonuç ekranındaki tek dokunuşu: 1 kolay, 2 uygun, 3 zor.
+  /// İsteğe bağlı; madde analizindeki gerçek doğru oranıyla kıyaslanır.
+  perceivedDifficulty Int?
 
   /// Paket ayarlarının oturum başındaki kopyası. Admin test ortasında paketi
   /// düzenlerse puanlama değişmesin diye — questionVersion ile aynı mantık.
@@ -1122,6 +1160,11 @@ model StudyGroup {
   createdByStaff String
   /// Arşivlenen grup listelerden düşer, ödevleri öğrenciye görünmez.
   archivedAt     DateTime?
+
+  /// Davet kodu: öğrenci /katil/<kod> bağlantısıyla gruba kendisi girer
+  /// (kayıt olurken ya da girişten sonra). Boş = davet kapalı. Tahmin
+  /// edilemez rastgele kod; koç yenileyince eski bağlantı çalışmaz.
+  joinCode String? @unique
 
   members     GroupMember[]
   assignments Assignment[]

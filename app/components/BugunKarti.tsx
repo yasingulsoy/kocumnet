@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
+  ArrowUpRight,
+  BookMarked,
   CalendarCheck,
   ChartLine,
   CircleCheck,
@@ -21,9 +24,12 @@ import { examShort } from "@/lib/exams";
 import { sonGunMetni } from "@/lib/deneme";
 import { kalanGun, kalanGunMetni } from "@/lib/odev";
 import type { OgrenciOdevi } from "@/lib/odev-sorgu";
+import { KONU_CALISMA_SORU } from "@/lib/review";
 import { KonuOdevButonu } from "@/app/(panel)/odevler/KonuOdevButonu";
 import { TekrarBaslatButonu } from "@/components/AlistirmaButonlari";
+import { KonuBesSoruButonu } from "@/components/KonuBesSoruButonu";
 import { PlanIsiBitirButonu } from "@/components/PlanIsiBitirButonu";
+import { Progress } from "@/components/ui";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { cx } from "@/components/tailadmin/cx";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
@@ -64,8 +70,29 @@ export interface BugunPlanIsi {
   kind: "STUDY" | "SOLVE" | "REVIEW" | "RETEST";
   title: string;
   topicId: string | null;
+  topicName?: string | null;
   estimatedMinutes: number;
   done: boolean;
+  /** Soru işi: bu hafta bu konuda uygulamada çözülen / hedef (lib/plan-ilerleme.ts). */
+  ilerleme?: { cozulen: number; hedef: number } | null;
+  /** Soru işi: "5 soru çöz" alıştırmasının kaynağı (planın kurulduğu test). */
+  kaynakOturumId?: string | null;
+  /** Konu tekrarı: önerilen yayın (lib/products.ts, sınava uygunsa). */
+  urun?: { ad: string; adres: string } | null;
+  /** Konu tekrarı: yanlış defterinde bu konunun kazanım özeti varsa oraya giden adres. */
+  kazanimAdresi?: string | null;
+}
+
+/**
+ * İş kalmayınca (ya da yalnızca önerilen test kaldıysa): en zayıf ölçülmüş
+ * konudan 5 soruluk süresiz alıştırma. Kaynak test konunun son ölçüldüğü test.
+ */
+export interface BugunHizli {
+  sessionId: string;
+  topicId: string;
+  topicName: string;
+  /** 0-1 */
+  oran: number;
 }
 
 export interface BugunOneri {
@@ -141,7 +168,27 @@ function Kabuk({
 
 const ileri = <ArrowRight className="rtl:rotate-180" />;
 
-export function BugunKarti({ is, yeni }: { is: BugunKartIsi; yeni: boolean }) {
+/** "Hızlı 5 soru" satırı: önerilen testin altında ikinci yol (vakti az olana). */
+function HizliSatiri({ h }: { h: BugunHizli }) {
+  return (
+    <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-100 pt-4">
+      <p className="min-w-0 flex-[1_1_14rem] text-theme-sm text-gray-500">
+        Vaktin azsa: en zayıf konun <span className="font-medium text-gray-700">{h.topicName}</span>, süresiz{" "}
+        {KONU_CALISMA_SORU} soru.
+      </p>
+      <KonuBesSoruButonu
+        sessionId={h.sessionId}
+        topicId={h.topicId}
+        topicName={h.topicName}
+        etiket={`Hızlı ${KONU_CALISMA_SORU} soru`}
+        variant="soft"
+        size="xs"
+      />
+    </div>
+  );
+}
+
+export function BugunKarti({ is, yeni, hizli = null }: { is: BugunKartIsi; yeni: boolean; hizli?: BugunHizli | null }) {
   switch (is.tur) {
     case "TEST": {
       const t = is.test;
@@ -282,29 +329,123 @@ export function BugunKarti({ is, yeni }: { is: BugunKartIsi; yeni: boolean }) {
 
     case "PLAN": {
       const p = is.is;
-      const retest = p.kind === "RETEST";
+      const kalanMetni = is.kalan > 1 ? ` · bu hafta ${is.kalan} iş kaldı` : " · haftanın son işi";
+
+      if (p.kind === "RETEST") {
+        return (
+          <Kabuk
+            ikon={<CalendarCheck aria-hidden />}
+            ust="Bugün · haftalık plan"
+            baslik={p.title}
+            metin={`~${p.estimatedMinutes} dk · çözünce plandan kendiliğinden düşer`}
+            eylem={
+              p.topicId ? (
+                <form action={konuTekrarBaslat}>
+                  <input type="hidden" name="topicId" value={p.topicId} />
+                  {/* Açılamazsa (günlük hak, havuz) ana sayfaya, uyarıyla dönülür. */}
+                  <input type="hidden" name="donus" value="/panel" />
+                  <SubmitButton block pendingText="Açılıyor…" startIcon={<Play />}>
+                    Kontrol testini çöz
+                  </SubmitButton>
+                </form>
+              ) : (
+                <PlanIsiBitirButonu itemId={p.id} title={p.title} />
+              )
+            }
+          />
+        );
+      }
+
+      /*
+       * Soru işi ("40 soru"): uygulamada 5'er soruluk alıştırmayla çözülür,
+       * bu hafta o konudan çözülen sorular sayılır; hedefe varınca iş
+       * kendiliğinden kapanır (lib/plan-ilerleme.ts). "Yaptım" ikincil:
+       * kitaptan çözen de işaretleyebilsin.
+       */
+      if (p.kind === "SOLVE") {
+        const il = p.ilerleme ?? null;
+        const coz =
+          p.kaynakOturumId && p.topicId ? (
+            <KonuBesSoruButonu
+              block
+              sessionId={p.kaynakOturumId}
+              topicId={p.topicId}
+              topicName={p.topicName ?? p.title}
+            />
+          ) : null;
+        return (
+          <Kabuk
+            ikon={<CalendarCheck aria-hidden />}
+            ust="Bugün · haftalık plan"
+            baslik={p.title}
+            metin={
+              il
+                ? `Bu hafta bu konuda ${il.cozulen}/${il.hedef} soru${is.kalan > 1 ? ` · ${is.kalan} iş kaldı` : " · haftanın son işi"}`
+                : `~${p.estimatedMinutes} dk · bitirince işaretle${kalanMetni}`
+            }
+            eylem={
+              <div className="flex flex-col gap-2">
+                {coz}
+                <PlanIsiBitirButonu itemId={p.id} title={p.title} variant={coz ? "outline" : "primary"} />
+              </div>
+            }
+            alt={
+              il ? (
+                <div className="w-full">
+                  <Progress
+                    value={(Math.min(il.cozulen, il.hedef) / il.hedef) * 100}
+                    label={`${p.title}: ${il.hedef} sorudan ${il.cozulen} soru çözüldü`}
+                    className="h-1.5"
+                  />
+                  <p className="mt-1.5 text-theme-xs text-gray-500">
+                    Uygulamada çözdüğün her soru sayılır; {il.hedef} soruya varınca iş kendiliğinden kapanır. Kitaptan
+                    çözdüysen &ldquo;Yaptım&rdquo;a bas.
+                  </p>
+                </div>
+              ) : undefined
+            }
+          />
+        );
+      }
+
+      // Konu tekrarı ve yanlış analizi: öğrencinin işaretlediği işler.
+      const baglantilar =
+        p.kind === "STUDY" && (p.urun || p.kazanimAdresi) ? (
+          <ul className="flex w-full flex-wrap gap-x-4 gap-y-1 border-t border-gray-100 pt-3 text-theme-sm">
+            {p.kazanimAdresi ? (
+              <li>
+                <Link
+                  href={p.kazanimAdresi}
+                  className="inline-flex min-h-9 items-center gap-1.5 font-medium text-brand-500 transition hover:text-brand-600"
+                >
+                  <BookMarked className="size-4" aria-hidden />
+                  Kazanım özetleri
+                </Link>
+              </li>
+            ) : null}
+            {p.urun ? (
+              <li className="min-w-0">
+                <a
+                  href={p.urun.adres}
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex min-h-9 max-w-full items-center gap-1.5 font-medium text-brand-500 transition hover:text-brand-600"
+                >
+                  <span className="truncate">Kaynak: {p.urun.ad}</span>
+                  <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
+                </a>
+              </li>
+            ) : null}
+          </ul>
+        ) : undefined;
       return (
         <Kabuk
           ikon={<CalendarCheck aria-hidden />}
           ust="Bugün · haftalık plan"
           baslik={p.title}
-          metin={
-            retest
-              ? `~${p.estimatedMinutes} dk · çözünce plandan kendiliğinden düşer`
-              : `~${p.estimatedMinutes} dk · bitirince işaretle${is.kalan > 1 ? ` · bu hafta ${is.kalan} iş kaldı` : " · haftanın son işi"}`
-          }
-          eylem={
-            retest && p.topicId ? (
-              <form action={konuTekrarBaslat}>
-                <input type="hidden" name="topicId" value={p.topicId} />
-                <SubmitButton block pendingText="Açılıyor…" startIcon={<Play />}>
-                  Kontrol testini çöz
-                </SubmitButton>
-              </form>
-            ) : (
-              <PlanIsiBitirButonu itemId={p.id} title={p.title} />
-            )
-          }
+          metin={`~${p.estimatedMinutes} dk · bitirince işaretle${kalanMetni}`}
+          eylem={<PlanIsiBitirButonu itemId={p.id} title={p.title} />}
+          alt={baglantilar}
         />
       );
     }
@@ -349,11 +490,37 @@ export function BugunKarti({ is, yeni }: { is: BugunKartIsi; yeni: boolean }) {
               Teste göz at
             </ButtonLink>
           }
+          alt={hizli ? <HizliSatiri h={hizli} /> : undefined}
         />
       );
     }
 
     case "YOK":
+      // İş kalmadı: boş bir "tamam" yerine en zayıf ölçülmüş konudan kısa bir alıştırma.
+      if (hizli) {
+        return (
+          <Kabuk
+            ikon={<CircleCheck aria-hidden />}
+            ust="Bugün · işlerin tamam"
+            baslik={`Hızlı ${KONU_CALISMA_SORU} soru: ${hizli.topicName}`}
+            metin={`Planın da tekrarın da tamam. Vaktin varsa en zayıf konun (%${Math.round(hizli.oran * 100)}): süre yok, her cevaptan sonra çözümünü görürsün.`}
+            eylem={
+              <div className="flex flex-col gap-2">
+                <KonuBesSoruButonu
+                  block
+                  sessionId={hizli.sessionId}
+                  topicId={hizli.topicId}
+                  topicName={hizli.topicName}
+                  etiket={`Hızlı ${KONU_CALISMA_SORU} soru`}
+                />
+                <ButtonLink href="/gelisim" variant="outline" block startIcon={<ChartLine />}>
+                  Gelişimine bak
+                </ButtonLink>
+              </div>
+            }
+          />
+        );
+      }
       return (
         <Kabuk
           ikon={<CircleCheck aria-hidden />}

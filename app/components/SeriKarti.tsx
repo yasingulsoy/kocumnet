@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Check, Flame } from "lucide-react";
 import type { SeriOzeti } from "@/lib/seri";
@@ -11,8 +12,12 @@ import { Card } from "@/components/tailadmin/ui/Card";
  * Üç bilgi, tek kart: kaç gündür çalışıyor, bugünkü hedefin neresinde, son
  * yedi gün. Bugün henüz soru çözmediyse seri kırılmış gösterilmez: "bugün de
  * sürsün" denir — gün bitmeden "serin bitti" demek motivasyonu kırar.
+ *
+ * `eylem`: kart "bugün bir soru çöz" dediğinde (bugün henüz soru yok) yanında
+ * duran düğme; pano seçer (hızlı 5 soru, bugünkü tekrar ya da testler).
+ * Eskiden kart çağrıyı yapıp düğme vermiyordu.
  */
-export function SeriKarti({ ozet }: { ozet: SeriOzeti }) {
+export function SeriKarti({ ozet, eylem }: { ozet: SeriOzeti; eylem?: ReactNode }) {
   const { seri, bugunCalisti, seriBekliyor, bugunAdet, hedef, hedefTamam, enUzun, son7 } = ozet;
 
   const baslik = bugunCalisti
@@ -33,7 +38,7 @@ export function SeriKarti({ ozet }: { ozet: SeriOzeti }) {
 
   return (
     <Card className="p-4 sm:p-5">
-      <div className="flex items-start gap-3 sm:gap-4">
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4">
         <span
           className={cx(
             "flex size-11 shrink-0 items-center justify-center rounded-xl",
@@ -42,10 +47,11 @@ export function SeriKarti({ ozet }: { ozet: SeriOzeti }) {
         >
           <Flame className="size-5" aria-hidden />
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-[1_1_12rem]">
           <h2 className="font-display text-base font-semibold text-balance text-gray-800">{baslik}</h2>
           <p className="mt-0.5 text-theme-sm leading-relaxed text-gray-500">{alt}</p>
         </div>
+        {!bugunCalisti && eylem ? <div className="w-full sm:w-auto sm:shrink-0">{eylem}</div> : null}
       </div>
 
       {/* Bugünkü hedef: hedef 0 ise yalnızca sayı. */}

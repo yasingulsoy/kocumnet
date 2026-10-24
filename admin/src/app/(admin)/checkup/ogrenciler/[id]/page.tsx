@@ -20,15 +20,20 @@ import {
   egilimeGirer,
   konuHaritasinaGirer,
   studentStats,
-  type OlcumKaydi,
   type ResultLike,
 } from "@/lib/checkup/shared/insights";
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
+import { olcumDisiNedeni, olcumSinavi, sonGorulme, type OlcumSonucu } from "@/lib/checkup/ogrenci-ozeti";
+import { riskSatirlari } from "@/lib/checkup/risk-data";
+import { SIFIRLAMA_UYARISI } from "@/lib/checkup/sifirlama";
+import { damgaAdi } from "@/lib/checkup/question-note";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { GrantForm, RevokeButton } from "@/components/checkup/EntitlementControls";
 import { CoachNoteEditor } from "@/components/checkup/CoachNoteEditor";
 import { OdevOgrenciKarti } from "@/components/checkup/OdevOgrenciKarti";
 import { PuanTrendi, type PuanNoktasi } from "@/components/checkup/Grafikler";
+import { RiskKutusu } from "@/components/checkup/RiskKutusu";
+import { SifirlamaBaglantisi } from "@/components/checkup/SifirlamaBaglantisi";
 import { Meter, levelColor, levelTone } from "@/components/checkup/ui";
 import { haftaBasi, haftaEtiketi } from "@/lib/checkup/shared/coaching";
 import { ChartCard } from "@/components/tailadmin/charts/ChartCard";
@@ -80,7 +85,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
   const sp = await searchParams;
   const now = new Date();
 
-  const [ogrenci, ucretliPaketler] = await Promise.all([
+  const [ogrenci, ucretliPaketler, risk, bekleyenSifirlama] = await Promise.all([
     db.user.findUnique({
       where: { id },
       select: {
@@ -92,6 +97,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
         targetExam: true,
         createdAt: true,
         lastLoginAt: true,
+        lastSeenAt: true,
         // Alıştırma (PRACTICE) bu listeye ve istatistiklere girmez: ölçüm değil.
         checkupSessions: {
           where: { kind: { not: "PRACTICE" } },
@@ -101,6 +107,8 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
             id: true,
             status: true,
             kind: true,
+            // Yarım test kuralı (shared/insights.ts yarimKaldi) bunu ve blankCount'u okur.
+            endedBy: true,
             stageLevel: true,
             stageKind: true,
             startedAt: true,
@@ -181,24 +189,37 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
     }),
+    // Risk kutusu: Riskli öğrenciler listesiyle aynı kural ve sorgu, tek öğrenci kapsamı.
+    riskSatirlari(now, { userId: id }),
+    // Personelin ürettiği, hâlâ geçerli sıfırlama bağlantısı var mı (jeton değil; yalnızca kim ve ne zamana kadar).
+    db.passwordResetToken.findFirst({
+      where: { userId: id, usedAt: null, expiresAt: { gt: now }, createdByStaff: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { expiresAt: true, createdByStaff: true },
+    }),
   ]);
 
   if (!ogrenci) notFound();
+  const bulgular = risk[0]?.bulgular ?? [];
+  const sonEtkinlik = sonGorulme(ogrenci);
 
   /*
    * Öğrenci panosuyla AYNI hesap ve AYNI süzgeç (shared/insights): burada
    * "zayıf" görünen konu, öğrencinin kendi ekranında da zayıf görünür. Özet
-   * sayılar yalnızca işaretli paket testlerinden (egilimeGirer), konu haritası
+   * sayılar yalnızca ölçüm sayılan paket testlerinden (egilimeGirer), konu haritası
    * kontrol testi ve seviyeli aşamayla birlikte (konuHaritasinaGirer). İkisi
    * de TEK SINAVDAN: LGS ile TYT sonuçlarını tek "genel başarı"da toplamak
    * anlamsız. Varsayılan öğrencinin hedef sınavı (ölçümü varsa), yoksa en son
-   * ölçüldüğü sınav; ?sinav= ile değişir.
+   * ölçüldüğü sınav; ?sinav= ile değişir. Boş gönderilen ve yarım kalan testler
+   * ikisine de girmez (olcumDisi); öğrenci listesi aynı kuralı kullanıyor
+   * (lib/checkup/ogrenci-ozeti.ts).
    */
-  const sonuclar: (ResultLike & OlcumKaydi & { examScope: string })[] = ogrenci.checkupSessions.flatMap((s) =>
+  const sonuclar: (ResultLike & OlcumSonucu)[] = ogrenci.checkupSessions.flatMap((s) =>
     s.result
       ? [
           {
             kind: s.kind,
+            endedBy: s.endedBy,
             examScope: s.result.examScope ?? s.package.examScope,
             correctCount: s.result.correctCount,
             wrongCount: s.result.wrongCount,
@@ -212,13 +233,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
       : []
   );
   // Oturumlar yeniden eskiye sıralı: ilk görülen sınav en son ölçülen.
-  const olculenSinavlar = [...new Set(sonuclar.filter((r) => konuHaritasinaGirer(r)).map((r) => r.examScope))];
-  const istenenSinav = typeof sp.sinav === "string" ? sp.sinav : null;
-  const sinav =
-    (istenenSinav && olculenSinavlar.includes(istenenSinav) ? istenenSinav : null) ??
-    (ogrenci.targetExam && olculenSinavlar.includes(ogrenci.targetExam) ? ogrenci.targetExam : null) ??
-    olculenSinavlar[0] ??
-    null;
+  const { sinav, olculenSinavlar } = olcumSinavi(sonuclar, ogrenci.targetExam, typeof sp.sinav === "string" ? sp.sinav : null);
   const ozet = studentStats(sonuclar.filter((r) => egilimeGirer(r, sinav)));
   const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, sinav))).sort(
     (a, b) =>
@@ -241,7 +256,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
    * seviyeli aşama cezasız, boş gönderilen test sıfır. Sınavlar grafikte ayrı.
    */
   const trend: PuanNoktasi[] = ogrenci.checkupSessions
-    .filter((s) => s.result && egilimeGirer({ kind: s.kind, ...s.result }))
+    .filter((s) => s.result && egilimeGirer({ kind: s.kind, endedBy: s.endedBy, ...s.result }))
     .map((s) => {
       const r = s.result!;
       const sorulan = r.correctCount + r.wrongCount + r.blankCount;
@@ -301,10 +316,25 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
         }
         details={[
           { label: "Kayıt", value: trDate(ogrenci.createdAt) },
-          { label: "Son giriş", value: ogrenci.lastLoginAt ? relativeDay(ogrenci.lastLoginAt, now) : "hiç giriş yapmadı" },
+          {
+            label: "Son etkinlik",
+            value: sonEtkinlik ? (
+              <span title={trDate(sonEtkinlik, { time: true })}>{relativeDay(sonEtkinlik, now)}</span>
+            ) : (
+              "hiç giriş yapmadı"
+            ),
+          },
           { label: "Aktif erişim hakkı", value: aktifHaklar.length ? aktifHaklar.length + " hak" : "yok" },
         ]}
+        actions={<SifirlamaBaglantisi userId={ogrenci.id} ad={ogrenci.name} uyari={SIFIRLAMA_UYARISI} />}
       />
+
+      {bekleyenSifirlama ? (
+        <Alert variant="info" compact className="-mt-3 mb-6">
+          Personelin ürettiği bir parola sıfırlama bağlantısı {trDate(bekleyenSifirlama.expiresAt, { time: true })} tarihine kadar
+          geçerli ({damgaAdi(bekleyenSifirlama.createdByStaff)}). Yeni bağlantı üretirsen o çalışmaz olur.
+        </Alert>
+      ) : null}
 
       {olculenSinavlar.length > 1 ? (
         <SegmentedTabs
@@ -325,7 +355,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
           value={ozet.testCount}
           icon={<CircleCheck />}
           tone="brand"
-          hint={(sinav ? examLabel(sinav) + " paket testleri" : "paket testleri") + "; boş gönderilen hariç"}
+          hint={(sinav ? examLabel(sinav) + " paket testleri" : "paket testleri") + "; boş ve yarım kalanlar hariç"}
         />
         <MetricCard
           label="Genel başarı"
@@ -365,7 +395,11 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
           ) : null}
 
           {/* ── Test geçmişi ─────────────────── */}
-          <ComponentCard title="Test geçmişi" desc="Yarım kalan ve süresi dolanlar dahil; alıştırmalar hariç." flush>
+          <ComponentCard
+            title="Test geçmişi"
+            desc="Yarım kalan ve süresi dolanlar dahil; alıştırmalar hariç. Boş gönderilen ve yarım kalan test özete ve konu haritasına girmez."
+            flush
+          >
             {ogrenci.checkupSessions.length === 0 ? (
               <EmptyState icon={<CircleCheck />} title="Henüz test başlatmadı" />
             ) : (
@@ -393,6 +427,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
                     const r = s.result;
                     const toplam = r ? r.correctCount + r.wrongCount + r.blankCount : 0;
                     const tur = testTuru(s);
+                    const sayilmadi = r ? olcumDisiNedeni({ kind: s.kind, endedBy: s.endedBy, ...r }) : null;
                     return (
                       <TableRow key={s.id}>
                         <TableCell className="min-w-48">
@@ -407,6 +442,7 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
                           <Badge size="sm" color={SESSION_RENGI[durum] ?? "light"}>
                             {SESSION_STATUS_LABEL[durum]}
                           </Badge>
+                          {sayilmadi ? <span className="mt-1 block text-theme-xs whitespace-nowrap">{sayilmadi}</span> : null}
                         </TableCell>
                         <TableCell align="end" nowrap className="tabular">
                           {r ? r.correctCount + " / " + r.wrongCount + " / " + r.blankCount : "—"}
@@ -457,6 +493,9 @@ export default async function StudentDetailPage({ params, searchParams }: PagePr
         </div>
 
         <div className="min-w-0 space-y-4 md:space-y-6">
+          {/* ── Risk bulguları (Riskli öğrenciler ile aynı kural) ── */}
+          <RiskKutusu bulgular={bulgular} />
+
           {/* ── Haftalık plan ──────────────────── */}
           <ComponentCard title="Çalışma planı" desc="Test sonucundan üretilen haftalık plan ve uygulanışı." flush={!buHafta}>
             {!buHafta ? (

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { History } from "lucide-react";
+import { Download, FileText, History, ImageIcon, ListTree } from "lucide-react";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { QUESTION_STATUS_LABEL, trDate } from "@/lib/checkup/format";
 import { partiGecmisi, type PartiSatiri } from "@/lib/checkup/question-import";
@@ -60,6 +60,8 @@ export default async function ImportPage() {
             : "Toplu içe aktarmalar ve sonuçları."
         }
       />
+
+      {yazabilir ? <Indirmeler /> : null}
 
       {yazabilir ? (
         <QuestionImport />
@@ -206,6 +208,66 @@ function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
   );
 }
 
+/**
+ * Dosyayı hazırlayana (hoca, içerik ekibi) indirme bağlantıları. Şablon ve
+ * örnek app/'teki belgelerin kopyası (shared/belgeler.ts); kodlar
+ * veritabanından o an üretilir. Hepsi içerik rollerine açık route handler.
+ */
+function Indirmeler() {
+  const baglantilar = [
+    {
+      href: "/checkup/sorular/ice-aktar/sablon",
+      ikon: <FileText aria-hidden />,
+      ad: "Şablonu indir",
+      aciklama: "Soru dosyasının bütün kuralları (SORU-SABLONU.md).",
+    },
+    {
+      href: "/checkup/sorular/ice-aktar/ornek",
+      ikon: <Download aria-hidden />,
+      ad: "Örnek dosya",
+      aciklama: "3 soru, biri şekilli. Denetle'de üçü de geçer.",
+    },
+    {
+      href: "/checkup/sorular/ice-aktar/ornek-sekil",
+      ikon: <ImageIcon aria-hidden />,
+      ad: "Örnek şekil",
+      aciklama: "Örnek dosyadaki şekil (ornek-sekil.png); .md ile aynı klasöre koy.",
+    },
+    {
+      href: "/checkup/sorular/ice-aktar/kodlar",
+      ikon: <ListTree aria-hidden />,
+      ad: "Konu ve kazanım kodları",
+      aciklama: "Veritabanından o an üretilir, hep güncel.",
+    },
+  ];
+  return (
+    <ComponentCard
+      className="mb-6"
+      title="Dosyayı hazırlamak için"
+      desc="Önce şablona ve örneğe bak; konu ve kazanım kodlarını listeden kopyala."
+    >
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {baglantilar.map((b) => (
+          <li key={b.href}>
+            {/* Düz bağlantı: dosya iner, sayfa değişmez (route handler'lar indirme başlığı gönderiyor). */}
+            <a
+              href={b.href}
+              download
+              className="flex h-full items-start gap-3 rounded-xl border border-gray-200 p-3.5 transition hover:border-brand-300 hover:bg-brand-25 [&_svg]:size-5"
+            >
+              <span className="mt-0.5 shrink-0 text-brand-500">{b.ikon}</span>
+              <span className="min-w-0">
+                <span className="block text-theme-sm font-semibold text-gray-800">{b.ad}</span>
+                <span className="mt-0.5 block text-theme-xs text-gray-500">{b.aciklama}</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </ComponentCard>
+  );
+}
+
 /** Kısa biçim hatırlatması — ayrıntı SORU-SABLONU.md'de (içerik ekibinin elinde). */
 function BicimHatirlatmasi() {
   return (
@@ -217,7 +279,8 @@ function BicimHatirlatmasi() {
         <div className="space-y-3">
           <p>
             Her soru <code className={CODE}>### Soru 01</code> başlığıyla başlar, alanlar{" "}
-            <code className={CODE}>* **Alan:** değer</code> biçimindedir. Tam kurallar SORU-SABLONU.md (v3) belgesinde.
+            <code className={CODE}>* **Alan:** değer</code> biçimindedir (<code className={CODE}>- </code> ile başlamak da
+            olur). Tam kurallar şablonda: yukarıdan <strong className="font-semibold text-gray-700">Şablonu indir</strong>.
           </p>
           <pre className="overflow-x-auto rounded-xl bg-gray-50 p-3 font-mono text-theme-xs leading-relaxed text-gray-800">
             {[
@@ -246,15 +309,16 @@ function BicimHatirlatmasi() {
         </div>
         <ul className="list-disc space-y-2 ps-5">
           <li>
-            Konu kodları{" "}
-            <Link href="/checkup/havuz" className="font-medium text-brand-500 hover:text-brand-600">
-              Havuz durumu
-            </Link>{" "}
-            ekranında, kazanım kodları{" "}
+            Konu ve kazanım kodları yukarıdaki{" "}
+            {/* Dosya indirir (route handler), sayfa değil: Link'in önceden yüklemesi gereksiz. */}
+            <a href="/checkup/sorular/ice-aktar/kodlar" download className="font-medium text-brand-500 hover:text-brand-600">
+              Konu ve kazanım kodları
+            </a>{" "}
+            dosyasında (her indirişte güncel); kazanımlar{" "}
             <Link href="/checkup/kazanimlar" className="font-medium text-brand-500 hover:text-brand-600">
               Kazanımlar
             </Link>{" "}
-            ekranında. Konu ağaçta yoksa soru reddedilir.
+            ekranında da. Konu kodu listede yoksa soru reddedilir.
           </li>
           <li>
             Seviye <code className={CODE}>1</code>, <code className={CODE}>2</code> ya da <code className={CODE}>3</code>.
@@ -265,12 +329,18 @@ function BicimHatirlatmasi() {
             çelişirse soru reddedilir. Şık değerleri birbirinden farklı olmalı.
           </li>
           <li>
-            Her yanlış şıkta hata kodu:{" "}
+            Her yanlış şıkta hata kodu ya da Türkçe adı (<code className={CODE}>İşlem hatası: açıklama</code>): taslak için
+            isteğe bağlı, <strong className="font-semibold text-gray-700">yayın için zorunlu</strong>. Kodu eksik soru
+            uyarıyla taslak girer.{" "}
             {ERROR_TYPES.map((k) => (
               <span key={k} title={ERROR_TYPE_LABELS[k]}>
                 <code className={CODE}>{k}</code>{" "}
               </span>
             ))}
+          </li>
+          <li>
+            Doğrudan yayına alırken yayına hazır olmayan soru (çözüm, hata tipi, seviye, kazanım, formül eksik) İncelemede
+            girer; raporda neyin eksik olduğu yazar.
           </li>
           <li>
             Hedef Sınav isteğe bağlı (boş = konunun her sınavı):{" "}

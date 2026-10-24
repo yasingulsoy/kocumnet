@@ -168,7 +168,11 @@ async function uygula(
               videoUrl: q.videoUrl,
               difficulty: q.difficulty,
               targetTimeSeconds: q.targetTimeSeconds,
-              status: YAYINLA ? "PUBLISHED" : "DRAFT",
+              // Panelle aynı yayın kapısı (lib/question-readiness.ts): eksikli soru
+              // "doğrudan yayına al" dense de incelemeye girer.
+              ...(YAYINLA && q.yayinEksikleri.length === 0
+                ? { status: "PUBLISHED" as const, publishedAt: new Date(), publishedByStaff: PERSONEL }
+                : { status: YAYINLA ? ("REVIEW" as const) : ("DRAFT" as const) }),
               sourceRef: q.sourceRef,
               importBatchId: batch.id,
               examScopes: q.examScopes,
@@ -422,7 +426,11 @@ async function main() {
   }
 
   const sonuc = await uygula(hazir, hatalar, basename(yol), kazanimlar, islenmis);
-  console.log(`\n${sonuc.yazilan} soru alındı (${YAYINLA ? "YAYINDA" : "taslak"}), ${hatalar.length} soru reddedildi.`);
+  const eksikli = YAYINLA ? hazir.filter((q) => q.yayinEksikleri.length > 0).length : 0;
+  console.log(
+    `\n${sonuc.yazilan} soru alındı (${YAYINLA ? "YAYINDA" : "taslak"}), ${hatalar.length} soru reddedildi.` +
+      (eksikli ? ` ${eksikli} soru yayına hazır olmadığı için İncelemede.` : "")
+  );
   if (sonuc.yeniKazanim.length) console.log(`Yeni kazanımlar: ${sonuc.yeniKazanim.join(", ")}`);
   console.log(`Parti kimliği: ${sonuc.batchId}  (geri almak için: --geri-al ${sonuc.batchId})`);
 }

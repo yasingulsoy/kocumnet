@@ -34,6 +34,7 @@ Build sırasında aşağıdaki değişken **mutlaka** tanımlanmalıdır. Aksi h
 | `CHECKUP_DATABASE_URL` | `kocumnet_checkup` bağlantısı — check-up uygulamasının (`app/`) `DATABASE_URL`'i ile **aynı** veritabanı |
 | `BACKEND_URL` | Sunucudan backend'e erişim adresi (personel oturumu her istekte buradan doğrulanır). Boşsa `NEXT_PUBLIC_BACKEND_URL` kullanılır |
 | `NEXT_PUBLIC_SITE_URL` | kocum.net adresi — kenar çubuğundaki "Site yönetimi" bağlantısı ve giriş ekranındaki "Parolamı unuttum" (`/admin/sifremi-unuttum`) buradan kurulur |
+| `NEXT_PUBLIC_APP_URL` | checkup.kocum.net adresi — grup davet bağlantısı (`/katil/<kod>`) ve koçun ürettiği parola sıfırlama bağlantısı buradan kurulur. Derlemede gömülür: **derleme ortamında** da tanımlı olmalı. Boşsa üretimde `https://checkup.kocum.net` |
 
 ## ⚠️ Backend VE frontend'de `AUTH_COOKIE_DOMAIN=.kocum.net` ZORUNLU
 

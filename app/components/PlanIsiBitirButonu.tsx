@@ -3,14 +3,25 @@
 import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { planIsiAction } from "@/lib/actions/plan";
-import { Button } from "@/components/tailadmin/ui/Button";
+import { Button, type ButtonVariant } from "@/components/tailadmin/ui/Button";
 
 /**
  * "Bugün" kartındaki plan işi: "Yaptım" işi kapatır. Eylem panoyu tazeler;
  * kart sıradaki işe geçer, plan kartı da aynı işi işaretli gösterir. Kontrol
- * testi (RETEST) buradan kapanmaz — onun düğmesi testi açar.
+ * testi (RETEST) buradan kapanmaz — onun düğmesi testi açar. Soru işinde
+ * birincil düğme "5 soru çöz"; "Yaptım" o zaman ikincil (`variant="outline"`).
  */
-export function PlanIsiBitirButonu({ itemId, title }: { itemId: string; title: string }) {
+export function PlanIsiBitirButonu({
+  itemId,
+  title,
+  variant = "primary",
+  etiket = "Yaptım",
+}: {
+  itemId: string;
+  title: string;
+  variant?: ButtonVariant;
+  etiket?: string;
+}) {
   const [pending, start] = useTransition();
   const [hata, setHata] = useState<string | null>(null);
 
@@ -18,6 +29,7 @@ export function PlanIsiBitirButonu({ itemId, title }: { itemId: string; title: s
     <div className="space-y-2">
       <Button
         block
+        variant={variant}
         loading={pending}
         startIcon={<Check />}
         aria-label={`${title}: yaptım, işaretle`}
@@ -33,7 +45,7 @@ export function PlanIsiBitirButonu({ itemId, title }: { itemId: string; title: s
           })
         }
       >
-        {pending ? "İşaretleniyor…" : "Yaptım"}
+        {pending ? "İşaretleniyor…" : etiket}
       </Button>
       {hata ? (
         <p role="alert" className="text-theme-xs font-medium text-error-600">

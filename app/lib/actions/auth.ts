@@ -4,10 +4,12 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/password";
-import { createSession, destroySession } from "@/lib/auth";
+import { verifyPassword } from "@/lib/password";
+import { createSession, destroySession, hesapAc } from "@/lib/auth";
 import { sendWelcomeMail } from "@/lib/mailer";
-import { sinirAsildi, sinirSifirla } from "@/lib/rate-limit";
+import { denemeYaz, sinirAsildi, sinirDolu, sinirSifirla } from "@/lib/rate-limit";
+import { guvenliSonra } from "@/lib/hesap-kurallari";
+import { DAVET_HATA_PENCERESI_MS, DAVET_HATA_SINIRI_IP, kodGecerliMi, kodNormalize } from "@/lib/grup-katilim";
 
 export interface FormState {
   error?: string;
@@ -50,6 +52,23 @@ function fieldErrors(error: z.ZodError): Record<string, string> {
   return out;
 }
 
+/*
+ * Kayıt sınırı (IP başına, saatte). Sınıfta tek Wi-Fi'dan 30 öğrenci aynı
+ * saatte kaydolabilmeli: eskiden 10'du ve "bu e-posta zaten var" denemeleri
+ * de sayılıyordu, sınıfın üçte biri kayıt ekranında kalıyordu.
+ *  - Açılan hesap: saatte 40. Her kayıt scrypt çalıştırır ve posta gönderir;
+ *    bir saldırgan tek IP'den saatte en fazla 40 sahte hesap açar.
+ *  - Başarısız deneme (e-posta zaten kayıtlı): ayrıca saatte 20. Bu cevap
+ *    "bu adres kayıtlı mı" sorusunu yanıtladığı için tarama sınırlı kalsın;
+ *    sınıfta e-postasını iki kez deneyen birkaç öğrenciye yeter.
+ * Biçim hatası (eksik ad, kısa parola, onay kutusu) sayılmaz: sunucuya
+ * yük bindirmez, bir şey de açığa çıkarmaz.
+ */
+const KAYIT_SINIRI_IP = 40;
+const KAYIT_HATA_SINIRI_IP = 20;
+const KAYIT_PENCERESI_MS = 60 * 60_000;
+const SINIR_MESAJI = "Çok fazla deneme yapıldı. Lütfen bir saat sonra tekrar dene.";
+
 /** Zamanlama saldırısına karşı sahte özet — gerçek bir özetle aynı maliyette. */
 const DUMMY_HASH =
   "scrypt$65536$8$1$AAAAAAAAAAAAAAAAAAAAAA==$" +
@@ -72,9 +91,9 @@ export async function registerAction(
 
   if (!parsed.success) return { fields: fieldErrors(parsed.error), values };
 
-  // Saatte 10 kayıt/IP: her kayıt scrypt çalıştırır ve e-posta gönderir.
-  if (await sinirAsildi("kayit", 10, 60 * 60_000)) {
-    return { error: "Çok fazla deneme yapıldı. Lütfen bir saat sonra tekrar dene.", values };
+  // Sayaçlara önce BAKILIR; yalnızca açılan hesap ve "zaten kayıtlı" sayılır.
+  if ((await sinirDolu("kayit-hata", KAYIT_HATA_SINIRI_IP)) || (await sinirDolu("kayit", KAYIT_SINIRI_IP))) {
+    return { error: SINIR_MESAJI, values };
   }
 
   // Onay kutusu tarayıcıda "required" ama bu atlatılabilir; asıl denetim burada.
@@ -83,26 +102,32 @@ export async function registerAction(
   }
 
   const { name, email, password, grade } = parsed.data;
+  // Gizli alanlar (kayıt sayfası adresten taşır): hepsi yeniden süzülür.
+  const sonra = guvenliSonra(formData.get("sonra"));
+  const grupKodu = kodNormalize(formData.get("grup"));
+  const davetli = kodGecerliMi(grupKodu);
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) {
+  /*
+   * Davet bağlantısından geldiyse hesap açılınca gruba katılır (hesapAc).
+   * Yanlış kod davet sayfasındaki tahmin sınırına sayılır; sınır doluysa hiç
+   * denenmez: kayıt formu kod tahmininin arka kapısı olmasın.
+   */
+  const grupDene = davetli && !(await sinirDolu("davet-hata", DAVET_HATA_SINIRI_IP));
+  const acilis = await hesapAc({
+    name,
+    email,
+    password,
+    grade,
+    kaynak: formData.get("k"),
+    grupKodu: grupDene ? grupKodu : null,
+  });
+  if (acilis.durum === "VAR") {
+    await denemeYaz("kayit-hata", KAYIT_PENCERESI_MS);
     return { fields: { email: "Bu e-posta ile bir hesap zaten var." }, values };
   }
-
-  let user: { id: string };
-  try {
-    user = await prisma.user.create({
-      data: { name, email, passwordHash: await hashPassword(password), grade },
-      select: { id: true },
-    });
-  } catch (e) {
-    // İki sekmeden aynı anda kayıt: benzersiz e-posta kısıtı yarışı kaybedene
-    // 500 yerine anlaşılır bir mesaj.
-    if ((e as { code?: string }).code === "P2002") {
-      return { fields: { email: "Bu e-posta ile bir hesap zaten var." }, values };
-    }
-    throw e;
-  }
+  await denemeYaz("kayit", KAYIT_PENCERESI_MS);
+  if (acilis.katilim?.sonuc === "GECERSIZ") await denemeYaz("davet-hata", DAVET_HATA_PENCERESI_MS);
+  const user = { id: acilis.userId };
 
   // Hoş geldin postası akışı BEKLETMEZ: SMTP yavaşsa kayıt yavaşlamasın.
   void sendWelcomeMail({ to: email, name });
@@ -111,8 +136,9 @@ export async function registerAction(
   await createSession(user.id, h.get("user-agent") ?? undefined);
 
   // redirect() özel bir hata fırlatarak çalışır — try/catch İÇİNE ALINMAZ,
-  // yoksa yönlendirme yutulur ve sayfa olduğu yerde kalır.
-  redirect("/panel");
+  // yoksa yönlendirme yutulur ve sayfa olduğu yerde kalır. Davetle gelen
+  // öğrenci katılım sayfasına döner: gruba girdiğini orada görür.
+  redirect(davetli ? `/katil/${grupKodu}` : (sonra ?? "/panel"));
 }
 
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -146,13 +172,16 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     return { error: "E-posta veya parola hatalı.", values };
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  const simdi = new Date();
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: simdi, lastSeenAt: simdi } });
   await sinirSifirla(`giris:${email}`);
 
   const h = await headers();
   await createSession(user.id, h.get("user-agent") ?? undefined);
 
-  redirect("/panel");
+  // Giriş isteyen sayfadan gelindiyse oraya (gizli alan; lib/hesap-kurallari.ts
+  // guvenliSonra yalnızca bu sitedeki göreli yolu kabul eder).
+  redirect(guvenliSonra(formData.get("sonra")) ?? "/panel");
 }
 
 export async function logoutAction() {

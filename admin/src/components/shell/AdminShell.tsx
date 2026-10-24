@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   ArrowUpRight,
+  CalendarCheck,
   ChartColumn,
+  ChartLine,
+  ClipboardCheck,
   Database,
   FileUp,
   Flag,
@@ -55,12 +58,16 @@ function menu(role: StaffRole): NavSection[] {
         { href: "/checkup", label: "Genel bakış", icon: <LayoutDashboard />, exact: true },
         // Özgür Hoca'nın içerik/kural kararları: bütün personel okur, cevabı içerik rolleri yazar.
         { href: "/checkup/hoca", label: "Hocaya sorular", icon: <GraduationCap /> },
+        // Pilotun toplu sayıları (huni, kullanım, öğrenme kazancı): öğrenci verisinden türediği için yönetim.
+        ...(yonetim ? [{ href: "/checkup/pilot", label: "Pilot ölçümü", icon: <ChartLine /> }] : []),
       ],
     },
     {
       title: "Soru havuzu",
       items: [
         { href: "/checkup/sorular", label: "Sorular", icon: <ListChecks /> },
+        // İncelemedeki soruları tek tek onaylama ekranı; görüntüleyici onaylayamaz.
+        ...(yazar ? [{ href: "/checkup/sorular/incele", label: "İnceleme kuyruğu", icon: <ClipboardCheck /> }] : []),
         { href: "/checkup/sorular/analiz", label: "Madde analizi", icon: <ChartColumn /> },
         // Görüntüleyici içe aktaramıyor; geçmişe soru listesindeki bağlantıdan ulaşır.
         ...(yazar ? [{ href: "/checkup/sorular/ice-aktar", label: "Toplu içe aktar", icon: <FileUp /> }] : []),
@@ -94,6 +101,8 @@ function menu(role: StaffRole): NavSection[] {
           {
             title: "Öğrenciler",
             items: [
+              // Koçun pazartesi ekranı: kim geride, kim ödevi yapmadı.
+              { href: "/checkup/bu-hafta", label: "Bu hafta", icon: <CalendarCheck /> },
               { href: "/checkup/ogrenciler", label: "Tüm öğrenciler", icon: <Users /> },
               { href: "/checkup/ogrenciler/riskli", label: "Riskli öğrenciler", icon: <UserRoundX /> },
               { href: "/checkup/gruplar", label: "Gruplar ve ödevler", icon: <UsersRound /> },

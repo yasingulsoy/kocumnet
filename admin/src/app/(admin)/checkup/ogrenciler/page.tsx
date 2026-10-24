@@ -4,6 +4,7 @@ import { Search, UserRoundX, Users } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
+import { listeOzeti, sonGorulme } from "@/lib/checkup/ogrenci-ozeti";
 import { loadRiskliOgrenciler } from "@/lib/checkup/risk-data";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { qs } from "@/components/checkup/ui";
@@ -23,12 +24,26 @@ export const metadata: Metadata = { title: "Check-up · Öğrenciler" };
 
 const SAYFA_BOYU = 25;
 
+/*
+ * "Son etkinlik" sırası: önce lastSeenAt (oturumla son istek), onu hiç
+ * yazılmamış (eski) kayıtlar sonra, kendi aralarında son girişe göre.
+ * Ekrandaki değer ikisinin yenisi (ogrenci-ozeti.ts sonGorulme); fark
+ * en fazla bir saat (lastSeenAt saatte bir yazılıyor).
+ */
 const SIRALAMA = {
-  yeni: { label: "En yeni kayıt", orderBy: { createdAt: "desc" as const } },
-  giris: { label: "Son giriş", orderBy: { lastLoginAt: { sort: "desc" as const, nulls: "last" as const } } },
-  ad: { label: "Ada göre", orderBy: { name: "asc" as const } },
+  yeni: { label: "En yeni kayıt", orderBy: [{ createdAt: "desc" as const }] },
+  etkinlik: {
+    label: "Son etkinlik",
+    orderBy: [
+      { lastSeenAt: { sort: "desc" as const, nulls: "last" as const } },
+      { lastLoginAt: { sort: "desc" as const, nulls: "last" as const } },
+    ],
+  },
+  ad: { label: "Ada göre", orderBy: [{ name: "asc" as const }] },
 };
 type SiralamaKey = keyof typeof SIRALAMA;
+/** Eski adres (?sirala=giris) yeni sıraya düşsün; kaydedilmiş bağlantılar bozulmasın. */
+const ESKI_SIRALAMA: Record<string, SiralamaKey> = { giris: "etkinlik" };
 
 export default async function StudentsPage({ searchParams }: PageProps<"/checkup/ogrenciler">) {
   const gate = await checkStaff(MANAGE_ROLES);
@@ -36,8 +51,8 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
 
   const sp = await searchParams;
   const ara = typeof sp.ara === "string" ? sp.ara.trim().slice(0, 100) : "";
-  const sirala: SiralamaKey =
-    typeof sp.sirala === "string" && Object.hasOwn(SIRALAMA, sp.sirala) ? (sp.sirala as SiralamaKey) : "yeni";
+  const istenenSira = typeof sp.sirala === "string" ? (ESKI_SIRALAMA[sp.sirala] ?? sp.sirala) : "";
+  const sirala: SiralamaKey = Object.hasOwn(SIRALAMA, istenenSira) ? (istenenSira as SiralamaKey) : "yeni";
   const sayfa = Math.max(1, Math.floor(Number(typeof sp.sayfa === "string" ? sp.sayfa : 1)) || 1);
 
   const where = {
@@ -69,15 +84,24 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
         targetExam: true,
         createdAt: true,
         lastLoginAt: true,
-        // Alıştırma (PRACTICE) test sayılmaz: ölçüm değil.
-        _count: { select: { checkupSessions: { where: { status: "SUBMITTED", kind: { not: "PRACTICE" } } } } },
+        lastSeenAt: true,
+        /*
+         * "Test" ve "Son başarı" ayrıntı sayfasıyla AYNI kuraldan
+         * (ogrenci-ozeti.ts listeOzeti → shared/insights.ts egilimeGirer):
+         * yalnızca ölçüm sayılan paket testleri, tek sınavdan. Kontrol testi,
+         * seviyeli aşama, boş gönderilen ve yarım kalan test sayılmaz; bu
+         * yüzden sonuçlar geliyor, sayım burada yapılıyor. Yarım test kuralı
+         * için endedBy ve blankCount seçili. Sayfa başına 25 öğrenci.
+         */
         checkupSessions: {
-          where: { status: "SUBMITTED", kind: { not: "PRACTICE" } },
-          orderBy: { submittedAt: "desc" },
-          take: 1,
+          where: { status: "SUBMITTED", kind: { not: "PRACTICE" }, result: { isNot: null } },
+          orderBy: { startedAt: "desc" },
+          take: 100,
           select: {
-            submittedAt: true,
-            result: { select: { correctCount: true, wrongCount: true, blankCount: true } },
+            kind: true,
+            endedBy: true,
+            package: { select: { examScope: true } },
+            result: { select: { correctCount: true, wrongCount: true, blankCount: true, examScope: true } },
           },
         },
         entitlements: {
@@ -155,11 +179,13 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
                 <TableCell isHeader>Öğrenci</TableCell>
                 <TableCell isHeader>Sınıf</TableCell>
                 <TableCell isHeader>Kayıt</TableCell>
-                <TableCell isHeader>Son giriş</TableCell>
-                <TableCell isHeader align="end">
+                <TableCell isHeader nowrap>
+                  Son etkinlik
+                </TableCell>
+                <TableCell isHeader align="end" title="Ölçüm sayılan paket testleri; boş ve yarım kalanlar hariç">
                   Test
                 </TableCell>
-                <TableCell isHeader align="end" nowrap>
+                <TableCell isHeader align="end" nowrap title="Ölçüm sayılan son paket testinin başarısı">
                   Son başarı
                 </TableCell>
                 <TableCell isHeader>Erişim</TableCell>
@@ -167,8 +193,15 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
             </TableHeader>
             <TableBody>
               {ogrenciler.map((o) => {
-                const son = o.checkupSessions[0]?.result;
-                const sonToplam = son ? son.correctCount + son.wrongCount + son.blankCount : 0;
+                const ozet = listeOzeti(
+                  o.checkupSessions.flatMap((s) =>
+                    s.result
+                      ? [{ kind: s.kind, endedBy: s.endedBy, ...s.result, examScope: s.result.examScope ?? s.package.examScope }]
+                      : []
+                  ),
+                  o.targetExam
+                );
+                const etkinlik = sonGorulme(o);
                 return (
                   <TableRow key={o.id} hover className="relative">
                     <TableCell className="w-full max-w-0 min-w-60">
@@ -187,14 +220,14 @@ export default async function StudentsPage({ searchParams }: PageProps<"/checkup
                     <TableCell nowrap title={trDate(o.createdAt, { time: true })}>
                       {trDate(o.createdAt)}
                     </TableCell>
-                    <TableCell nowrap>{o.lastLoginAt ? relativeDay(o.lastLoginAt, now) : "hiç girmedi"}</TableCell>
-                    <TableCell align="end">
-                      <span className="tabular text-gray-800">{o._count.checkupSessions}</span>
+                    <TableCell nowrap title={etkinlik ? trDate(etkinlik, { time: true }) : undefined}>
+                      {etkinlik ? relativeDay(etkinlik, now) : "hiç girmedi"}
                     </TableCell>
                     <TableCell align="end">
-                      <span className="tabular text-gray-800">
-                        {son && sonToplam > 0 ? percent(son.correctCount / sonToplam) : "—"}
-                      </span>
+                      <span className="tabular text-gray-800">{ozet.test}</span>
+                    </TableCell>
+                    <TableCell align="end">
+                      <span className="tabular text-gray-800">{ozet.sonBasari === null ? "—" : percent(ozet.sonBasari)}</span>
                     </TableCell>
                     <TableCell nowrap>
                       {o.entitlements.length > 0 ? (

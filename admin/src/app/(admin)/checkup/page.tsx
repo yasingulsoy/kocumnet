@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ChevronRight, CircleCheck, ListChecks, PieChart, Plus, UserPlus, Users } from "lucide-react";
+import { ArrowRight, ChartLine, ChevronRight, CircleCheck, ListChecks, PieChart, Plus, UserPlus, Users } from "lucide-react";
 import { Prisma } from "@/lib/checkup/generated/client";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
@@ -9,6 +9,7 @@ import { sagliktanBaslatilabilir } from "@/lib/checkup/mock-rules";
 import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
 import { acikBildirimSayisi } from "@/lib/checkup/student-reports";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
+import { egilimeGirer, konuHaritasinaGirer, olcumDisi } from "@/lib/checkup/shared/insights";
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { TestGrafigi } from "@/components/checkup/Grafikler";
@@ -58,13 +59,18 @@ export default async function CheckupOverviewPage() {
   // Günlük sayımlar 12 haftayı (en eski pazartesiden bugüne en çok 84 gün) kapsasın.
   const d85 = new Date(now.getTime() - 85 * GUN);
 
+  // Tamamlanan test: ölçüm sayılan (boş ve yarım kalan hariç, shared/insights.ts
+  // olcumDisi). Yalnızca kuralın düşürebileceği sonuçlar yükleniyor: hiç
+  // işaretlenmemiş (doğru = yanlış = 0) ya da öğrencinin bitirmediği testler.
+  const bitenTest = { status: "SUBMITTED", kind: { not: "PRACTICE" } } as const;
+
   const [
     ogrenci,
     yeniOgrenci,
     tamamlanan,
     tamamlanan7,
+    olcumDisiAdaylari,
     suruyor,
-    basari30,
     soruDurum,
     cozumsuzYayinda,
     hataTipsizYayinda,
@@ -78,15 +84,22 @@ export default async function CheckupOverviewPage() {
   ] = await Promise.all([
     db.user.count({ where: { role: "STUDENT" } }),
     db.user.count({ where: { role: "STUDENT", createdAt: { gte: d7 } } }),
-    // Alıştırma (PRACTICE) test sayılmaz: ölçüm değil.
-    db.checkupSession.count({ where: { status: "SUBMITTED", kind: { not: "PRACTICE" } } }),
-    db.checkupSession.count({ where: { status: "SUBMITTED", kind: { not: "PRACTICE" }, submittedAt: { gte: d7 } } }),
-    db.checkupSession.count({ where: { status: "IN_PROGRESS", kind: { not: "PRACTICE" }, expiresAt: { gt: now } } }),
-    db.checkupResult.aggregate({
-      where: { computedAt: { gte: d30 } },
-      _sum: { correctCount: true, wrongCount: true, blankCount: true },
-      _count: { _all: true },
+    // Alıştırma (PRACTICE) test sayılmaz: ölçüm değil (sonuç satırı da yok).
+    db.checkupResult.count({ where: { session: bitenTest } }),
+    db.checkupResult.count({ where: { session: { ...bitenTest, submittedAt: { gte: d7 } } } }),
+    db.checkupResult.findMany({
+      where: {
+        session: bitenTest,
+        OR: [{ correctCount: 0, wrongCount: 0 }, { session: { endedBy: { in: ["TIMEOUT", "RESTART"] } } }],
+      },
+      select: {
+        correctCount: true,
+        wrongCount: true,
+        blankCount: true,
+        session: { select: { endedBy: true, submittedAt: true } },
+      },
     }),
+    db.checkupSession.count({ where: { status: "IN_PROGRESS", kind: { not: "PRACTICE" }, expiresAt: { gt: now } } }),
     db.question.groupBy({ by: ["status"], _count: { _all: true } }),
     db.question.count({ where: { status: "PUBLISHED", solution: { equals: Prisma.DbNull } } }),
     db.question.count({
@@ -110,11 +123,20 @@ export default async function CheckupOverviewPage() {
       WHERE role = 'STUDENT' AND "createdAt" >= ${d85}
       GROUP BY 1
     `,
+    // Son 30 günün sonuçları: sınav başına başarı ve zorlanılan konular. Ölçüm
+    // kuralı için blankCount ve endedBy şart (shared/insights.ts yarimKaldi).
     db.checkupResult.findMany({
       where: { computedAt: { gte: d30 } },
       orderBy: { computedAt: "desc" },
       take: 2000,
-      select: { topicBreakdown: true },
+      select: {
+        correctCount: true,
+        wrongCount: true,
+        blankCount: true,
+        examScope: true,
+        topicBreakdown: true,
+        session: { select: { kind: true, endedBy: true, package: { select: { examScope: true } } } },
+      },
     }),
     kisisel
       ? db.checkupSession.findMany({
@@ -152,9 +174,31 @@ export default async function CheckupOverviewPage() {
   const incelemede = soruSayisi("REVIEW");
   const taslak = soruSayisi("DRAFT");
 
-  const s = basari30._sum;
-  const soru30 = (s.correctCount ?? 0) + (s.wrongCount ?? 0) + (s.blankCount ?? 0);
-  const oran30 = soru30 > 0 ? (s.correctCount ?? 0) / soru30 : null;
+  // Ölçüm sayılmayan (boş ya da yarım kalan) testler: kart "ayrıca n" diye yazar.
+  const olcumDisilar = olcumDisiAdaylari.filter((r) => olcumDisi({ ...r, endedBy: r.session.endedBy }));
+  const olcumDisi7 = olcumDisilar.filter((r) => r.session.submittedAt && r.session.submittedAt >= d7).length;
+  const olcumSayilan = tamamlanan - olcumDisilar.length;
+  const olcumSayilan7 = tamamlanan7 - olcumDisi7;
+
+  // ── Ortalama başarı: SINAV BAŞINA, yalnızca eğilime giren sonuçlar ──
+  // LGS, TYT ve KPSS'yi; denemeyi, kontrol testini ve seviyeli aşamayı tek
+  // oranda toplamak anlamsız (CheckupResult.examScope notu). Öğrencinin
+  // grafiğiyle aynı kural: paket testi, ölçüm sayılan (shared/insights.ts).
+  const sinavaGore = new Map<string, { dogru: number; soru: number; test: number }>();
+  for (const r of sonuclar30) {
+    const sinav = r.examScope ?? r.session.package.examScope;
+    if (!egilimeGirer({ ...r, kind: r.session.kind, endedBy: r.session.endedBy, examScope: sinav })) continue;
+    const cur = sinavaGore.get(sinav) ?? { dogru: 0, soru: 0, test: 0 };
+    cur.dogru += r.correctCount;
+    cur.soru += r.correctCount + r.wrongCount + r.blankCount;
+    cur.test += 1;
+    sinavaGore.set(sinav, cur);
+  }
+  const basariSinavlari = [...sinavaGore.entries()]
+    .filter(([, v]) => v.soru > 0)
+    .map(([sinav, v]) => ({ sinav, oran: v.dogru / v.soru, test: v.test }))
+    .sort((a, b) => b.test - a.test);
+  const basBasari = basariSinavlari[0] ?? null;
 
   // ── Son 14 gün ───────────────────────────────────────────
   const testMap = new Map(gunlukTest.map((r) => [r.gun, Number(r.n)]));
@@ -190,6 +234,8 @@ export default async function CheckupOverviewPage() {
   // ── En çok zorlanılan konular (son 30 gün, tüm öğrenciler) ──
   const konuMap = new Map<string, { name: string; asked: number; correct: number }>();
   for (const r of sonuclar30) {
+    // Boş ve yarım testler konuyu "zor" gösterirdi: konu haritasının kuralı (alıştırma zaten sonuç yazmaz).
+    if (!konuHaritasinaGirer({ ...r, kind: r.session.kind, endedBy: r.session.endedBy })) continue;
     const tb = r.topicBreakdown as unknown as TopicBreakdown | null;
     if (!tb || !Array.isArray(tb.topics)) continue;
     for (const t of tb.topics) {
@@ -291,6 +337,12 @@ export default async function CheckupOverviewPage() {
                 Yeni soru
               </ButtonLink>
             ) : null}
+            {/* Pilot ölçümü öğrenci verisinden türüyor: yalnızca yönetim (sayfa da sunucuda denetler). */}
+            {kisisel ? (
+              <ButtonLink href="/checkup/pilot" variant="outline" size="xs" startIcon={<ChartLine />}>
+                Pilot ölçümü
+              </ButtonLink>
+            ) : null}
           </>
         }
       />
@@ -337,17 +389,40 @@ export default async function CheckupOverviewPage() {
             />
             <MetricCard
               label="Tamamlanan test"
-              value={trNumber(tamamlanan)}
+              value={trNumber(olcumSayilan)}
               icon={<CircleCheck />}
               tone="success"
-              hint={tamamlanan7 + " son 7 günde · " + suruyor + " şu an çözülüyor"}
+              hint={
+                <>
+                  {olcumSayilan7 + " son 7 günde · " + suruyor + " şu an çözülüyor"}
+                  {olcumDisilar.length > 0 ? (
+                    <span className="block text-gray-400">ayrıca {trNumber(olcumDisilar.length)} yarım/boş (ölçüm sayılmaz)</span>
+                  ) : null}
+                </>
+              }
             />
             <MetricCard
               label="Ortalama başarı · 30 gün"
-              value={oran30 === null ? "—" : percent(oran30)}
+              value={
+                basBasari ? (
+                  <>
+                    {percent(basBasari.oran)}{" "}
+                    <span className="text-base font-medium text-gray-500">{examLabel(basBasari.sinav)}</span>
+                  </>
+                ) : (
+                  "—"
+                )
+              }
               icon={<PieChart />}
               tone="brand"
-              hint={basari30._count._all > 0 ? basari30._count._all + " testte doğru / sorulan" : "Son 30 günde test yok"}
+              hint={
+                basBasari
+                  ? [
+                      basBasari.test + " paket testinde doğru / sorulan",
+                      ...basariSinavlari.slice(1).map((b) => examLabel(b.sinav) + " " + percent(b.oran) + " (" + b.test + " test)"),
+                    ].join(" · ")
+                  : "Son 30 günde ölçüm sayılan paket testi yok"
+              }
             />
             <MetricCard
               label="Yayındaki soru"
@@ -463,7 +538,7 @@ export default async function CheckupOverviewPage() {
         <ChartCard
           className="col-span-12 xl:col-span-5"
           title="En çok zorlanılan konular"
-          description="Son 30 gün, tüm öğrenciler · en az 10 kez sorulmuş konular, doğru oranı"
+          description="Son 30 gün, tüm öğrenciler · ölçüm sayılan testlerde en az 10 kez sorulmuş konular, doğru oranı"
         >
           {zorKonular.length === 0 ? (
             <EmptyState

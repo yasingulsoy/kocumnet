@@ -14,6 +14,12 @@ import { istemciIpBelirle } from "./istemci-ip";
  * Anahtar: istemci IP + eylem (+ hedef); giriş yapmış eylemlerde IP yerine
  * kullanıcı kimliği (sinirAsildiKullanici). Harita periyodik olarak budanır;
  * eskiden hiç budanmıyordu ve zamanla şişiyordu.
+ *
+ * İki kullanım biçimi:
+ *  - sinirAsildi*: her deneme sayılır ve aynı çağrıda karar verilir.
+ *  - sinirDolu* + denemeYaz*: önce sayaca BAKILIR, yalnızca belirli sonuçlar
+ *    (başarılı kayıt, yanlış davet kodu) sayılır. Sınıfta tek Wi-Fi'dan 30
+ *    öğrenci kaydolurken doğru giden denemeler başarısızların payını yemesin.
  */
 
 interface Kayit {
@@ -70,6 +76,32 @@ export async function sinirAsildiKullanici(
   pencereMs: number
 ): Promise<boolean> {
   return say(`u:${userId}|${anahtar}`, limit, pencereMs);
+}
+
+function dolu(k: string, limit: number): boolean {
+  const now = Date.now();
+  const rec = kayitlar.get(k);
+  return Boolean(rec && rec.until >= now && rec.count >= limit);
+}
+
+/** Sayacı artırmadan bakar: bu IP'nin pencerede `limit` denemesi dolmuş mu. */
+export async function sinirDolu(anahtar: string, limit: number): Promise<boolean> {
+  return dolu(`${await istemci()}|${anahtar}`, limit);
+}
+
+/** Bu IP'nin sayacını bir artırır; pencere ilk denemede başlar. */
+export async function denemeYaz(anahtar: string, pencereMs: number): Promise<void> {
+  say(`${await istemci()}|${anahtar}`, Number.POSITIVE_INFINITY, pencereMs);
+}
+
+/** sinirDolu'nun kullanıcı kimliğiyle sayılanı. */
+export function sinirDoluKullanici(userId: string, anahtar: string, limit: number): boolean {
+  return dolu(`u:${userId}|${anahtar}`, limit);
+}
+
+/** denemeYaz'ın kullanıcı kimliğiyle sayılanı. */
+export function denemeYazKullanici(userId: string, anahtar: string, pencereMs: number): void {
+  say(`u:${userId}|${anahtar}`, Number.POSITIVE_INFINITY, pencereMs);
 }
 
 /** Başarılı girişte sayaç sıfırlanır: doğru parolayı bilen kilitli kalmasın. */

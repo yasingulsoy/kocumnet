@@ -22,17 +22,23 @@ import { useOnay } from "./Onay";
  * `kilitli`: yayındaki ve başlatılmış denemelerin adları. O soru yayından hiç
  * alınamaz (sunucu da reddeder): "yerine başka soru koy" yolu yok, çünkü
  * başlatılmış denemenin listesi değişemiyor. Seçenekler kapalı, nedeni yazılı.
+ *
+ * `yayinEksigi`: soru "yayına hazır mı" listesinden geçmiyorsa eksiklerin kısa
+ * adları ("çözüm yok, hata tipi eksik"). "Yayında" seçeneği kapalı ve nedeni
+ * yazılı; sunucu da aynı kuralla reddeder (lib/checkup/yayin-kapisi.ts).
  */
 export function StatusSelect({
   id,
   status,
   denemeler,
   kilitli,
+  yayinEksigi,
 }: {
   id: string;
   status: string;
   denemeler?: string[];
   kilitli?: string[];
+  yayinEksigi?: string;
 }) {
   const [value, setValue] = useState(status);
   const [pending, start] = useTransition();
@@ -79,11 +85,14 @@ export function StatusSelect({
           }
         });
       }}
-      options={QUESTION_STATUSES.map((s) => ({
-        value: s,
-        label: QUESTION_STATUS_LABEL[s] + (durumKilitli && s !== "PUBLISHED" ? " (kilitli)" : ""),
-        disabled: durumKilitli && s !== "PUBLISHED",
-      }))}
+      options={QUESTION_STATUSES.map((s) => {
+        const eksik = s === "PUBLISHED" && value !== "PUBLISHED" && Boolean(yayinEksigi);
+        return {
+          value: s,
+          label: QUESTION_STATUS_LABEL[s] + (durumKilitli && s !== "PUBLISHED" ? " (kilitli)" : eksik ? " (eksik: " + yayinEksigi + ")" : ""),
+          disabled: (durumKilitli && s !== "PUBLISHED") || eksik,
+        };
+      })}
     />
   );
 }

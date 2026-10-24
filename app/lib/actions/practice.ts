@@ -64,7 +64,8 @@ export async function konuCalisAction(
     if (e instanceof CheckupError) return { error: e.message };
     throw e;
   }
-  redirect(`/alistirma/${yeni}`);
+  // Ana sayfadaki "5 soru çöz"den açıldıysa özet oraya döndürsün (tek izinli değer).
+  redirect(formData.get("donus") === "panel" ? `/alistirma/${yeni}?donus=panel` : `/alistirma/${yeni}`);
 }
 
 /**

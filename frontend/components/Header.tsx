@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, BookOpen, Briefcase, Building2, House, Mail, MapPin, Newspaper } from "lucide-react";
 import { SITE_BRAND } from "@/lib/site-brand";
-import { CHECKUP_URL } from "@/lib/site";
+import { checkupAdresi } from "@/lib/site";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import type { Locale } from "@/lib/i18n/config";
 import { localizedPath, type RouteKey } from "@/lib/routes";
@@ -46,6 +46,8 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
     exact: key === "home",
   }));
   const iletisim = localizedPath("contact", locale);
+  // Kaynak etiketi (?k=): şerit ve mobil menü aynı yer sayılır, dil fark etmez.
+  const checkupUst = checkupAdresi("ust");
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
@@ -64,9 +66,9 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
           </div>
           <div className="flex shrink-0 items-center gap-3 sm:gap-4">
             {/* Check-up uygulaması adresi tanımlıysa her sayfadan bir tık uzakta. */}
-            {CHECKUP_URL ? (
+            {checkupUst ? (
               <a
-                href={CHECKUP_URL}
+                href={checkupUst}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden items-center gap-1 font-medium text-white transition hover:underline md:inline-flex"
@@ -113,9 +115,9 @@ export function Header({ locale, dict }: { locale: Locale; dict: Dictionary }) {
               <ButtonLink href={iletisim} size="md" block>
                 {dict.nav.contact}
               </ButtonLink>
-              {CHECKUP_URL ? (
+              {checkupUst ? (
                 <ExternalButton
-                  href={CHECKUP_URL}
+                  href={checkupUst}
                   newTabLabel={dict.nav.opensInNewTab}
                   variant="soft"
                   size="md"

@@ -1,6 +1,9 @@
+import { cache } from "react";
 import katex from "katex";
 import { ZoomIn } from "lucide-react";
+import { prisma } from "@/lib/db";
 import type { ContentBlock, InlineNode, QuestionContent } from "@/lib/question-content";
+import { latexCizimi } from "@/lib/question-markup";
 
 /**
  * Soru gövdesini ekrana basar.
@@ -16,7 +19,8 @@ import type { ContentBlock, InlineNode, QuestionContent } from "@/lib/question-c
 
 function renderLatex(latex: string, displayMode: boolean): string {
   try {
-    return katex.renderToString(latex, {
+    // Saklanan kaynak değişmez; ondalık virgül yalnızca çizimde bitişir (question-markup.ts latexCizimi).
+    return katex.renderToString(latexCizimi(latex), {
       displayMode,
       throwOnError: false,
       // Hatalı formül kırmızı görünsün; sessizce boş bırakmak, sorunun
@@ -41,6 +45,37 @@ function mediaUrl(mediaId: string) {
   return `/api/media/${mediaId}`;
 }
 
+/*
+ * Şeklin piksel boyutu MediaAsset'te (yüklemede sharp yazıyor, lib/media-image.ts).
+ * Soru gövdesi yalnızca mediaId taşıyor; boyut burada, istek başına görsel
+ * başına bir kez okunur (React cache) ve <img>'e width/height olarak yazılır.
+ * Eskiden yazılmıyordu: tarayıcı şekil inene kadar yer ayırmıyor, şekil
+ * gelince altındaki şıklar aşağı kayıyordu (öğrenci yanlış şıkka dokunuyordu).
+ * Boyutu olmayan eski kayıtta öznitelik yok, eskisi gibi. Cevap anahtarıyla
+ * ilgisi yok: yalnızca genişlik ve yükseklik okunur.
+ */
+const gorselBoyutu = cache(async (mediaId: string): Promise<{ width: number; height: number } | null> => {
+  try {
+    const m = await prisma.mediaAsset.findUnique({ where: { id: mediaId }, select: { width: true, height: true } });
+    return m?.width && m.height ? { width: m.width, height: m.height } : null;
+  } catch {
+    // Boyut okunamadıysa şekil yine çizilir; yalnızca yer önceden ayrılmaz.
+    return null;
+  }
+});
+
+/**
+ * Soru görseli. `h-auto` (blok şekil) ya da sabit yükseklik (satır içi simge)
+ * sınıfla verilir; width/height öznitelikleri tarayıcıya en-boy oranını söyler.
+ */
+async function Gorsel({ mediaId, alt, className }: { mediaId: string; alt: string; className: string }) {
+  const boyut = await gorselBoyutu(mediaId);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={mediaUrl(mediaId)} alt={alt} width={boyut?.width} height={boyut?.height} className={className} />
+  );
+}
+
 function Inline({ nodes }: { nodes: InlineNode[] }) {
   return (
     <>
@@ -57,10 +92,9 @@ function Inline({ nodes }: { nodes: InlineNode[] }) {
 
         if (node.type === "inline_image") {
           return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Gorsel
               key={i}
-              src={mediaUrl(node.mediaId)}
+              mediaId={node.mediaId}
               alt={node.alt}
               className="inline-block h-[1.4em] w-auto align-text-bottom"
             />
@@ -113,11 +147,11 @@ function Block({ block, compact, buyutulebilir }: { block: ContentBlock; compact
 
     case "image": {
       const gorsel = (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={mediaUrl(block.mediaId)}
+        <Gorsel
+          mediaId={block.mediaId}
           alt={block.alt}
-          className="mx-auto max-w-full rounded-lg border border-gray-200 bg-white"
+          // h-auto: daralan ekranda yükseklik width/height oranıyla küçülsün (öznitelikteki piksel kalmasın).
+          className="mx-auto h-auto max-w-full rounded-lg border border-gray-200 bg-white"
         />
       );
       return (

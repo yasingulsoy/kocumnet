@@ -98,6 +98,8 @@ Tek sınavla başlamak en doğrusu. Önerim TYT ya da ALES/DGS.
 | Word (.docx) dosyasından içe aktarma | Orta | Hoca Word'de yazıyorsa dönüştürme adımı kalkar |
 | Parametrik soru şablonu (panelde tanım, örnek üretme, onay) | Orta-büyük | Seviye 1 havuzu hızla dolar, telafi tükenmez |
 | ✅ **İnceleme notları** (10 Ekim; 21 Ekim'den beri öğrencinin hata bildirimleri de) | Küçük | Hoca ile ekip panel içinde yazışır |
+| ✅ **İnceleme kuyruğu ve yayın kapısı** (24 Ekim): hoca soruyu öğrencinin göreceği hâliyle görüp Onayla / Düzeltme iste; eksikli soru (çözüm, hata tipi, seviye, formül) yayına çıkamaz | Orta | Hatalı soru öğrenciye ulaşmadan yakalanır |
+| ✅ **İçe aktarmayı kolaylaştırma** (24 Ekim): şablon, örnek dosya ve kod listesi indirme; esnek biçim; formül düğmeleri; ekran görüntüsü yapıştırma | Küçük | Hoca ilk denemede reddedilmez |
 
 ---
 
@@ -139,15 +141,37 @@ kontrol testi; seviyeli check-up; gelişim grafiği.
 
 **Öğrenci:**
 - ✅ **Tek "bugün" kartı** (10 Ekim; 21 Ekim'den beri koçun ödevi de).
-- **Kısa oturumlar:** telefonda 10-15 dakikalık işler.
-- **Parolasız giriş:** e-postaya gelen bağlantıyla giriş (e-posta altyapısı gerekir).
-- **Hatırlatma:** haftalık posta, seri ve günlük hedef hazır (21 Ekim); tarayıcı bildirimi eklenebilir.
+- ✅ **Kısa oturumlar** (24 Ekim): plan işinde "5 soru çöz" ve "bu hafta 12/40" ilerlemesi; hedefe
+  varınca iş kendiliğinden kapanır; iş kalmayınca en zayıf konudan "Hızlı 5 soru".
+- **Parolasız giriş:** e-postaya gelen bağlantıyla giriş (e-posta altyapısı gerekir). O zamana kadar
+  koç panelden tek kullanımlık parola sıfırlama bağlantısı üretip WhatsApp'tan iletebiliyor (24 Ekim).
+- ✅ **Hatırlatma:** haftalık posta, seri ve günlük hedef (21 Ekim); takvime günlük hatırlatıcı
+  (`.ics`) ve "ana ekrana ekle" (24 Ekim). Tarayıcı bildirimi eklenebilir.
+- ✅ **Oturum pilot boyunca düşmez** (24 Ekim): kullanıldıkça uzayan oturum; girişten sonra istenen
+  sayfaya dönüş.
+- ✅ **Yarım kalan test ölçüm sayılmaz** (24 Ekim): süre dolan ya da yeniden başlatılan testte
+  soruların yarısından azı işaretliyse konu haritası, plan, grafik ve ödev bu testi saymaz
+  (eşik hocaya soruldu).
 
 **Koç ve içerik ekibi:**
 - Yapıldı: panelden içe aktarma ve inceleme notları (10 Ekim); grup ve ödev, öğrenci soruları,
   hata bildirimleri, deneme oluşturucu (21 Ekim).
+- 24 Ekim: grup davet bağlantısı (`/katil/<kod>`; sınıfta tahtaya yazılabilen kod) ve e-posta
+  listesiyle toplu ekleme; koçun "Bu hafta" ekranı; riskli listesinde "ödevi yapmadı" ve 7 günlük
+  pasif eşiği; grup yazdırma görünümü; veli raporunda ödevler.
 - Hazır: paket düzenleyici, riskli öğrenciler, koç notu ve madde analizi. Tohum betiği
   panelde düzenlenen paketleri artık ezmiyor; yalnızca `--guncelle` ile yazıyor.
+
+**Pilotu ölçmek (24 Ekim):** panelde "Pilot ölçümü" ekranı ve indirilebilir pilot sonu raporu.
+Yalnızca toplu sayılar (beşten azı gizli): kayıt hunisi, yarım kalan testler, hangi özelliğin
+kullanıldığı, ilk ve son ölçüm arasındaki fark (planına giren ve girmeyen konular yan yana),
+öğrencinin zorluk algısı ve kayıt kaynağı. kocum.net'teki check-up bağlantıları kaynak etiketi
+(`?k=`) taşıyor; çerez yok.
+
+**Pilottan sonraya bırakılanlar:** uyarlamalı test ve tahmini puan (25 öğrenciyle soru başına
+güvenilir zorluk hesaplanamaz; uyarlamalı seçim pilotun ölçümünü de karıştırır); tek öğrenciye
+ödev; birden fazla koç ve ayrı "koç" rolü; öğrenci ve veli telefonu (kişisel veri kararı);
+koç notunun plandan ayrılması; pilot sonu anketi (sorular hocadan).
 
 ---
 

@@ -2,7 +2,7 @@
 
 Merhaba hocam. Bu sayfada Matematik Check-up'ı öğrencilere açmadan önce sizin kararınızı bekleyen konular var. Sistemin büyük kısmı hazır: öğrenci kısa testler çözüyor, sonuç ekranında konu konu nerede olduğunu görüyor, haftalık bir plan alıyor ve yanlışlarını aralıklı tekrarla kapatıyor. Eksik olan, gerçek sorular ve bir öğretmenin vermesi gereken kararlar.
 
-Sorular ürünün bölümlerine göre sıralandı (18 bölüm, 126 soru). Her bölümün başında, o özelliğin öğrencinin ekranında ne yaptığını anlatan kısa bir giriş var. Her soruda sistemin şu an ne yaptığı, bunu neden sorduğumuz ve bizim önerimiz yazıyor.
+Sorular ürünün bölümlerine göre sıralandı (18 bölüm, 128 soru). Her bölümün başında, o özelliğin öğrencinin ekranında ne yaptığını anlatan kısa bir giriş var. Her soruda sistemin şu an ne yaptığı, bunu neden sorduğumuz ve bizim önerimiz yazıyor.
 
 Cevaplamak için çoğu zaman bir işaret yeter: 'Uygun', 'Değişsin' ya da seçeneklerden biri. Not yazmak isteğe bağlı; 'Değişsin' dediğinizde ya da seçeneklerde olmayan bir şey söylemek istediğinizde birkaç kelime yeterli. Acil işaretli 9 soruyu önce cevaplamanızı rica ederiz: pilot onlarsız başlayamıyor.
 
@@ -86,7 +86,7 @@ Matematik Check-up'ta öğrenci kısa, süreli testler çözüyor; sonuç ekran�
 
 **Soru 1.5** — Pilotun başarılı geçtiğini neyle anlayalım?
 
-**Şu an:** Tanımlı bir başarı ölçüsü yok. Panel bunları zaten sayıyor: çözülen testler, haftalık planın tamamlanma oranı, kontrol testi sonuçları, riskli öğrenciler, sorulara gelen hata bildirimleri.
+**Şu an:** Tanımlı bir başarı ölçüsü yok. Paneldeki 'Pilot ölçümü' ekranı bunları sayıyor: kaç öğrencinin kaydolup ilk testini çözdüğü ve 2. ve 3. haftada hâlâ geldiği, testlerin kaçının yarım kaldığı, hangi özelliğin kaç kişi tarafından kullanıldığı, ilk ve son ölçüm arasındaki fark, kontrol testlerini geçme oranı, öğrencilerin testleri kolay mı zor mu bulduğu. Sonunda bunların toplu bir raporu indirilebiliyor.
 
 **Neden soruyoruz:** Ölçüyü baştan seçersek pilotun sonunda 'iyi geçti mi' sorusunu sayılarla cevaplarız; sonradan seçilen ölçü hep iyi çıkar.
 
@@ -157,6 +157,24 @@ Birden çok seçenek işaretleyebilirsiniz.
 **Önerimiz:** Soru yazanlara editör, size ve koçlara müdür yetkisi.
 
 Cevabınızda: Her kişi için ad, e-posta adresi ve yetki.
+
+> Cevap:
+
+**Soru 1.10** — Pilot sonunda 'öğrenciler öğrendi mi' sorusunu cevaplarken şu sınırlar uygun mu?
+
+**Şu an:** Panelde 'Pilot ölçümü' ekranı var. Aynı öğrencinin aynı konudaki ilk ve son ölçümünü karşılaştırıyor ve planına giren konularla girmeyenleri yan yana gösteriyor. Daha önce gördüğü soruların tekrar geldiği testler hesaba girmiyor, çünkü hatırlanan soru öğrenmeyi değil hafızayı ölçüyor. Sayılar toplu; öğrencinin adı görünmüyor, beşten az kişiden çıkan sayı gizleniyor.
+
+**Neden soruyoruz:** Zayıf diye seçilen konu, çalışılmasa da sonraki ölçümde biraz yükselme eğiliminde; şans eseri düşük çıkan puan bir sonraki sefere kendiliğinden düzelir. Asıl kanıt, planına giren konuların girmeyenlerden daha çok yükselmesi. Az sayıda öğrenciyle çıkan fark da tesadüf olabilir.
+
+**Önerimiz:** Kalsın; pilot sonunda iki grup arasındaki fark artış eşiğini geçiyorsa yöntem işe yarıyor demektir.
+
+Parantez içindeki değerler şu an sistemde olanlar. Değiştirmek istediğiniz hücreye yenisini yazın; boş hücreler doldurulacak.
+
+|  | Sınır |
+| --- | --- |
+| Anlamlı artış: başarıda en az kaç puanlık yükselme | (10) |
+| Ortalama göstermek için en az kaç öğrenci | (10) |
+| Bir konuyu karşılaştırmak için iki ölçümde de en az kaç soru | (3) |
 
 > Cevap:
 
@@ -464,7 +482,7 @@ Bir soru öğrenciye yalnızca soru metni ve şıklarla gitmiyor. Yanlış şık
 
 **Soru 5.1** — Her yanlış şıkkın hangi hatadan çıktığını yazmak zorunlu kalsın mı? Ekip bunu her soruda yapabilir mi?
 
-**Şu an:** Zorunlu: yanlış şıklarından birinin hata türü yazılmamış soru sisteme alınmıyor. Sonuç ekranındaki 'yanlışlarının ortak sebebi' kartı bu işaretlerden çıkıyor.
+**Şu an:** Yayın için zorunlu: hata türü eksik soru taslak olarak alınıyor ama yayına çıkamıyor; toplu dosyada da eksik olan soru reddedilmiyor, uyarıyla taslak giriyor. Sonuç ekranındaki 'yanlışlarının ortak sebebi' kartı bu işaretlerden çıkıyor.
 
 **Neden soruyoruz:** Öğrenci 'yanlış yaptın' yerine 'kavram eksiğin yok, işlemde kaybediyorsun' cümlesini görüyor; çalışma biçimini değiştiren bilgi bu.
 
@@ -479,15 +497,15 @@ Bir soru öğrenciye yalnızca soru metni ve şıklarla gitmiyor. Yanlış şık
 
 **Soru 5.2** — Çözümü yazılmamış soru sisteme alınsın mı?
 
-**Şu an:** Çözüm alanı boşsa sistem uyarıyor ama soruyu alıyor. Öğrenci sonuç ekranında ve alıştırmada çözümü görüyor; çözümsüz soruda yalnızca doğru şık görünüyor.
+**Şu an:** Çözümsüz soru taslak olarak alınıyor ama çözüm eklenene kadar yayına çıkamıyor. Soru formunda 'yayına hazır mı' listesi eksikleri gösteriyor; toplu yayında çözümsüz sorular atlanıyor ve hangileri olduğu söyleniyor. Öğrenci sonuç ekranında ve alıştırmada çözümü görüyor.
 
 **Neden soruyoruz:** Öğrencinin en çok öğrendiği an, yanlışının çözümünü okuduğu an. Çözümsüz soru bu anı boşa harcıyor.
 
-**Önerimiz:** Alınsın ama çözüm eklenene kadar yayına çıkamasın: yazar çözümü sonra ekleyebilir, öğrenci çözümsüz soru görmez.
+**Önerimiz:** Kalsın: yazar çözümü sonra ekleyebilir, öğrenci çözümsüz soru görmez.
 
-- ☐ Alınsın ama çözüm eklenene kadar yayına çıkamasın (önerimiz)
+- ☐ Alınsın ama çözüm eklenene kadar yayına çıkamasın (şu an; önerimiz)
 - ☐ Hiç alınmasın
-- ☐ Şimdiki gibi uyarıyla alınsın
+- ☐ Uyarıyla alınsın, çözümsüz de yayına çıkabilsin
 
 > Cevap:
 
@@ -685,7 +703,7 @@ Bir soru yayına çıkmadan önce taslak ve inceleme aşamalarından geçebiliyo
 
 **Soru 7.1** — Bir soru yayına çıkmadan önce incelemeden geçmek zorunda olsun mu?
 
-**Şu an:** Zorunlu değil. Soru yazma yetkisi olan herkes bir soruyu doğrudan yayına alabiliyor; toplu aktarımda da onay sorularak 'doğrudan yayına al' seçeneği var.
+**Şu an:** Zorunlu değil. Soru yazma yetkisi olan herkes bir soruyu doğrudan yayına alabiliyor; toplu aktarımda da onay sorularak 'doğrudan yayına al' seçeneği var. Yalnızca eksiksiz soru yayına çıkabiliyor: çözüm, her yanlış şıkkın hata türü, seviye ve formüllerin düzgün görünmesi şart. Panelde ayrıca bir 'İnceleme kuyruğu' var: incelemedeki soruları öğrencinin göreceği hâliyle tek tek gösteriyor; 'Onayla', 'Düzeltme iste' ve 'Atla' düğmeleriyle ilerleniyor. Yazan kendi sorusunu onaylarken bir uyarı görüyor ama engellenmiyor. Her sorunun kim tarafından ve ne zaman yayına alındığı kaydediliyor.
 
 **Neden soruyoruz:** İnceleme zorunlu olursa hatalı soru öğrenciye ulaşmadan yakalanıyor; ama yayın hızı ikinci kişinin zamanına bağlanıyor.
 
@@ -980,6 +998,20 @@ Parantez içindeki değerler şu an sistemde olanlar. Değiştirmek istediğiniz
 | Güçlü (5 sorudan 4 ya da 5 doğru) | (Üslü Sayılar: 5/5 — konu oturmuş.) | (Çalışman karşılığını verdi; planındaki sıradaki işe geç.) |
 | Orta (3 doğru) | (Üslü Sayılar: 3/5 — yol alınmış, henüz bitmedi.) | (Yanlışlarının çözümüne bak, aynı tipten birkaç soru daha çöz; birkaç gün sonra yeniden kontrol et.) |
 | Zayıf (2 ya da daha az doğru) | (Üslü Sayılar: 2/5 — konu henüz oturmadı.) | (Bir haftada her konu oturmaz. Çözümleri incele, konu tekrarına dön; birkaç gün sonra yeniden kontrol et.) |
+
+> Cevap:
+
+**Soru 9.9** — Öğrenci testi bitirmeden bırakırsa (süre dolarsa ya da testi baştan başlatırsa), soruların en az yüzde kaçını işaretlemiş olmalı ki test bir ölçüm sayılsın?
+
+**Şu an:** Yüzde 50. Bunun altında kalan test puanlanıyor ve öğrenci cevaplarını görebiliyor, ama sonuç ekranında 'Bu test yarım kaldı, ölçüm sayılmadı' yazıyor ve 'Yeniden çöz' düğmesi çıkıyor. Yarım test konu haritasına, gelişim grafiğine, haftalık plana ve deneme sıralamasına girmiyor; ödevi de tamamlamıyor. Yanlış defterine yalnızca işaretleyip yanlış yaptığı sorular giriyor, boşlar girmiyor. Öğrencinin kendisi 'Bitir'e bastıysa test ne kadar boş olursa olsun ölçüm sayılıyor: bilerek boş bırakmak da bir cevap.
+
+**Neden soruyoruz:** Telefonda kesinti olağan. Eşik çok düşükse yarım test öğrencinin bir haftalık planını bozuyor; çok yüksekse, gerçekten zorlanıp çok soruyu boş bırakan öğrencinin ölçümü kayboluyor.
+
+**Örnek:** 24 soruluk testte 2 soru işaretleyip telefonu bırakan öğrencinin bütün konuları 'zayıf' çıkıyordu ve haftanın planı bu testten kuruluyordu.
+
+**Önerimiz:** Yüzde 50 kalsın.
+
+Şu an: %50; sizin önerdiğiniz: %____
 
 > Cevap:
 
@@ -1561,14 +1593,14 @@ Parantez içindeki değerler şu an sistemde olanlar. Değiştirmek istediğiniz
 
 **Soru 14.4** — Plandaki '40 soru' işi nasıl kapansın?
 
-**Şu an:** Öğrenci elle işaretliyor: kitaptan çözdüğü sorular sistemde görünmüyor. Koçun verdiği konu ödevi ise sistemden okunuyor.
+**Şu an:** İkisi birden. Bugün kartında işin yanında '5 soru çöz' düğmesi ve 'bu hafta bu konuda 12/40 soru' gibi bir ilerleme var; öğrenci uygulamada o konudan hedef kadar soru çözünce iş kendiliğinden kapanıyor. 'Bilmiyorum' deyip geçilen soru sayılmıyor. Kitaptan çalışan öğrenci için 'Yaptım' düğmesi de duruyor.
 
 **Neden soruyoruz:** Elle işaret kitaptan çalışan öğrenci için şart, ama doğrulanmıyor; uygulamada çözülen sorular ise zaten biliniyor.
 
-**Önerimiz:** Uygulamada o konudan 40 soru çözülünce iş kendiliğinden işaretlensin; elle işaret de kalsın.
+**Önerimiz:** Kalsın.
 
-- ☐ Uygulamada hedefe ulaşınca kendiliğinden; elle işaret de kalsın (önerimiz)
-- ☐ Yalnızca elle (şu an)
+- ☐ Uygulamada hedefe ulaşınca kendiliğinden; elle işaret de kalsın (şu an; önerimiz)
+- ☐ Yalnızca elle
 - ☐ Yalnızca uygulamada çözülen sorular sayılsın
 
 > Cevap:
@@ -1824,7 +1856,7 @@ Birden çok seçenek işaretleyebilirsiniz.
 
 **Soru 16.7** — Son tarihten sonra bitirilen ödevin 'geç tamamlandı' diye işaretlenip yine de tamamlanmış sayılması uygun mu?
 
-**Şu an:** Böyle. Son tarihi geçen ödev öğrencinin listesinde 7 gün daha 'gecikti' rozetiyle duruyor, sonra geçmişe düşüyor. Hiç işaret konmadan gönderilen test ödevi tamamlamıyor.
+**Şu an:** Böyle. Son tarihi geçen ödev öğrencinin listesinde 7 gün daha 'gecikti' rozetiyle duruyor, sonra geçmişe düşüyor. Hiç işaret konmadan gönderilen ya da yarım kalan test ödevi tamamlamıyor.
 
 **Neden soruyoruz:** Geç de olsa yapılması istenen bir iş; ama koçun zamanında yapanla geç yapanı ayırabilmesi gerekiyor.
 
@@ -1837,7 +1869,7 @@ Birden çok seçenek işaretleyebilirsiniz.
 
 **Soru 16.8** — Bir öğrencinin riskli öğrenciler listesine düşme eşikleri uygun mu?
 
-**Şu an:** Liste yalnızca yönetici ve müdüre açık. Etkinlik: giriş, test ya da alıştırma. Düşüş, aynı türden son iki paket testine bakıyor; kontrol testleri, seviyeli aşamalar ve boş gönderilen testler sayılmıyor. Planı yapmıyor uyarısı, içinde bulunulan haftaya değil geçen haftaya bakıyor.
+**Şu an:** Liste yalnızca yönetici ve müdüre açık; grup grup da süzülebiliyor. Etkinlik: uygulamayı açmak, test ya da alıştırma. Pilot beş hafta sürdüğü için pasif eşiği 14 günden 7 güne indi. Yeni bir uyarı var: süresi geçen hafta içinde dolan ödevi yapmayan öğrenci. 'Hiç başlamadı' uyarısı, boş ya da yarım kalan testi başlamış saymıyor. Düşüş, aynı türden son iki paket testine bakıyor; kontrol testleri, seviyeli aşamalar, boş ve yarım testler sayılmıyor. Planı yapmıyor uyarısı, içinde bulunulan haftaya değil geçen haftaya bakıyor.
 
 **Neden soruyoruz:** Eşikler koçun haftalık arama listesini belirliyor; çok gevşekse liste kalabalıklaşıp okunmuyor, çok sıkıysa kopan öğrenci geç fark ediliyor.
 
@@ -1847,7 +1879,8 @@ Parantez içindeki değerler şu an sistemde olanlar. Değiştirmek istediğiniz
 
 |  | Eşik |
 | --- | --- |
-| Pasif: hiç etkinlik olmayan gün | (14) |
+| Pasif: hiç etkinlik olmayan gün | (7) |
+| Ödevi yapmadı: süresi son kaç gün içinde dolan ödeve bakılsın | (7) |
 | Hiç başlamadı: kayıttan sonra hiç test çözmeden geçen gün | (3) |
 | Planı yapmıyor: geçen haftanın planında biten işlerin oranı, yüzde (altı) | (40) |
 | Düşüşte: son iki testte başarı düşüşü, puan | (10) |

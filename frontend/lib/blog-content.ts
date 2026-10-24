@@ -2,16 +2,20 @@
  * Blog yazısı HTML'ini sayfaya hazırlar (yalnızca sunucuda çalışır).
  *
  * İçerik backend'de sanitize-html'den geçiyor; başlıklara `id` izni yok.
- * Burada iki şey yapılıyor:
+ * Burada üç şey yapılıyor:
  *
  * 1. İçerikteki göreli /uploads/... görsel yollarını backend adresine çözmek.
  * 2. h2/h3 başlıklarına okunabilir `id` vermek ve içindekiler listesini
  *    çıkarmak. Uzun yazıda okur bölüme atlayabilsin, bölüm bağlantısı
  *    (…/blog/yazi#calisma-plani) paylaşılabilsin.
+ * 3. Yazının içindeki check-up bağlantılarına kaynak etiketi (`?k=blog`)
+ *    eklemek: yazar adresi düz yazar, panel blogdan gelen kaydı yine sayar.
  *
  * Kimlikler yalnızca [a-z0-9-] ya da "bolum-N": özniteliğe eklenen değer
  * HTML'e kaçış gerektiren hiçbir karakter taşımaz.
  */
+
+import { checkupEtiketle } from "./site";
 
 export interface IcindekilerOgesi {
   id: string;
@@ -66,6 +70,20 @@ function kimlikUret(metin: string): string {
     .replace(/-+$/g, "");
 }
 
+/**
+ * Check-up'a giden bağlantılara `k=blog` (lib/site.ts checkupEtiketle; elle
+ * konmuş etikete dokunmaz). Öznitelik değerinde & `&amp;` yazılı: çözülüp
+ * yeniden kaçırılıyor, yeni değer de yalnızca adres karakterleri taşıyor.
+ */
+function checkupBaglantilari(html: string): string {
+  return html.replace(/(<a\s[^>]*?\bhref=)("[^"]*"|'[^']*')/gi, (tam, bas: string, tirnakli: string) => {
+    const tirnak = tirnakli[0];
+    const adres = tirnakli.slice(1, -1).replace(/&amp;/g, "&");
+    const yeni = checkupEtiketle(adres, "blog");
+    return yeni === adres ? tam : bas + tirnak + yeni.replace(/&/g, "&amp;") + tirnak;
+  });
+}
+
 /** Göreli /uploads/... yollarını backend'e çözer. */
 function gorselYollari(html: string, backendUrl: string): string {
   return html.replace(/src="(\/uploads\/[^"]+)"/g, `src="${backendUrl}$1"`);
@@ -82,7 +100,7 @@ export function blogIceriginiHazirla(
   const icindekiler: IcindekilerOgesi[] = [];
   const kullanilan = new Set<string>();
 
-  const islenmis = gorselYollari(html, backendUrl).replace(
+  const islenmis = checkupBaglantilari(gorselYollari(html, backendUrl)).replace(
     /<h([23])(\s[^>]*)?>([\s\S]*?)<\/h\1>/gi,
     (tam, seviyeStr: string, oznitelikler: string | undefined, ic: string) => {
       const metin = duzMetin(ic);

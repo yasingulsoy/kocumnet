@@ -130,6 +130,14 @@ function AcikOdev({ o, now }: { o: OgrenciOdevi; now: Date }) {
               </span>
             ) : null}
           </div>
+          {/* Sayılmayan deneme: öğrenci "yaptım ama tamamlanmadı" diye şaşırmasın (lib/odev.ts). */}
+          {o.kind === "PACKAGE" && (o.ilerleme.yarimKaldi || o.ilerleme.bosGonderildi) ? (
+            <p className="mt-2 text-theme-xs font-medium text-warning-700">
+              {o.ilerleme.yarimKaldi
+                ? "Son denemen yarım kaldı: soruların yarısından azını işaretledin, ödeve sayılmadı. Testi yeniden çöz."
+                : "Testi hiç işaretlemeden gönderdin; ödeve sayılmadı. Testi yeniden çöz."}
+            </p>
+          ) : null}
           {o.kind === "TOPIC_PRACTICE" ? (
             <div className="mt-3 max-w-sm">
               <Progress

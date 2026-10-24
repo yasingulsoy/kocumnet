@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, GraduationCap, Target } from "lucide-react";
 import { tanismaAction, type TanismaState } from "@/lib/actions/onboarding";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/exams";
 import { cx } from "@/components/tailadmin/cx";
 import { Alert } from "@/components/tailadmin/ui/Alert";
+import { Badge } from "@/components/tailadmin/ui/Badge";
 import { Button } from "@/components/tailadmin/ui/Button";
 import { Card } from "@/components/tailadmin/ui/Card";
 
@@ -35,12 +36,22 @@ function uzunAd(ad: string) {
  * Tek ekranda altı sınav kartı + sınıf + hedef göstermek telefonda uzun bir
  * kaydırma oluyor; üç ayrı sayfa ise üç yükleme demek. İkisi arası: seçim
  * yapılınca ikinci adım açılıyor, geri dönmek tek dokunuş.
+ *
+ * Odak: adım değişince eski düğme DOM'dan kalkıyor ve odak sayfanın başına
+ * düşüyordu (ekran okuyucu ve klavye kullanan öğrenci nerede olduğunu
+ * kaybediyordu). Sınav seçilince ikinci adımın başlığına, "Değiştir"e
+ * basılınca seçili sınavın düğmesine odak verilir.
+ *
+ * `hazirSinavlar`: yayında testi olan sınavlar. Olmayan "Yakında" etiketiyle
+ * görünür, seçilebilir; ikinci adımda bunun ne demek olduğu yazar.
  */
 export function TanismaForm({
+  hazirSinavlar,
   mevcutSinav,
   mevcutSinif,
   mevcutHedef,
 }: {
+  hazirSinavlar: readonly string[];
   mevcutSinav: string | null;
   mevcutSinif: string | null;
   mevcutHedef: number | null;
@@ -62,12 +73,25 @@ export function TanismaForm({
   );
   const [hedef, setHedef] = useState<number>(mevcutHedef ?? 0);
 
+  // Odak yalnızca öğrenci adım değiştirdiğinde taşınır; sayfa açılışında değil.
+  const odakTasi = useRef(false);
+  const ikinciBaslik = useRef<HTMLHeadingElement>(null);
+  const sinavListesi = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!odakTasi.current) return;
+    odakTasi.current = false;
+    if (adim === 2) ikinciBaslik.current?.focus();
+    else sinavListesi.current?.querySelector<HTMLButtonElement>("[aria-pressed='true'], button")?.focus();
+  }, [adim]);
+
   const sinavSec = (s: ExamScopeValue) => {
     setSinav(s);
     setSinif(EXAMS[s].grades.length === 1 ? EXAMS[s].grades[0] : "");
     setHedef(EXAMS[s].defaultTargetNet);
+    odakTasi.current = true;
     setAdim(2);
   };
+  const yakinda = (s: string) => !hazirSinavlar.includes(s);
 
   return (
     <form action={formAction} className="space-y-5">
@@ -79,7 +103,7 @@ export function TanismaForm({
       <input type="hidden" name="targetNet" value={hedef} />
 
       {adim === 1 ? (
-        <ul className="grid gap-3">
+        <ul ref={sinavListesi} className="grid gap-3">
           {SECILEBILIR_SINAVLAR.map((s) => {
             const e = EXAMS[s];
             return (
@@ -87,6 +111,7 @@ export function TanismaForm({
                 <button
                   type="button"
                   onClick={() => sinavSec(s)}
+                  aria-pressed={sinav === s}
                   className={cx(
                     "flex w-full cursor-pointer touch-manipulation items-center gap-4 rounded-2xl border p-4 text-start transition",
                     "hover:shadow-theme-md active:bg-gray-50",
@@ -99,7 +124,14 @@ export function TanismaForm({
                   <span className="min-w-0 flex-1">
                     {/* Rozette zaten kısaltma var; başlıkta tekrar etmiyoruz
                         ("TYT — Temel Yeterlilik Testi" telefonda iki satıra düşüyordu). */}
-                    <span className="block text-base font-semibold text-gray-800">{uzunAd(e.name)}</span>
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-base font-semibold text-gray-800">{uzunAd(e.name)}</span>
+                      {yakinda(s) ? (
+                        <Badge size="sm" color="light">
+                          Yakında
+                        </Badge>
+                      ) : null}
+                    </span>
                     <span className="mt-0.5 block text-theme-sm text-gray-500">
                       {e.audience} · matematik {e.mathQuestionCount} soru · {e.season}
                     </span>
@@ -112,6 +144,14 @@ export function TanismaForm({
         </ul>
       ) : (
         <div className="space-y-5">
+          {/* İkinci adımın başlığı: sınav seçilince odak buraya gelir (tabIndex -1: yalnızca programla). */}
+          <h2
+            ref={ikinciBaslik}
+            tabIndex={-1}
+            className="font-display text-lg font-semibold text-gray-800 focus:outline-hidden!"
+          >
+            Biraz da seni tanıyalım
+          </h2>
           {/* Seçilen sınav — değiştirmek tek dokunuş */}
           <Card tone="brand" className="flex items-start gap-3 p-4 sm:gap-4 sm:p-5">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-theme-sm font-bold text-white">
@@ -122,10 +162,26 @@ export function TanismaForm({
               <span className="block text-base font-semibold text-gray-800">{bilgi ? uzunAd(bilgi.name) : null}</span>
               <span className="mt-0.5 block text-theme-sm leading-snug text-gray-500">{bilgi?.blankAdvice}</span>
             </span>
-            <Button variant="soft" size="xs" onClick={() => setAdim(1)} className="shrink-0">
+            <Button
+              variant="soft"
+              size="xs"
+              onClick={() => {
+                odakTasi.current = true;
+                setAdim(1);
+              }}
+              className="shrink-0"
+            >
               Değiştir
             </Button>
           </Card>
+
+          {/* Testi henüz olmayan sınav: bilerek seçsin, pano boş gelince şaşırmasın. */}
+          {sinav && yakinda(sinav) ? (
+            <Alert variant="info">
+              {bilgi?.short} testleri hazırlanıyor. Yine de seçebilirsin: testler hazır olunca ana sayfanda görünür, bu
+              arada diğer sınavların testlerini çözebilirsin.
+            </Alert>
+          ) : null}
 
           {/* Üç soru tek kartta, aralarında ince çizgi. Dolgu sarmalayıcıda:
               dolgulu fieldset'te legend dolgunun dışına (kenara) çizilir. */}

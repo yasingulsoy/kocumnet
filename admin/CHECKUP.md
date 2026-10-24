@@ -6,18 +6,22 @@ bağlanır; backend yalnızca giriş ve oturum doğrulaması için kullanılır.
 
 | Ekran | Adres | Kim görür |
 |---|---|---|
-| Genel bakış — kayıt/test sayıları, son 14 gün, içerik kuyruğu, dikkat isteyen paketler, zorlanılan konular | `/checkup` | tüm personel (öğrenci adları yalnızca yönetici/müdür) |
+| Genel bakış — kayıt/test sayıları (ölçüm sayılan; "ayrıca n yarım/boş"), sınav başına başarı, son 14 gün, içerik kuyruğu, dikkat isteyen paketler, zorlanılan konular (boş ve yarım test hariç) | `/checkup` | tüm personel (öğrenci adları ve "Pilot ölçümü" düğmesi yalnızca yönetici/müdür) |
+| Pilot ölçümü — yalnızca toplu sayılar, grup ve tarih süzgeci: kayıt hunisi (tanışma, ilk ölçüm, 2. ve 3+. hafta etkin), test kapanışları (bitirdi / süre doldu / yeniden başlattı, yarım, boş, bırakılan yer), özellik kullanımı, öğrenme kazancı (ilk-son ölçüm, planına giren ve girmeyen konular, 10 öğrenciden azsa "veri yetersiz"), zorluk algısı, kayıt kaynağı; 5'ten küçük sayı "<5". Pilot sonu raporu `.md`. Kurallar ve tanımlar `lib/checkup/pilot-kurallari.ts`, `pilot-tanimlar.ts` | `/checkup/pilot`, `/pilot/rapor.md` | yönetici, müdür |
 | Hocaya sorular — Özgür Hoca'nın içerik ve kural kararları: soru başına kart (Uygun/Değişsin, seçenek, sayı, tablo, yazı + not), ilerleme, süzgeç (`?suzgec=bekleyen\|cevaplanan\|uygulanan\|acil`), bölüm atlama, yazdırma; "uygulandı" işareti (cevap değişince kalkar); cevap dökümü `.md`. Sorular kodda (`lib/checkup/hoca/sorular.ts`), cevaplar `TeacherAnswer`'da, kurallar `lib/checkup/hoca/cevap.ts` | `/checkup/hoca`, `/hoca/cevaplar.md` | okuma: tüm personel; cevap: yönetici, müdür, editör; "uygulandı" ve döküm: yönetici, müdür |
-| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım, içe aktarma partisi `?parti=`, "Açık notu olanlar" `?not=acik`), satırda açık not rozeti, hızlı ve toplu durum değiştirme | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
-| Toplu içe aktar — SORU-SABLONU `.md` + görseller (klasör seçimi ya da sürükle-bırak); **Denetle** (soru başına hata/uyarı, çift kayıt, hiçbir şey yazılmaz) → **Taslak olarak kaydet** (isteğe bağlı doğrudan yayın); içe aktarma geçmişi ve **Geri al** | `/checkup/sorular/ice-aktar` | geçmiş: tüm personel; içe aktarma ve geri alma: yazma rolleri |
-| Soru ekle / düzenle — `$…$` yazımı, canlı KaTeX önizleme, şekil yükleme, madde analizi kartı (bulguda "Not ekle"), inceleme notları (ekle, çözüldü / yeniden aç), "kaydet ve yenisini ekle", "benzerini oluştur", süzgeçli listede önceki/sonraki ve "kaydet ve sonrakine geç" | `/checkup/sorular/yeni`, `/[id]` | yazma ve not: yönetici, müdür, editör; notları okuma: tüm personel |
+| Sorular — liste, süzgeç (metin/kaynak/`#kimlik` araması, kazanım, yazan ve "Benim sorularım", seviye, içe aktarma partisi `?parti=`, "Açık notu olanlar" `?not=acik`), satırda açık not ve "yayına hazır değil" rozeti, hızlı ve toplu durum değiştirme (toplu yayında hazır olmayan atlanır, sebebiyle sayılır) | `/checkup/sorular` | tüm personel; durum değiştirme: yazma rolleri |
+| İnceleme kuyruğu — İncelemedeki sorular en eskiden, öğrencinin göreceği hâliyle (doğru şık, çeldiricinin hata tipi, çözüm, ipucu, künye, "yayına hazır mı"); **Onayla** (O), **Düzeltme iste** (D; not zorunlu, soru Taslağa döner), **Atla** (A); sınav/konu/yazan süzgeci; kendi sorusunda uyarı (`KENDI_SORUSUNU_ONAYLAYABILIR`) | `/checkup/sorular/incele` | yazma rolleri |
+| Toplu içe aktar — SORU-SABLONU `.md` + görseller (klasör seçimi ya da sürükle-bırak); **Denetle** (soru başına hata/uyarı, çift kayıt, hiçbir şey yazılmaz) → **Taslak olarak kaydet** (isteğe bağlı doğrudan yayın; yayına hazır olmayan İncelemede girer); içe aktarma geçmişi ve **Geri al**. İndirmeler: şablon, örnek dosya ve şekli, konu ve kazanım kodları (o an veritabanından). Esnek biçim: `- ` ile başlayan satır, `**Alan**: değer`, Türkçe hata tipi adı | `/checkup/sorular/ice-aktar` (+ `/sablon`, `/ornek`, `/ornek-sekil`, `/kodlar`) | geçmiş ve indirme: tüm personel; içe aktarma ve geri alma: yazma rolleri |
+| Soru ekle / düzenle — `$…$` yazımı, canlı KaTeX önizleme, formül düğmeleri, şekil yükleme (Ctrl+V ile yapıştırma, imlecin satırına), **"yayına hazır mı" canlı listesi** (eksik varken Yayında seçilemez), madde analizi kartı (bulguda "Not ekle"), inceleme notları (ekle, çözüldü / yeniden aç), "kaydet ve yenisini ekle" (durum taşınmaz, kaynak öneki taşınır), "benzerini oluştur", adresten ön dolu yeni soru (`?konu=&kazanim=&seviye=&sinav=`), süzgeçli listede önceki/sonraki, "yayına alan" | `/checkup/sorular/yeni`, `/[id]` | yazma ve not: yönetici, müdür, editör; notları okuma: tüm personel |
 | Madde analizi — gerçek cevaplardan doğru oranı, ayırt edicilik, şık dağılımı, süre ve bulgular; sınav ve dönem süzgeci, CSV, önerilen zorluğu toplu uygulama (yazma rolleri); satırda açık not sayısı ve "Not ekle" (soru ekranında not kutusu bulgularla dolu açılır) | `/checkup/sorular/analiz`, `/analiz/csv` | tüm personel (kişisel veri yok) |
-| Havuz durumu — katalog paketi × konu doldurulabilirlik, zorluk bantları | `/checkup/havuz` | tüm personel |
-| Öğrenciler + öğrenci detayı (test geçmişi, konu haritası, çalışma planı ve koç notu, seviyeli koşular, erişim hakları) | `/checkup/ogrenciler` | yönetici, müdür |
-| Riskli öğrenciler — pasif, düşüşte, planı yapmıyor, hiç başlamadı; eşikler `lib/checkup/risk.ts` | `/checkup/ogrenciler/riskli` | yönetici, müdür |
+| Havuz durumu — katalog paketi × konu doldurulabilirlik, zorluk bantları, konu başına "tekrar soru · 14 gün" ve "önce yazılacak konular" | `/checkup/havuz` | tüm personel |
+| Bu hafta — koçun pazartesi ekranı: öğrenci başına son etkinlik, bu hafta çözülen soru, geçen 7 günün ödevleri, açık ödev, plan yüzdesi, risk rozetleri, bekleyen koça soru; önce müdahale gerekenler; grup süzgeci | `/checkup/bu-hafta` | yönetici, müdür |
+| Öğrenciler + öğrenci detayı (son etkinlik, test geçmişi — boş/yarım test "sayılmadı", konu haritası, risk kutusu, çalışma planı ve koç notu, seviyeli koşular, erişim hakları, **parola sıfırlama bağlantısı**: 24 saat, tek kullanımlık, bir kez gösterilir, personel başına saatte 5) | `/checkup/ogrenciler` | yönetici, müdür |
+| Riskli öğrenciler — pasif (7 gün), düşüşte, planı yapmıyor, hiç başlamadı (ölçüm sayılan test yok), ödevi yapmadı; grup süzgeci `?grup=`; eşikler `lib/checkup/risk.ts` | `/checkup/ogrenciler/riskli` | yönetici, müdür |
+| Gruplar ve ödevler — grup, üyeler (davetle katılanlar ayrı işaretli), ödev, ısı haritası (boş/yarım test hariç); **davet bağlantısı** (`/katil/<kod>`, oluştur / yenile / kapat; arşiv kapatır), e-posta listesiyle toplu ekleme (en çok 200), yazdırma görünümü (üye × son 4 ödev, en zayıf 5 konu; CSV yok) | `/checkup/gruplar`, `/[id]`, `/[id]/yazdir` | yönetici, müdür |
 | Paketler — türüne göre (katalog / seviyeli / konu tekrar testi) hazırlık, yayın durumu, ücretli/ücretsiz | `/checkup/paketler` | değiştirme: yönetici, müdür |
 | Paket oluştur / düzenle — katalog (STANDARD) paketinin adı, özeti, süresi ve konu dağılımı; konu başına canlı havuz yeterliliği | `/checkup/paketler/yeni`, `/[id]` | yönetici, müdür |
-| Kazanımlar — seviyeli check-up'ın öğrenme çıktıları; sınav başına seviye 1 hazırlık sayacı (kazanım × ≥2 L1 sorusu; LGS 35, diğerleri 50) | `/checkup/kazanimlar` | yazma: yönetici, müdür, editör |
+| Kazanımlar — seviyeli check-up'ın öğrenme çıktıları; sınav başına seviye 1 hazırlık sayacı (kazanım × ≥2 L1 sorusu; LGS 35, diğerleri 50); her satırda "Bu kazanıma soru yaz" | `/checkup/kazanimlar` | yazma: yönetici, müdür, editör |
 | Seviyeli koşular — kim hangi seviyede, kapıda duranlar, telafi bekleyenler | `/checkup/seviyeli` | tüm personel (öğrenci adları yönetici/müdür) |
 
 Roller backend'in `utils/roles.js` gruplarıyla aynı (`CONTENT_ROLES`, `USER_MANAGE_ROLES`).
@@ -38,7 +42,16 @@ src/lib/checkup/
   question-list.ts Soru listesinin adres sorgusu — kaydedince aynı süzgece/sayfaya dönüş (`geri`)
   question-query.ts Soru listesinin süzgeç ve sırası (server-only) — liste ve önceki/sonraki ortak
   item-list.ts     Madde analizi listesi: süzgeç, sıralama, adres — sayfa ve CSV ortak
-  risk.ts          Riskli öğrenci kuralları ve eşikleri (tek yer); risk-data.ts veriyi toplar
+  risk.ts          Riskli öğrenci kuralları ve eşikleri (tek yer); risk-data.ts veriyi toplar (ölçüm kuralının SQL ikizi)
+  bu-hafta-kurallari.ts / bu-hafta.ts  "Bu hafta" ekranı: saf sıralama ve toplu sorgular
+  ogrenci-ozeti.ts Öğrenci listesi ve ayrıntısının ortak sayımı (egilimeGirer)
+  davet.ts         Grup davet kodu: app/lib/grup-katilim.ts ile AYNI biçim (test:koc-panel eşitliği denetler)
+  sifirlama.ts     Koçun ürettiği parola sıfırlama jetonu: app'in hashToken'ıyla AYNI özet
+  uygulama.ts      Öğrenci uygulamasının adresi (NEXT_PUBLIC_APP_URL; davet ve sıfırlama bağlantıları)
+  pilot-kurallari.ts / pilot.ts / pilot-rapor.ts / pilot-tanimlar.ts  Pilot ölçümü: saf hesaplar ("<5"), sorgular, .md rapor, tanımlar
+  soru-akisi.ts    Soru formunun saf kuralları: durum taşımama, kaynak öneki, ön dolu form, formül ekleme
+  yayin-kapisi.ts  Yayına alma yolu (form, toplu, kuyruk, içe aktarma): shared/question-readiness'e uymayanı atlar, publishedAt/By yazar
+  indirme.ts       İçe aktarma ekranındaki indirmelerin ortak yanıtı
   coach-note.ts    Koç notu sınırı ve temizliği (düzenleyici ve eylem ortak)
   package-rules.ts Paket düzenleme kuralları (MIN_PER_TOPIC, sınırlar, adres önerisi) — istemci ve sunucu ortak
   package-save.ts  Katalog paketi doğrulama ve yazma (server-only; yetkiyi eylem denetler)

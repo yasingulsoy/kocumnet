@@ -21,13 +21,29 @@ const initial: FormState = {};
  *
  * Hata dönüşünde ad, e-posta ve onay geri yazılıyor (React 19 formu sıfırlıyor);
  * parola bilerek geri yazılmaz.
+ *
+ * Gizli alanlar (kayıt sayfası adresten süzüp verir, eylem yeniden süzer):
+ * `sonra` hesap açılınca dönülecek yol, `grup` davet kodu (hesap açılınca
+ * gruba katılır), `k` kocum.net bağlantısının kaynak etiketi. Gizli alan
+ * form sıfırlamasından etkilenmez: değer niteliği aynı kalır.
  */
-export function RegisterForm() {
+export function RegisterForm({
+  sonra,
+  grup,
+  k,
+}: {
+  sonra?: string | null;
+  grup?: string | null;
+  k?: string | null;
+}) {
   const [state, formAction, pending] = useActionState(registerAction, initial);
 
   return (
     <form action={formAction} className="space-y-5">
       {state.error ? <Alert variant="error">{state.error}</Alert> : null}
+      {sonra ? <input type="hidden" name="sonra" value={sonra} /> : null}
+      {grup ? <input type="hidden" name="grup" value={grup} /> : null}
+      {k ? <input type="hidden" name="k" value={k} /> : null}
 
       <Field label="Ad soyad" error={state.fields?.name}>
         <Input

@@ -124,7 +124,7 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Pilotun başarı ölçüsü",
         soru: "Pilotun başarılı geçtiğini neyle anlayalım?",
         simdi:
-          "Tanımlı bir başarı ölçüsü yok. Panel bunları zaten sayıyor: çözülen testler, haftalık planın tamamlanma oranı, kontrol testi sonuçları, riskli öğrenciler, sorulara gelen hata bildirimleri.",
+          "Tanımlı bir başarı ölçüsü yok. Paneldeki 'Pilot ölçümü' ekranı bunları sayıyor: kaç öğrencinin kaydolup ilk testini çözdüğü ve 2. ve 3. haftada hâlâ geldiği, testlerin kaçının yarım kaldığı, hangi özelliğin kaç kişi tarafından kullanıldığı, ilk ve son ölçüm arasındaki fark, kontrol testlerini geçme oranı, öğrencilerin testleri kolay mı zor mu bulduğu. Sonunda bunların toplu bir raporu indirilebiliyor.",
         neden:
           "Ölçüyü baştan seçersek pilotun sonunda 'iyi geçti mi' sorusunu sayılarla cevaplarız; sonradan seçilen ölçü hep iyi çıkar.",
         oneri:
@@ -214,6 +214,26 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
           "Soru yazan bir öğretmenin öğrencilerin adını ve e-postasını görmesi gerekmiyor; kişisel bilgi en az kişiye açık olmalı.",
         oneri: "Soru yazanlara editör, size ve koçlara müdür yetkisi.",
         cevap: { tur: "metin", ipucu: "Her kişi için ad, e-posta adresi ve yetki." },
+        oncelik: "normal",
+      },
+      {
+        anahtar: "pilot.kazanc",
+        baslik: "Öğrenme kazancının hesabı",
+        soru: "Pilot sonunda 'öğrenciler öğrendi mi' sorusunu cevaplarken şu sınırlar uygun mu?",
+        simdi:
+          "Panelde 'Pilot ölçümü' ekranı var. Aynı öğrencinin aynı konudaki ilk ve son ölçümünü karşılaştırıyor ve planına giren konularla girmeyenleri yan yana gösteriyor. Daha önce gördüğü soruların tekrar geldiği testler hesaba girmiyor, çünkü hatırlanan soru öğrenmeyi değil hafızayı ölçüyor. Sayılar toplu; öğrencinin adı görünmüyor, beşten az kişiden çıkan sayı gizleniyor.",
+        neden:
+          "Zayıf diye seçilen konu, çalışılmasa da sonraki ölçümde biraz yükselme eğiliminde; şans eseri düşük çıkan puan bir sonraki sefere kendiliğinden düzelir. Asıl kanıt, planına giren konuların girmeyenlerden daha çok yükselmesi. Az sayıda öğrenciyle çıkan fark da tesadüf olabilir.",
+        oneri: "Kalsın; pilot sonunda iki grup arasındaki fark artış eşiğini geçiyorsa yöntem işe yarıyor demektir.",
+        cevap: {
+          tur: "tablo",
+          sutunlar: [{ anahtar: "esik", baslik: "Sınır", tur: "sayi" }],
+          satirlar: [
+            satir("artis", "Anlamlı artış: başarıda en az kaç puanlık yükselme", { esik: 10 }),
+            satir("ogrenci", "Ortalama göstermek için en az kaç öğrenci", { esik: 10 }),
+            satir("soru", "Bir konuyu karşılaştırmak için iki ölçümde de en az kaç soru", { esik: 3 }),
+          ],
+        },
         oncelik: "normal",
       },
     ],
@@ -624,7 +644,7 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Yanlış şıkların hata türü",
         soru: "Her yanlış şıkkın hangi hatadan çıktığını yazmak zorunlu kalsın mı? Ekip bunu her soruda yapabilir mi?",
         simdi:
-          "Zorunlu: yanlış şıklarından birinin hata türü yazılmamış soru sisteme alınmıyor. Sonuç ekranındaki 'yanlışlarının ortak sebebi' kartı bu işaretlerden çıkıyor.",
+          "Yayın için zorunlu: hata türü eksik soru taslak olarak alınıyor ama yayına çıkamıyor; toplu dosyada da eksik olan soru reddedilmiyor, uyarıyla taslak giriyor. Sonuç ekranındaki 'yanlışlarının ortak sebebi' kartı bu işaretlerden çıkıyor.",
         ornek:
           "2a + 3b = 42 sorusunda doğru cevap 18. 21 şıkkı 'eksik okuma: b = 0 alınmış, pozitif şartı atlanmış', 19 şıkkı 'kavram yanılgısı: 2a tek sayı olamaz' diye işaretleniyor.",
         neden:
@@ -638,15 +658,15 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Çözümsüz soru",
         soru: "Çözümü yazılmamış soru sisteme alınsın mı?",
         simdi:
-          "Çözüm alanı boşsa sistem uyarıyor ama soruyu alıyor. Öğrenci sonuç ekranında ve alıştırmada çözümü görüyor; çözümsüz soruda yalnızca doğru şık görünüyor.",
+          "Çözümsüz soru taslak olarak alınıyor ama çözüm eklenene kadar yayına çıkamıyor. Soru formunda 'yayına hazır mı' listesi eksikleri gösteriyor; toplu yayında çözümsüz sorular atlanıyor ve hangileri olduğu söyleniyor. Öğrenci sonuç ekranında ve alıştırmada çözümü görüyor.",
         neden: "Öğrencinin en çok öğrendiği an, yanlışının çözümünü okuduğu an. Çözümsüz soru bu anı boşa harcıyor.",
-        oneri: "Alınsın ama çözüm eklenene kadar yayına çıkamasın: yazar çözümü sonra ekleyebilir, öğrenci çözümsüz soru görmez.",
+        oneri: "Kalsın: yazar çözümü sonra ekleyebilir, öğrenci çözümsüz soru görmez.",
         cevap: {
           tur: "secenek",
           secenekler: [
-            secenek("yayin-yok", "Alınsın ama çözüm eklenene kadar yayına çıkamasın", onerilen),
+            secenek("yayin-yok", "Alınsın ama çözüm eklenene kadar yayına çıkamasın (şu an)", onerilen),
             secenek("alinmasin", "Hiç alınmasın"),
-            secenek("simdiki", "Şimdiki gibi uyarıyla alınsın"),
+            secenek("simdiki", "Uyarıyla alınsın, çözümsüz de yayına çıkabilsin"),
           ],
         },
         oncelik: "normal",
@@ -880,7 +900,7 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Yayına alma kuralı",
         soru: "Bir soru yayına çıkmadan önce incelemeden geçmek zorunda olsun mu?",
         simdi:
-          "Zorunlu değil. Soru yazma yetkisi olan herkes bir soruyu doğrudan yayına alabiliyor; toplu aktarımda da onay sorularak 'doğrudan yayına al' seçeneği var.",
+          "Zorunlu değil. Soru yazma yetkisi olan herkes bir soruyu doğrudan yayına alabiliyor; toplu aktarımda da onay sorularak 'doğrudan yayına al' seçeneği var. Yalnızca eksiksiz soru yayına çıkabiliyor: çözüm, her yanlış şıkkın hata türü, seviye ve formüllerin düzgün görünmesi şart. Panelde ayrıca bir 'İnceleme kuyruğu' var: incelemedeki soruları öğrencinin göreceği hâliyle tek tek gösteriyor; 'Onayla', 'Düzeltme iste' ve 'Atla' düğmeleriyle ilerleniyor. Yazan kendi sorusunu onaylarken bir uyarı görüyor ama engellenmiyor. Her sorunun kim tarafından ve ne zaman yayına alındığı kaydediliyor.",
         neden:
           "İnceleme zorunlu olursa hatalı soru öğrenciye ulaşmadan yakalanıyor; ama yayın hızı ikinci kişinin zamanına bağlanıyor.",
         oneri: "Zorunlu olsun: soruyu yazan kişi kendi sorusunu yayına alamasın, doğrudan yayına alma seçeneği kalksın.",
@@ -1230,6 +1250,21 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
             }),
           ],
         },
+        oncelik: "normal",
+      },
+      {
+        anahtar: "test.yarim",
+        baslik: "Yarım kalan test",
+        soru:
+          "Öğrenci testi bitirmeden bırakırsa (süre dolarsa ya da testi baştan başlatırsa), soruların en az yüzde kaçını işaretlemiş olmalı ki test bir ölçüm sayılsın?",
+        simdi:
+          "Yüzde 50. Bunun altında kalan test puanlanıyor ve öğrenci cevaplarını görebiliyor, ama sonuç ekranında 'Bu test yarım kaldı, ölçüm sayılmadı' yazıyor ve 'Yeniden çöz' düğmesi çıkıyor. Yarım test konu haritasına, gelişim grafiğine, haftalık plana ve deneme sıralamasına girmiyor; ödevi de tamamlamıyor. Yanlış defterine yalnızca işaretleyip yanlış yaptığı sorular giriyor, boşlar girmiyor. Öğrencinin kendisi 'Bitir'e bastıysa test ne kadar boş olursa olsun ölçüm sayılıyor: bilerek boş bırakmak da bir cevap.",
+        ornek:
+          "24 soruluk testte 2 soru işaretleyip telefonu bırakan öğrencinin bütün konuları 'zayıf' çıkıyordu ve haftanın planı bu testten kuruluyordu.",
+        neden:
+          "Telefonda kesinti olağan. Eşik çok düşükse yarım test öğrencinin bir haftalık planını bozuyor; çok yüksekse, gerçekten zorlanıp çok soruyu boş bırakan öğrencinin ölçümü kayboluyor.",
+        oneri: "Yüzde 50 kalsın.",
+        cevap: { tur: "sayi", birim: "%", enAz: 10, enCok: 90, simdiki: 50 },
         oncelik: "normal",
       },
     ],
@@ -1944,15 +1979,15 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "'Soru çöz' işinin kapanması",
         soru: "Plandaki '40 soru' işi nasıl kapansın?",
         simdi:
-          "Öğrenci elle işaretliyor: kitaptan çözdüğü sorular sistemde görünmüyor. Koçun verdiği konu ödevi ise sistemden okunuyor.",
+          "İkisi birden. Bugün kartında işin yanında '5 soru çöz' düğmesi ve 'bu hafta bu konuda 12/40 soru' gibi bir ilerleme var; öğrenci uygulamada o konudan hedef kadar soru çözünce iş kendiliğinden kapanıyor. 'Bilmiyorum' deyip geçilen soru sayılmıyor. Kitaptan çalışan öğrenci için 'Yaptım' düğmesi de duruyor.",
         neden:
           "Elle işaret kitaptan çalışan öğrenci için şart, ama doğrulanmıyor; uygulamada çözülen sorular ise zaten biliniyor.",
-        oneri: "Uygulamada o konudan 40 soru çözülünce iş kendiliğinden işaretlensin; elle işaret de kalsın.",
+        oneri: "Kalsın.",
         cevap: {
           tur: "secenek",
           secenekler: [
-            secenek("ikisi", "Uygulamada hedefe ulaşınca kendiliğinden; elle işaret de kalsın", onerilen),
-            secenek("elle", "Yalnızca elle (şu an)"),
+            secenek("ikisi", "Uygulamada hedefe ulaşınca kendiliğinden; elle işaret de kalsın (şu an)", onerilen),
+            secenek("elle", "Yalnızca elle"),
             secenek("uygulama", "Yalnızca uygulamada çözülen sorular sayılsın"),
           ],
         },
@@ -2242,7 +2277,7 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Geç tamamlanan ödev",
         soru: "Son tarihten sonra bitirilen ödevin 'geç tamamlandı' diye işaretlenip yine de tamamlanmış sayılması uygun mu?",
         simdi:
-          "Böyle. Son tarihi geçen ödev öğrencinin listesinde 7 gün daha 'gecikti' rozetiyle duruyor, sonra geçmişe düşüyor. Hiç işaret konmadan gönderilen test ödevi tamamlamıyor.",
+          "Böyle. Son tarihi geçen ödev öğrencinin listesinde 7 gün daha 'gecikti' rozetiyle duruyor, sonra geçmişe düşüyor. Hiç işaret konmadan gönderilen ya da yarım kalan test ödevi tamamlamıyor.",
         neden: "Geç de olsa yapılması istenen bir iş; ama koçun zamanında yapanla geç yapanı ayırabilmesi gerekiyor.",
         oneri: "Kalsın.",
         cevap: { tur: "uygunMu" },
@@ -2253,7 +2288,7 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
         baslik: "Riskli öğrenci eşikleri",
         soru: "Bir öğrencinin riskli öğrenciler listesine düşme eşikleri uygun mu?",
         simdi:
-          "Liste yalnızca yönetici ve müdüre açık. Etkinlik: giriş, test ya da alıştırma. Düşüş, aynı türden son iki paket testine bakıyor; kontrol testleri, seviyeli aşamalar ve boş gönderilen testler sayılmıyor. Planı yapmıyor uyarısı, içinde bulunulan haftaya değil geçen haftaya bakıyor.",
+          "Liste yalnızca yönetici ve müdüre açık; grup grup da süzülebiliyor. Etkinlik: uygulamayı açmak, test ya da alıştırma. Pilot beş hafta sürdüğü için pasif eşiği 14 günden 7 güne indi. Yeni bir uyarı var: süresi geçen hafta içinde dolan ödevi yapmayan öğrenci. 'Hiç başlamadı' uyarısı, boş ya da yarım kalan testi başlamış saymıyor. Düşüş, aynı türden son iki paket testine bakıyor; kontrol testleri, seviyeli aşamalar, boş ve yarım testler sayılmıyor. Planı yapmıyor uyarısı, içinde bulunulan haftaya değil geçen haftaya bakıyor.",
         neden:
           "Eşikler koçun haftalık arama listesini belirliyor; çok gevşekse liste kalabalıklaşıp okunmuyor, çok sıkıysa kopan öğrenci geç fark ediliyor.",
         oneri: "Kalsın; pilotta liste her hafta birkaç kişiyi geçmiyorsa doğru ayardadır.",
@@ -2261,7 +2296,8 @@ export const HOCA_BOLUMLERI: HocaBolumu[] = [
           tur: "tablo",
           sutunlar: [{ anahtar: "esik", baslik: "Eşik", tur: "sayi" }],
           satirlar: [
-            satir("pasif", "Pasif: hiç etkinlik olmayan gün", { esik: 14 }),
+            satir("pasif", "Pasif: hiç etkinlik olmayan gün", { esik: 7 }),
+            satir("odev", "Ödevi yapmadı: süresi son kaç gün içinde dolan ödeve bakılsın", { esik: 7 }),
             satir("baslamadi", "Hiç başlamadı: kayıttan sonra hiç test çözmeden geçen gün", { esik: 3 }),
             satir("plan", "Planı yapmıyor: geçen haftanın planında biten işlerin oranı, yüzde (altı)", { esik: 40 }),
             satir("dusus", "Düşüşte: son iki testte başarı düşüşü, puan", { esik: 10 }),

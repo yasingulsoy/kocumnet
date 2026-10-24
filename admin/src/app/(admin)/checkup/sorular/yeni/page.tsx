@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/checkup/db";
 import { CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
-import { QUESTION_LEVELS, isExamScope, isQuestionStatus } from "@/lib/checkup/format";
+import { QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
+import { adrestenDoluMu, yeniSoruVarsayilanlari } from "@/lib/checkup/soru-akisi";
 import { MAX_HINTS, parseHints, parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
 import { GateNotice } from "@/components/checkup/GateNotice";
@@ -14,11 +15,13 @@ import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 export const metadata: Metadata = { title: "Check-up · Yeni soru" };
 
 /**
- * Yeni soru. İki kısayol adresten gelir:
+ * Yeni soru. Kısayollar adresten gelir:
  *
- * - "Kaydet ve yenisini ekle" sonrası: `?kaydedildi=<id>&konuId=…&seviye=…`
- *   — sınıflandırma taşınır, içerik boş. Aynı konudan art arda soru girmek
- *   içerik ekibinin asıl işi.
+ * - Ön dolu sınıflandırma: `?konuId=…&kazanimId=…&seviye=…&hedef=…` (ayrıca
+ *   `zorluk`, `sure`, `durum`, `kaynak`). "Kaydet ve yenisini ekle" sonrası
+ *   (`kaydedildi=<id>` ile) ve Kazanımlar sayfasının "Bu kazanıma soru yaz"
+ *   bağlantısı bu yolu kullanır; kurallar soru-akisi.ts yeniSoruVarsayilanlari.
+ *   Durum taşınmaz: yeni soru taslak ya da incelemede başlar.
  * - "Benzerini oluştur": `?kopya=<id>` — kaynak sorunun her şeyi, taslak
  *   olarak. Metin değişmeden kaydedilemez (parmak izi benzersiz).
  */
@@ -67,6 +70,8 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
 
   const konuIdleri = new Set(topics.map((t) => t.id));
   const kazanimlar = new Map(objectives.map((o) => [o.id, o]));
+  // Adresten gelen sınıflandırma (kaydedildi olmadan da): her alan doğrulanır.
+  const adrestenGelen = !kopyaId && (kaydedilen || adrestenDoluMu(sp));
 
   let defaults: Partial<QuestionInitial> | undefined;
   let kopyaNotu: string | null = null;
@@ -104,25 +109,13 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
       };
       kopyaNotu = kaynak.stemText.slice(0, 90) + (kaynak.stemText.length > 90 ? "…" : "");
     }
-  } else if (kaydedilen) {
-    // Önceki sorunun sınıflandırması — adres elle kurcalanabilir, her alan doğrulanır.
-    const konuId = tek(sp.konuId);
-    const seviye = tek(sp.seviye);
-    const kazanimId = tek(sp.kazanimId);
-    const zorluk = Number(tek(sp.zorluk));
-    const sure = Number(tek(sp.sure));
-    const durum = tek(sp.durum);
-    const konuGecerli = konuIdleri.has(konuId);
-    defaults = {
-      topicId: konuGecerli ? konuId : "",
-      level: (QUESTION_LEVELS as readonly string[]).includes(seviye) ? seviye : "",
-      objectiveId: konuGecerli && kazanimlar.get(kazanimId)?.topicId === konuId ? kazanimId : "",
-      difficulty: Number.isInteger(zorluk) && zorluk >= 1 && zorluk <= 5 ? zorluk : 3,
-      targetTimeSeconds: Number.isInteger(sure) && sure >= 10 && sure <= 600 ? sure : 75,
-      status: isQuestionStatus(durum) ? durum : "DRAFT",
-      examScopes: tek(sp.hedef).split(",").filter(isExamScope),
-    };
+  } else if (adrestenGelen) {
+    defaults = yeniSoruVarsayilanlari(sp, {
+      konular: konuIdleri,
+      kazanimKonusu: new Map(objectives.map((o) => [o.id, o.topicId])),
+    });
   }
+  const seciliKazanim = defaults?.objectiveId ? kazanimlar.get(defaults.objectiveId) : undefined;
 
   return (
     <>
@@ -141,7 +134,13 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
           <Link href={soruAdresi(kaydedilen, geri)} className="font-semibold text-gray-800 underline underline-offset-2">
             kaydedileni aç
           </Link>
-          . Konu, seviye, kazanım ve zorluk aynen kaldı; sıradakini yaz.
+          . Konu, seviye, kazanım, zorluk, süre ve hedef sınav aynen kaldı
+          {defaults?.sourceRef ? ", kaynağın başı da (“" + defaults.sourceRef + "”)" : ""}. Durum taşınmadı: bu soru{" "}
+          {QUESTION_STATUS_LABEL[defaults?.status ?? "DRAFT"]} olarak başlıyor. Sıradakini yaz.
+        </Alert>
+      ) : adrestenGelen && seciliKazanim ? (
+        <Alert variant="info" compact className="mb-4">
+          Kazanım hazır seçili: <span className="font-medium text-gray-800">{seciliKazanim.code}</span> · {seciliKazanim.name}.
         </Alert>
       ) : null}
       {kopyaNotu ? (
@@ -160,7 +159,7 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/chec
       <QuestionForm
         // Aynı adrese yeni parametrelerle dönüldüğünde (kaydet ve yenisi) form
         // sıfırdan kurulsun; yoksa React önceki sorunun metnini durumda tutar.
-        key={kopyaId || kaydedilen || "bos"}
+        key={kopyaId || kaydedilen || (adrestenGelen ? "adres:" + JSON.stringify(defaults) : "bos")}
         canEdit
         maxIpucu={MAX_HINTS}
         topics={topics.map((t) => ({

@@ -31,6 +31,13 @@ export interface OlcumKaydi {
   kind: string;
   correctCount: number;
   wrongCount: number;
+  /**
+   * Yarım test kuralı için (yarimKaldi). Sorgu bu iki alanı seçmezse kural
+   * işlemez ve test ölçüme girer: yeni bir okuma yazarken ikisini de seç.
+   */
+  blankCount?: number;
+  /** CheckupSession.endedBy: "STUDENT" | "TIMEOUT" | "RESTART"; eski kayıtta boş. */
+  endedBy?: string | null;
   /** Sonucun sınavı. Eski kayıtlarda boş: o zaman her sınava uyar sayılır. */
   examScope?: string | null;
 }
@@ -46,6 +53,47 @@ export interface OlcumKaydi {
  */
 export function isaretsiz(r: { correctCount: number; wrongCount: number }): boolean {
   return r.correctCount + r.wrongCount === 0;
+}
+
+/**
+ * Yarım testte işaretli soru payının alt sınırı. Bunun ALTINDA kalan ve
+ * öğrencinin bitirmediği (süre doldu ya da yeniden başlattı) test ölçüm
+ * sayılmaz. Hocaya sorulan eşik (Hocaya sorular, ölçme bölümü); karar
+ * gelene kadar yarı.
+ */
+export const YARIM_TEST_ESIGI = 0.5;
+
+/**
+ * Yarım kalan test: öğrenci "Bitir"e basmadı (süre doldu ya da testi yeniden
+ * başlattı) VE soruların yarısından azını işaretledi.
+ *
+ * Telefonda kesinti olağan: 24 sorunun 2'sini çözüp bırakan öğrencinin testi
+ * süre dolunca puanlanıyor, boşlar "sorulmuş" sayıldığı için bütün konular
+ * zayıf çıkıyor, grafik %8'e düşüyor, haftanın planı bu testten kuruluyor.
+ * Öğrencinin kendi bitirdiği test, ne kadar boş olursa olsun, ölçümdür
+ * (bilerek boş bırakmak da bir cevap); yalnızca hiç işaretlemediyse
+ * isaretsiz kuralına takılır.
+ */
+export function yarimKaldi(r: {
+  correctCount: number;
+  wrongCount: number;
+  blankCount?: number;
+  endedBy?: string | null;
+}): boolean {
+  if (!r.endedBy || r.endedBy === "STUDENT" || r.blankCount === undefined) return false;
+  const isaretli = r.correctCount + r.wrongCount;
+  const toplam = isaretli + r.blankCount;
+  return toplam > 0 && isaretli < toplam * YARIM_TEST_ESIGI;
+}
+
+/** Ölçüm sayılmayan sonuç: hiç işaretlenmemiş ya da yarım kalmış. */
+export function olcumDisi(r: {
+  correctCount: number;
+  wrongCount: number;
+  blankCount?: number;
+  endedBy?: string | null;
+}): boolean {
+  return isaretsiz(r) || yarimKaldi(r);
 }
 
 /** Sınav süzgeci: sınav verilmediyse ya da kayıtta yazmıyorsa (eski kayıt) geçer. */
@@ -66,7 +114,7 @@ function sinavaUyar(s: OlcumKaydi, sinav?: string | null): boolean {
  *  - Alıştırma: ölçüm değil (sonuç satırı da yok).
  */
 export function egilimeGirer(s: OlcumKaydi, sinav?: string | null): boolean {
-  return s.kind === "PACKAGE" && !isaretsiz(s) && sinavaUyar(s, sinav);
+  return s.kind === "PACKAGE" && !olcumDisi(s) && sinavaUyar(s, sinav);
 }
 
 const KONU_HARITASI_TURLERI = new Set(["PACKAGE", "TOPIC_RETEST", "LEVEL_STAGE"]);
@@ -77,7 +125,7 @@ const KONU_HARITASI_TURLERI = new Set(["PACKAGE", "TOPIC_RETEST", "LEVEL_STAGE"]
  * farkı bu): soru soruldu, öğrenci cevapladı. Alıştırma girmez.
  */
 export function konuHaritasinaGirer(s: OlcumKaydi, sinav?: string | null): boolean {
-  return KONU_HARITASI_TURLERI.has(s.kind) && !isaretsiz(s) && sinavaUyar(s, sinav);
+  return KONU_HARITASI_TURLERI.has(s.kind) && !olcumDisi(s) && sinavaUyar(s, sinav);
 }
 
 export interface AggregateTopic {

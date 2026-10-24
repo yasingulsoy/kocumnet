@@ -28,11 +28,21 @@ import {
 import { aktifPlan } from "@/lib/plan";
 import { aktifKosu } from "@/lib/level-run";
 import { bugunkuIs } from "@/lib/bugun";
-import { bugunkuOdev } from "@/lib/odev-sorgu";
+import { ogrenciOdevleri } from "@/lib/odev-sorgu";
+import { bugunOdevi } from "@/lib/odev";
 import { haftaBasiAni, haftaEtiketi } from "@/lib/coaching";
 import { daysUntilExam, examShort } from "@/lib/exams";
+import { hataMesaji } from "@/lib/hata-kodlari";
+import { planSoruDurumu } from "@/lib/plan-ilerleme";
+import { PRODUCTS, productUrl, urunSinavaUygun } from "@/lib/products";
+import { safeParseQuestionContent } from "@/lib/question-content";
 import type { TopicBreakdown } from "@/lib/scoring";
-import { BugunKarti } from "@/components/BugunKarti";
+import { BugunKarti, type BugunHizli, type BugunPlanIsi } from "@/components/BugunKarti";
+import { KonuBesSoruButonu } from "@/components/KonuBesSoruButonu";
+import { TekrarBaslatButonu } from "@/components/AlistirmaButonlari";
+import { OdevlerSatiri } from "@/components/OdevlerSatiri";
+import { HatirlaticiKarti } from "@/components/HatirlaticiKarti";
+import { AnaEkranaEkle } from "@/components/AnaEkranaEkle";
 import { PackageCard } from "@/components/PackageCard";
 import { PlanCard } from "@/components/PlanCard";
 import { PlanOlusturKarti } from "@/components/PlanOlusturKarti";
@@ -83,6 +93,42 @@ const ACIK_TEST_SECIMI = {
   items: { where: { answer: { choiceId: { not: null } } }, select: { id: true } },
 } satisfies Prisma.CheckupSessionSelect;
 
+/**
+ * Panonun sonuç okuması. `endedBy` ve `blankCount` yarım test kuralı için
+ * (lib/insights.ts yarimKaldi): seçilmezse yarım kalan test eğilime ve konu
+ * haritasına sessizce girer.
+ */
+const SONUC_SECIMI = {
+  sessionId: true,
+  correctCount: true,
+  wrongCount: true,
+  blankCount: true,
+  netScore: true,
+  totalTimeMs: true,
+  computedAt: true,
+  topicBreakdown: true,
+  examScope: true,
+  session: { select: { kind: true, endedBy: true, package: { select: { name: true } } } },
+} satisfies Prisma.CheckupResultSelect;
+
+/**
+ * Sonuçlar ÖĞRENCİNİN SINAVINA göre. LGS, TYT ve KPSS sonuçlarını tek bir
+ * "genel başarı" çizgisinde toplamak anlamsız; eski kayıtlarda kapsam
+ * yazmıyor (null), onları da alıyoruz. Panoda son 20 test yeter; sınırsız
+ * sorgu her testte biraz daha yavaşlar.
+ */
+function sonuclariOku(userId: string, sinav: string | null) {
+  return prisma.checkupResult.findMany({
+    where: {
+      session: { userId },
+      ...(sinav ? { OR: [{ examScope: sinav as never }, { examScope: null }] } : {}),
+    },
+    orderBy: { computedAt: "desc" },
+    take: 20,
+    select: SONUC_SECIMI,
+  });
+}
+
 /** Kartın başındaki ikon kutusu (vurgulu: marka, sakin: gri). */
 function IkonKutusu({ children, sakin = false }: { children: ReactNode; sakin?: boolean }) {
   return (
@@ -103,10 +149,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const user = await requirePageUser();
   const now = new Date();
   const sp = await searchParams;
-  const hata = typeof sp.hata === "string" ? sp.hata : null;
+  // Adreste yalnızca hata KODU; cümle sabit tablodan, bilinmeyen kod gösterilmez (lib/hata-kodlari.ts).
+  const hata = hataMesaji(sp.hata);
   const yeniTanisma = sp.tanisma === "1";
 
-  const [acik, kagit, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu, defter, odev] = await Promise.all([
+  const [acik, kagit, hedefSonuclari, katalog, plan, buHaftakiTest, seviyeliKosu, defter, odevler, planSoru] = await Promise.all([
     /*
      * Açık testler İKİ sorguda: süresi işleyen ekran testi ve kâğıt oturumu.
      * Eskiden tek sorgu en yeni başlayanı alıyordu; 48 saat açık kalan kâğıt
@@ -124,34 +171,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
       orderBy: { expiresAt: "asc" },
       select: ACIK_TEST_SECIMI,
     }),
-    /*
-     * Sonuçlar ÖĞRENCİNİN SINAVINA göre. LGS, TYT ve KPSS sonuçlarını tek bir
-     * "genel başarı" çizgisinde toplamak anlamsız; eski kayıtlarda kapsam
-     * yazmıyor (null), onları da alıyoruz.
-     */
-    prisma.checkupResult.findMany({
-      where: {
-        session: { userId: user.id },
-        ...(user.targetExam
-          ? { OR: [{ examScope: user.targetExam }, { examScope: null }] }
-          : {}),
-      },
-      orderBy: { computedAt: "desc" },
-      // Panoda son 20 test yeter; sınırsız sorgu her testte biraz daha yavaşlar.
-      take: 20,
-      select: {
-        sessionId: true,
-        correctCount: true,
-        wrongCount: true,
-        blankCount: true,
-        netScore: true,
-        totalTimeMs: true,
-        computedAt: true,
-        topicBreakdown: true,
-        examScope: true,
-        session: { select: { kind: true, package: { select: { name: true } } } },
-      },
-    }),
+    sonuclariOku(user.id, user.targetExam),
     loadCatalog(user.id, now, { scope: user.targetExam }),
     aktifPlan(user.id, now),
     /*
@@ -169,23 +189,57 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         // Zaman damgası: haftanın başladığı AN (pazartesi 00:00 TR), tarih değil.
         session: { userId: user.id, kind: "PACKAGE", status: "SUBMITTED", submittedAt: { gte: haftaBasiAni(now) } },
       },
-      select: { correctCount: true, wrongCount: true, session: { select: { kind: true } } },
+      // Yarım test kuralı (egilimeGirer) blankCount ve endedBy ister.
+      select: { correctCount: true, wrongCount: true, blankCount: true, session: { select: { kind: true, endedBy: true } } },
     }),
     /* Seviyeli check-up devam ediyor mu — "Seviye 2 seni bekliyor". */
     aktifKosu(user.id),
     /* Yanlış defteri: bugün kaç soru (aralıklı tekrar). */
     bugunkuTekrarDurumu(user.id, now),
-    /* Koçun ödevi: son tarihi 3 gün içinde, bitmemiş (lib/odev.ts bugunOdevi). */
-    bugunkuOdev(user.id, now),
+    /* Koçun ödevleri: açıklar ana sayfada satır, son tarihi yakın olan "Bugün" kartında. */
+    ogrenciOdevleri(user.id, now),
+    /* Planın soru işlerinin bu haftaki ilerlemesi (lib/plan-ilerleme.ts). */
+    planSoruDurumu(user.id, now),
   ]);
+  /* Koçun ödevi "Bugün" kartına yalnızca son tarihi 3 gün içindeyse girer (lib/odev.ts bugunOdevi). */
+  const odev = bugunOdevi(odevler.acik, now);
+
+  /*
+   * Hedef sınavda hiç sonuç yoksa (öğrenci hedefini yeni değiştirdi ya da
+   * hedef sınavın testleri henüz yok) ama başka bir sınavda varsa, gelişim
+   * sayfası gibi en son sonucu olan sınava düşülür ve bu söylenir. Eskiden
+   * pano boş kalıyordu: ALES'te üç test çözmüş öğrenci "ilk testinle
+   * başlayalım" görüyordu.
+   */
+  let gosterilenSinav: string | null = user.targetExam;
+  let sonuclarHam = hedefSonuclari;
+  if (sonuclarHam.length === 0 && user.targetExam) {
+    const baska = await prisma.checkupResult.findFirst({
+      where: { session: { userId: user.id }, examScope: { not: null } },
+      orderBy: { computedAt: "desc" },
+      select: { examScope: true },
+    });
+    if (baska?.examScope && baska.examScope !== user.targetExam) {
+      gosterilenSinav = baska.examScope;
+      sonuclarHam = await sonuclariOku(user.id, baska.examScope);
+    }
+  }
+  const baskaSinavdan = gosterilenSinav !== user.targetExam;
   /* Seri ve günlük hedef (lib/seri.ts); koçun henüz okunmamış cevapları. */
   const [seri, kocCevabi] = await Promise.all([seriDurumu(user.id, now), okunmamisCevapSayisi(user.id)]);
 
-  const sonuclar: (ResultLike & { sessionId: string; packageName: string; kind: string; examScope: string | null })[] =
+  const sonuclar: (ResultLike & {
+    sessionId: string;
+    packageName: string;
+    kind: string;
+    endedBy: string | null;
+    examScope: string | null;
+  })[] =
     sonuclarHam.map((r) => ({
       sessionId: r.sessionId,
       packageName: r.session.package.name,
       kind: r.session.kind,
+      endedBy: r.session.endedBy,
       examScope: r.examScope,
       correctCount: r.correctCount,
       wrongCount: r.wrongCount,
@@ -205,11 +259,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
    * (konuHaritasinaGirer: o konunun gerçek ölçümü). Gelişim, veli raporu ve
    * panelin öğrenci sayfası aynı iki süzgeçten geçiyor.
    */
-  const olcumler = sonuclar.filter((r) => egilimeGirer(r, user.targetExam));
+  const olcumler = sonuclar.filter((r) => egilimeGirer(r, gosterilenSinav));
   const ozet = studentStats(olcumler);
-  const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, user.targetExam))).filter(
-    (t) => t.level !== null
-  );
+  const haritadakiler = sonuclar.filter((r) => konuHaritasinaGirer(r, gosterilenSinav));
+  const konular = aggregateTopics(haritadakiler).filter((t) => t.level !== null);
   const zayiflar = [...konular]
     .filter((t) => t.level === "WEAK")
     .sort((a, b) => a.ratio - b.ratio)
@@ -229,6 +282,42 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
    * ekranda çözülür (lib/deneme.ts kagittaCozulebilir).
    */
   const seviyeliBekliyor = seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? seviyeliKosu : null;
+
+  /*
+   * Plan işleri uygulamada yapılabilsin: soru işine ilerleme ve "5 soru çöz"
+   * (kaynak: planın kurulduğu test), konu tekrarına yayın ve kazanım özeti
+   * bağlantısı. Kazanım özeti yanlış defterinde konunun grubunda duruyor;
+   * bağlantı yalnızca o konunun defterde özeti olan bir maddesi varsa.
+   */
+  const tekrarKonulari = (plan?.items ?? []).flatMap((i) => (i.kind === "STUDY" && i.topicId ? [i.topicId] : []));
+  const ozetliKonular = new Set(
+    tekrarKonulari.length > 0
+      ? (
+          await prisma.notebookItem.findMany({
+            where: { userId: user.id, resolvedAt: null, topicId: { in: tekrarKonulari }, objectiveId: { not: null } },
+            select: { topicId: true, objective: { select: { summary: true } } },
+          })
+        )
+          .filter((m) => m.objective?.summary && safeParseQuestionContent(m.objective.summary).success)
+          .map((m) => m.topicId)
+      : []
+  );
+  const planIsleri: (BugunPlanIsi & { acilabilir: boolean })[] | null = plan
+    ? plan.items.map((i) => {
+        const urun = i.productId ? PRODUCTS[i.productId] : undefined;
+        return {
+          ...i,
+          ilerleme: planSoru?.isler.get(i.id) ?? null,
+          kaynakOturumId: planSoru?.kaynakOturumId ?? null,
+          urun: urun && urunSinavaUygun(urun, plan.examScope) ? { ad: urun.name, adres: productUrl(urun.id) } : null,
+          kazanimAdresi:
+            i.kind === "STUDY" && i.topicId && ozetliKonular.has(i.topicId)
+              ? `/defter?konu=${encodeURIComponent(i.topicId)}#konu-${i.topicId}`
+              : null,
+        };
+      })
+    : null;
+
   const bugun = bugunkuIs({
     acikTest: acik,
     kagit: kagit ? { test: kagit, sonAn: kagit.expiresAt } : null,
@@ -236,16 +325,33 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     odevSonAn: odev?.dueAt ?? null,
     seviyeli: seviyeliBekliyor,
     tekrar: defter,
-    planIsleri: plan?.items ?? null,
+    planIsleri,
     oneri: oneriler[0] ?? null,
   });
+
+  /*
+   * "Hızlı 5 soru": iş kalmayınca (ya da yalnızca önerilen test kaldıysa)
+   * en zayıf ÖLÇÜLMÜŞ konudan süresiz alıştırma. Güçlü konuda önerilmez.
+   * Kaynak test, konunun en son ölçüldüğü test (alıştırma o testin konusundan
+   * açılır, lib/practice.ts konuCalismasiBaslat).
+   */
+  const enZayif = [...konular].filter((t) => t.level !== "STRONG").sort((a, b) => a.ratio - b.ratio)[0];
+  const enZayifKaynagi = enZayif
+    ? haritadakiler.find((r) => r.topicBreakdown.topics.some((t) => t.topicId === enZayif.topicId && t.asked > 0))
+    : undefined;
+  const hizli: BugunHizli | null =
+    enZayif && enZayifKaynagi
+      ? { sessionId: enZayifKaynagi.sessionId, topicId: enZayif.topicId, topicName: enZayif.name, oran: enZayif.ratio }
+      : null;
   const defterBugunde = bugun.tur === "TEKRAR" || bugun.tur === "TEKRAR_DEVAM";
   const digerOneriler = oneriler
     .filter((p) => bugun.tur !== "ONERI" || p.slug !== bugun.paket.slug)
     .slice(0, 2);
   const kalanGun = daysUntilExam(user.targetExam, now);
   const haftalikHedef = user.weeklyTestGoal ?? null;
-  const buHaftakiTestSayisi = buHaftakiTest.filter((r) => egilimeGirer({ ...r, kind: r.session.kind })).length;
+  const buHaftakiTestSayisi = buHaftakiTest.filter((r) =>
+    egilimeGirer({ ...r, kind: r.session.kind, endedBy: r.session.endedBy })
+  ).length;
   const temponunDurumu = haftalikHedef !== null && buHaftakiTestSayisi >= haftalikHedef;
 
   /** Bir testin başarı oranı (doğru / soru). */
@@ -301,20 +407,59 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
       <div className="space-y-4 md:space-y-6">
         {hata ? <Alert variant="error">{hata}</Alert> : null}
         {yeniTanisma ? (
-          <Alert variant="success">
-            Hazırız. {examShort(user.targetExam)} için testlerin aşağıda —
-            {user.targetNet ? ` hedefin ${trNumber(user.targetNet, 0)} net.` : ""}
+          katalog.length > 0 ? (
+            <Alert variant="success">
+              Hazırız. {examShort(user.targetExam)} için testlerin aşağıda —
+              {user.targetNet ? ` hedefin ${trNumber(user.targetNet, 0)} net.` : ""}
+            </Alert>
+          ) : (
+            // Tanışmada "yakında" etiketli sınavı bilerek seçti: boş pano sürpriz olmasın.
+            <Alert variant="info">
+              Hazırız. {examShort(user.targetExam)} testleri hazırlanıyor; hazır olunca burada görünecek. Bu arada
+              diğer sınavların testlerini çözebilirsin.
+            </Alert>
+          )
+        ) : null}
+        {baskaSinavdan && gosterilenSinav ? (
+          <Alert variant="info">
+            Henüz bir {examShort(user.targetExam)} sonucun yok. Aşağıdaki sayılar en son çözdüğün{" "}
+            {examShort(gosterilenSinav)} testlerinden.
           </Alert>
         ) : null}
 
         {/* ── 1. Bugün: tek iş, tek düğme ─────────────────── */}
         {/* Hiç testi olmayan öğrencide iş yoksa (katalog boş) alttaki boş durum konuşur. */}
-        {bugun.tur !== "YOK" || !yeni ? <BugunKarti is={bugun} yeni={yeni} /> : null}
+        {bugun.tur !== "YOK" || !yeni ? <BugunKarti is={bugun} yeni={yeni} hizli={hizli} /> : null}
 
-        {/* ── Koçun cevabı (okunmamış varsa) ve seri ──────── */}
+        {/* ── Koç: açık ödevler ve okunmamış cevaplar ─────── */}
+        {/* Ödevler telefonda menüde yok; açık ödev varsa burada tek satır. */}
+        <OdevlerSatiri odevler={odevler.acik} now={now} />
         <KocCevabiSatiri adet={kocCevabi} />
         {/* Hiç soru çözmemiş yeni öğrenciye yok: boş panoda tek çağrı ilk test. */}
-        {!yeni || seri.enUzun > 0 ? <SeriKarti ozet={seri} /> : null}
+        {!yeni || seri.enUzun > 0 ? (
+          <SeriKarti
+            ozet={seri}
+            eylem={
+              // "Bugün bir soru çöz" diyen kartın düğmesi: en kısa yol.
+              hizli ? (
+                <KonuBesSoruButonu
+                  sessionId={hizli.sessionId}
+                  topicId={hizli.topicId}
+                  topicName={hizli.topicName}
+                  etiket="Bir soru çöz"
+                  variant="soft"
+                  size="xs"
+                />
+              ) : defter.hazir > 0 ? (
+                <TekrarBaslatButonu etiket="Bir soru çöz" />
+              ) : (
+                <ButtonLink href="/paketler" variant="soft" size="xs" className="max-sm:w-full">
+                  Bir test seç
+                </ButtonLink>
+              )
+            }
+          />
+        ) : null}
 
         {/* ── 2. Bu hafta ─────────────────────────────────── */}
         {plan ? <PlanCard plan={plan} haftaEtiketi={haftaEtiketi(plan.weekStart)} /> : !yeni ? <PlanOlusturKarti /> : null}
@@ -573,6 +718,29 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
               action={<ButtonLink href="/paketler?tur=TUMU">Diğer sınavların testleri</ButtonLink>}
             />
           </Card>
+        ) : null}
+        {/* Hedef sınavın testi yoksa sonucu olan öğrenci de çıkmaz sokakta kalmasın. */}
+        {!yeni && katalog.length === 0 ? (
+          <Card className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5">
+            <IkonKutusu sakin>
+              <ClipboardList aria-hidden />
+            </IkonKutusu>
+            <p className="min-w-0 flex-[1_1_14rem] text-theme-sm text-gray-500">
+              {examShort(user.targetExam)} testleri hazırlanıyor. Bu arada diğer sınavların testlerini çözebilirsin.
+            </p>
+            <ButtonLink href="/paketler?tur=TUMU" variant="outline" className="max-sm:w-full">
+              Diğer sınavların testleri
+            </ButtonLink>
+          </Card>
+        ) : null}
+
+        {/* ── Uygulamayı yanına al: hatırlatıcı ve ana ekran ─ */}
+        {/* İlk sonuçtan sonra: önce ne işe yaradığını görsün. İkisi de kapatılabilir (bu cihazda). */}
+        {!yeni ? (
+          <div className="grid gap-4 md:grid-cols-2 md:gap-6">
+            <HatirlaticiKarti />
+            <AnaEkranaEkle />
+          </div>
         ) : null}
       </div>
     </div>

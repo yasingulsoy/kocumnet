@@ -216,12 +216,16 @@ export function QuestionImport() {
 
   const kaydet = async () => {
     if (!rapor || !md) return;
-    const n = rapor.sayilar.gecerli;
+    const hazir = rapor.sayilar.yayinaHazir;
+    const eksik = rapor.sayilar.gecerli - hazir;
     if (
       yayinla &&
       !(await onayla({
-        title: n + " soru doğrudan yayına alınsın mı?",
-        description: "Sorular öğrenci testlerine seçilmeye başlayacak. İşaretlemezsen taslak girer; listeden inceleyip toplu yayına alırsın.",
+        title: hazir + " soru doğrudan yayına alınsın mı?",
+        description:
+          "Sorular öğrenci testlerine seçilmeye başlayacak." +
+          (eksik ? " Yayına hazır olmayan " + eksik + " soru İncelemede girer (eksikleri raporda)." : "") +
+          " İşaretlemezsen hepsi taslak girer; listeden inceleyip toplu yayına alırsın.",
         confirmLabel: "Yayına al",
         tone: "warning",
       }))
@@ -397,13 +401,24 @@ export function QuestionImport() {
             onChange={(e) => setYayinla(e.target.checked)}
             disabled={mesgul}
             label="Doğrudan yayına al"
-            description="İşaretlemezsen sorular taslak girer: listeden inceleyip toplu yayına alırsın. Yayındaki soru öğrenci testlerine seçilmeye başlar."
+            description={
+              "İşaretlemezsen sorular taslak girer: listeden inceleyip toplu yayına alırsın. Yayındaki soru öğrenci testlerine seçilmeye başlar." +
+              (rapor.sayilar.gecerli > rapor.sayilar.yayinaHazir
+                ? " Yayına hazır olmayan " +
+                  (rapor.sayilar.gecerli - rapor.sayilar.yayinaHazir) +
+                  " soru (raporda “yayına hazır değil”) İncelemede girer."
+                : "")
+            }
           />
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void kaydet()} disabled={mesgul || !md || asim} loading={kaydediliyor}>
               {kaydediliyor
                 ? "Kaydediliyor…"
-                : rapor.sayilar.gecerli + (yayinla ? " soruyu yayına al" : " soruyu taslak olarak kaydet")}
+                : yayinla
+                  ? rapor.sayilar.gecerli === rapor.sayilar.yayinaHazir
+                    ? rapor.sayilar.gecerli + " soruyu yayına al"
+                    : rapor.sayilar.yayinaHazir + " soruyu yayına al, " + (rapor.sayilar.gecerli - rapor.sayilar.yayinaHazir) + " soruyu incelemeye gönder"
+                  : rapor.sayilar.gecerli + " soruyu taslak olarak kaydet"}
             </Button>
             {rapor.sayilar.reddedilen ? (
               <span className="text-theme-sm text-gray-500">{rapor.sayilar.reddedilen} soru atlanacak (raporda kırmızı).</span>
@@ -416,7 +431,15 @@ export function QuestionImport() {
         <Card className="p-5 sm:px-6">
           <Alert
             variant="success"
-            title={kayit.yazilan + " soru " + (kayit.yayinda ? "yayına alındı." : "taslak olarak kaydedildi.")}
+            title={
+              kayit.yazilan +
+              " soru " +
+              (!kayit.yayinda
+                ? "taslak olarak kaydedildi."
+                : kayit.incelemede
+                  ? "kaydedildi: " + (kayit.yazilan - kayit.incelemede) + " yayında, " + kayit.incelemede + " İncelemede."
+                  : "yayına alındı.")
+            }
             action={
               <>
                 <ButtonLink href={"/checkup/sorular?parti=" + encodeURIComponent(kayit.partiId)} size="xs">
@@ -429,6 +452,9 @@ export function QuestionImport() {
             }
           >
             {kayit.atlanan ? kayit.atlanan + " soru atlandı (raporda kırmızı). " : ""}
+            {kayit.incelemede
+              ? kayit.incelemede + " soru yayına hazır olmadığı için İncelemede girdi; eksikleri raporda, İnceleme kuyruğunda da görünür. "
+              : ""}
             {kayit.yeniKazanimlar.length ? "Yeni kazanımlar: " + kayit.yeniKazanimlar.join(", ") + ". " : ""}
             Aşağıdaki geçmişten bu içe aktarmayı geri alabilirsin.
           </Alert>
@@ -479,7 +505,15 @@ function Rapor({
             etiket="Geçerli"
             deger={s.gecerli}
             ton="success"
-            alt={[s.ipuclu ? s.ipuclu + " ipuçlu" : "", s.videolu ? s.videolu + " videolu" : ""].filter(Boolean).join(" · ") || undefined}
+            alt={
+              [
+                s.gecerli ? s.yayinaHazir + " yayına hazır" : "",
+                s.ipuclu ? s.ipuclu + " ipuçlu" : "",
+                s.videolu ? s.videolu + " videolu" : "",
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
           />
           <Sayac etiket="Reddedilen" deger={s.reddedilen} ton={s.reddedilen ? "error" : "gray"} />
           <Sayac etiket="Uyarılı" deger={s.uyarili} ton={s.uyarili ? "warning" : "gray"} />
@@ -562,6 +596,11 @@ function SoruSatiri({ q, gorselAdresi }: { q: RaporSorusu; gorselAdresi: (ad: st
             {q.uyarilar.length} uyarı
           </Badge>
         ) : null}
+        {q.gecerli && q.yayinEksikleri.length ? (
+          <Badge size="sm" color="light">
+            yayına hazır değil
+          </Badge>
+        ) : null}
         <p className="min-w-0 flex-1 text-sm font-medium text-gray-800">
           {q.sira}. {q.baslik}
           <span className="font-normal text-gray-500"> · satır {q.satir}</span>
@@ -626,9 +665,15 @@ function SoruSatiri({ q, gorselAdresi }: { q: RaporSorusu; gorselAdresi: (ad: st
           ))}
         </ul>
       ) : null}
-      {q.gecerli && !q.uyarilar.length ? (
+      {q.gecerli && q.yayinEksikleri.length ? (
+        // Taslak olarak girer; "doğrudan yayına al"da İncelemede (yayın kapısı).
+        <p className="mt-2 text-theme-xs text-gray-600">
+          <span className="font-medium text-gray-700">Yayın için eksik:</span> {q.yayinEksikleri.join(" ")}
+        </p>
+      ) : null}
+      {q.gecerli && !q.uyarilar.length && !q.yayinEksikleri.length ? (
         <p className="mt-1.5 flex items-center gap-1.5 text-theme-xs text-success-700">
-          <CircleCheck aria-hidden className="size-3.5" /> Sorun yok.
+          <CircleCheck aria-hidden className="size-3.5" /> Sorun yok, yayına hazır.
         </p>
       ) : null}
 

@@ -291,6 +291,26 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
                                 Sorular
                               </Link>
                             ) : null}
+                            {/*
+                             * Her satırda (sorusu olmayanda da): yeni soru formu konu, kazanım,
+                             * seviye 1 ve kazanımın sınavlarıyla dolu açılır (soru-akisi.ts
+                             * yeniSoruVarsayilanlari). Arşivdeki kazanıma ve yaprak olmayan
+                             * konuya soru bağlanmaz: bağlantı yok.
+                             */}
+                            {yazabilir && o.status !== "ARCHIVED" && konuAdi.get(o.topicId)?._count.children === 0 ? (
+                              <Link
+                                href={qs("/checkup/sorular/yeni", {
+                                  konuId: o.topicId,
+                                  kazanimId: o.id,
+                                  seviye: "L1_TEMEL",
+                                  hedef: o.examScopes.length ? o.examScopes.join(",") : undefined,
+                                })}
+                                className="ms-1 text-theme-xs font-medium text-brand-500 hover:text-brand-600"
+                                title="Yeni soru formu bu kazanımla, seviye 1 olarak açılır"
+                              >
+                                Bu kazanıma soru yaz
+                              </Link>
+                            ) : null}
                           </div>
                           <ObjectiveRowEditor row={o} canEdit={yazabilir} />
                           <ObjectiveSummaryEditor row={o} canEdit={yazabilir} />

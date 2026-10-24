@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChartColumn, FileUp, Flag, Lightbulb, ListChecks, ListOrdered, MessageSquareText, PlayCircle, Plus, Search, X } from "lucide-react";
+import { ChartColumn, ClipboardCheck, FileUp, Flag, Lightbulb, ListChecks, ListOrdered, MessageSquareText, PlayCircle, Plus, Search, UserRound, X } from "lucide-react";
 import { db } from "@/lib/checkup/db";
 import { partiBilgisi } from "@/lib/checkup/question-import";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import {
+  QUESTION_LEVELS,
   QUESTION_LEVEL_LABEL,
   QUESTION_STATUS_LABEL,
   examLabel,
@@ -13,8 +14,10 @@ import {
   trDate,
   trNumber,
 } from "@/lib/checkup/format";
-import { EKSIK, ICERIK, LISTE_SIRASI, listeKosulu, listeSuzgeci } from "@/lib/checkup/question-query";
+import { EKSIK, ICERIK, LISTE_SIRASI, listeKosulu, listeSuzgeci, yazanlar } from "@/lib/checkup/question-query";
 import { listeSorgusuParams, soruAdresi } from "@/lib/checkup/question-list";
+import { satirHazirligi } from "@/lib/checkup/yayin-kapisi";
+import { EKSIK_KISA } from "@/lib/checkup/shared/question-readiness";
 import { containsStepBreak, safeParseQuestionContent, splitSolutionSteps } from "@/lib/checkup/shared/question-content";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { StatusSelect } from "@/components/checkup/StatusSelect";
@@ -101,11 +104,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
   // Süzgeç ve sıra tek yerde (lib/checkup/question-query.ts): soru ekranındaki
   // önceki/sonraki gezinmesi aynı listeyi izliyor.
   const suzgec = listeSuzgeci(sp);
-  const { konu, durum, ara, kazanim, eksik, icerik, parti, not, bildirim, sayfa } = suzgec;
+  const { konu, durum, ara, kazanim, eksik, icerik, parti, not, bildirim, yazan, seviye, sayfa } = suzgec;
+  // "Benim sorularım": adreste e-posta değil personel kimliği durur.
+  const benimKimligim = String(gate.staff.id);
 
   const where = listeKosulu(suzgec);
 
-  const [topics, toplam, questions, partiKaydi] = await Promise.all([
+  const [topics, toplam, questions, partiKaydi, yazanListesi] = await Promise.all([
     db.topic.findMany({
       where: { children: { none: {} } },
       orderBy: [{ examScope: "asc" }, { name: "asc" }],
@@ -133,8 +138,11 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         solution: true,
         hints: true,
         videoUrl: true,
-        topic: { select: { name: true, examScope: true } },
-        objective: { select: { code: true } },
+        // "Yayına hazır mı" rozeti için (lib/checkup/yayin-kapisi.ts HAZIRLIK_ALANLARI ile aynı alanlar).
+        stem: true,
+        choices: { orderBy: { sortOrder: "asc" }, select: { content: true, isCorrect: true, errorType: true } },
+        topic: { select: { name: true, examScope: true, examScopes: true } },
+        objective: { select: { code: true, status: true } },
         // Satırdaki "açık not" rozeti: yalnızca personel notları (bildirimin kendi rozeti var).
         _count: { select: { notes: { where: { resolvedAt: null, kind: "STAFF" } } } },
         // Sorunun yer aldığı denemeler: rozet, yayından kaldırma uyarısı ve kilit
@@ -146,6 +154,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
       },
     }),
     parti ? partiBilgisi(parti) : Promise.resolve(null),
+    yazanlar(),
   ]);
 
   // Satırdaki "bildirim" rozeti: bu sayfadaki soruların açık öğrenci bildirimleri.
@@ -177,7 +186,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
   );
 
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
-  const suzgecVar = Boolean(konu || durum || ara || eksik || icerik || kazanim || parti || not || bildirim);
+  const suzgecVar = Boolean(konu || durum || ara || eksik || icerik || kazanim || parti || not || bildirim || yazan || seviye);
   // Soruyu açıp kaydedince bu süzgece ve sayfaya dönülür.
   const geri = listeSorgusuParams({
     ara,
@@ -189,8 +198,12 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
     parti,
     not,
     bildirim,
+    yazan,
+    seviye,
     sayfa: sayfa > 1 ? String(sayfa) : undefined,
   });
+  // Süzgeç çiplerinin ve sayfalamanın taşıdığı ortak süzgeç (sayfa hariç).
+  const temel = { ara, konu, durum, eksik, icerik, kazanim, parti, not, bildirim, yazan, seviye };
 
   const kaydedilen = tek(sp.kaydedildi);
   const guncellenen = tek(sp.guncellendi);
@@ -203,6 +216,9 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         description={trNumber(toplam) + (suzgecVar ? " soru bu süzgeçlere uyuyor." : " soru havuzda.")}
         actions={
           <>
+            <ButtonLink href="/checkup/sorular/incele" variant="outline" size="xs" startIcon={<ClipboardCheck />}>
+              İnceleme kuyruğu
+            </ButtonLink>
             <ButtonLink href="/checkup/sorular/analiz" variant="outline" size="xs" startIcon={<ChartColumn />}>
               Madde analizi
             </ButtonLink>
@@ -243,7 +259,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         </Alert>
       ) : null}
 
-      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []} denemeleri={denemeleri} kilitliler={kilitliler}>
+      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []} denemeleri={denemeleri} kilitliler={kilitliler} sorgu={geri}>
         <Card>
           {/* Süzgeçler — GET formu: seçim adres çubuğunda kalır, paylaşılabilir. */}
           <form method="get" role="search" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 sm:px-6 sm:py-5">
@@ -304,16 +320,49 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
               </Select>
             </Field>
 
+            <Field label="Seviye" className="min-w-0 grow basis-40">
+              <Select name="seviye" defaultValue={seviye} compact>
+                <option value="">Tümü</option>
+                {QUESTION_LEVELS.map((l) => (
+                  <option key={l} value={l}>
+                    {QUESTION_LEVEL_LABEL[l]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Yazan" className="min-w-0 grow basis-52">
+              <Select name="yazan" defaultValue={yazan} compact>
+                <option value="">Herkes</option>
+                {yazanListesi.map((y) => (
+                  <option key={y.kimlik} value={y.kimlik}>
+                    {y.kimlik === benimKimligim ? "Ben" : y.ad} ({y.sayi})
+                  </option>
+                ))}
+                {/* Henüz sorusu yoksa da "Ben" seçilebilsin. */}
+                {yazanListesi.some((y) => y.kimlik === benimKimligim) ? null : <option value={benimKimligim}>Ben (0)</option>}
+              </Select>
+            </Field>
+
             {/* Sıkı alan yüksekliğinde (36 px): kutu öteki alanların kutularıyla aynı hizada. */}
             <div className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1">
               <Checkbox name="not" value="acik" defaultChecked={not === "acik"} label="Açık notu olanlar" />
               <Checkbox name="bildirim" value="acik" defaultChecked={bildirim === "acik"} label="Açık bildirimi olanlar" />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button type="submit" variant="outline" size="xs">
                 Süz
               </Button>
+              {/* Kısayol: öteki süzgeçler kalır, yalnızca yazan değişir. */}
+              <ButtonLink
+                href={qs("/checkup/sorular", { ...temel, yazan: yazan === benimKimligim ? undefined : benimKimligim })}
+                variant={yazan === benimKimligim ? "primary" : "ghost"}
+                size="xs"
+                startIcon={<UserRound />}
+              >
+                Benim sorularım
+              </ButtonLink>
               {suzgecVar ? (
                 <ButtonLink href="/checkup/sorular" variant="ghost" size="xs">
                   Temizle
@@ -325,13 +374,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
           {kazanim || parti ? (
             <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3 sm:px-6">
               {kazanim ? (
-                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, parti, not, bildirim })}>
+                <SuzgecCipi etiket="Kazanım" kaldir={qs("/checkup/sorular", { ...temel, kazanim: undefined })}>
                   <span className={MONO}>{kazanim}</span>
                 </SuzgecCipi>
               ) : null}
               {parti ? (
                 <>
-                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, kazanim, not, bildirim })}>
+                  <SuzgecCipi etiket="İçe aktarma" kaldir={qs("/checkup/sorular", { ...temel, parti: undefined })}>
                     {partiKaydi ? (
                       <>
                         {partiKaydi.dosyaAdi} · {trDate(partiKaydi.tarih, { time: true })}
@@ -372,6 +421,9 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
               <ul className="divide-y divide-gray-100">
                 {questions.map((q) => {
                   const ozet = (q.stemText || "metinsiz soru").slice(0, 80);
+                  // Yayında ve arşivde olmayan soru için: yayına alınabilir mi, ne eksik.
+                  const eksikler =
+                    q.status === "DRAFT" || q.status === "REVIEW" ? satirHazirligi(q).eksikler : [];
                   return (
                     <li key={q.id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                       {yazabilir ? <BulkCheckbox id={q.id} label={"Seç: " + ozet} /> : null}
@@ -422,7 +474,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                                 {q.shownCount} kez soruldu · {percent(q.correctCount / q.shownCount)} doğru
                               </span>
                             ) : null}
-                            {q.solution === null ? <span className="text-warning-700">çözüm yok</span> : null}
+                            {eksikler.length ? (
+                              <span className="text-warning-700" title={eksikler.map((e) => e.mesaj).join(" ")}>
+                                yayına hazır değil: {[...new Set(eksikler.map((e) => EKSIK_KISA[e.kod]))].join(", ")}
+                              </span>
+                            ) : q.solution === null ? (
+                              <span className="text-warning-700">çözüm yok</span>
+                            ) : null}
                             <EkIcerik hints={q.hints} videoUrl={q.videoUrl} solution={q.solution} />
                             {q.packageLinks.length ? (
                               <span className="text-brand-700" title={q.packageLinks.map((l) => l.package.name).join(", ")}>
@@ -451,6 +509,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                               status={q.status}
                               denemeler={denemeleri[q.id]}
                               kilitli={kilitliler[q.id]}
+                              yayinEksigi={eksikler.length ? eksikler.map((e) => EKSIK_KISA[e.kod]).join(", ") : undefined}
                             />
                           ) : null}
                         </div>
@@ -466,7 +525,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         <Pagination
           currentPage={Math.min(sayfa, sonSayfa)}
           totalPages={sonSayfa}
-          href={(p) => qs("/checkup/sorular", { ara, konu, durum, eksik, icerik, kazanim, parti, not, bildirim, sayfa: p > 1 ? p : undefined })}
+          href={(p) => qs("/checkup/sorular", { ...temel, sayfa: p > 1 ? p : undefined })}
         />
       </BulkProvider>
     </>

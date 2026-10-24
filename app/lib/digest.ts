@@ -74,7 +74,9 @@ export async function haftalikPostalariGonder(now = new Date()): Promise<{ aday:
       mailOptOut: false,
       onboardedAt: { not: null },
       OR: [{ lastDigestAt: null }, { lastDigestAt: { lt: haftaBaslangici } }],
-      AND: [{ OR: [{ lastLoginAt: { gte: esik } }, { createdAt: { gte: esik } }] }],
+      // lastSeenAt: oturum kayan süreli, çalışan öğrenci yeniden parola girmiyor;
+      // yalnızca lastLoginAt'e bakmak etkin öğrenciye posta göndermemek demekti.
+      AND: [{ OR: [{ lastSeenAt: { gte: esik } }, { lastLoginAt: { gte: esik } }, { createdAt: { gte: esik } }] }],
     },
     orderBy: [{ lastDigestAt: { sort: "asc", nulls: "first" } }],
     take: PARTI,

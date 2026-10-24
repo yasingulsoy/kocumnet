@@ -1,7 +1,8 @@
 import "server-only";
 import { Prisma } from "./generated/client";
 import { db } from "./db";
-import { isQuestionStatus, type QuestionStatus } from "./format";
+import { QUESTION_LEVELS, isQuestionStatus, type QuestionStatus } from "./format";
+import type { EksikKodu } from "./shared/question-readiness";
 
 /**
  * Soru listesinin süzgeci ve sırası — TEK tanım. Liste sayfası ve soru
@@ -19,8 +20,23 @@ export const EKSIK = {
   hatatipsiz: { label: "Hata tipi eksik şıkkı var", where: { choices: { some: { isCorrect: false, errorType: null } } } },
   seviyesiz: { label: "Seviyesi yok", where: { level: null } },
   kazanimsiz: { label: "Kazanımı yok", where: { objectiveId: null } },
+  // Yayın kapısının "kazanım" maddesi yalnızca seviye 1'i ister (seviye 2-3 kazanımsız olabilir).
+  l1kazanimsiz: { label: "Seviye 1, kazanımı yok", where: { level: "L1_TEMEL", objectiveId: null } },
 } as const satisfies Record<string, { label: string; where: Prisma.QuestionWhereInput }>;
 export type EksikKey = keyof typeof EKSIK;
+
+/**
+ * "Yayına hazır mı" eksiklerinin listedeki karşılığı: toplu yayın sonucundaki
+ * "çözüm yok (2)" bağlantısı bu süzgeci açar. Formül, şık ve şık sayısı
+ * eksiklerinin sorgu karşılığı yok (içerik çözümlenmeden bilinmez); onlar
+ * soru soru listelenir.
+ */
+export const EKSIK_SUZGECI: Partial<Record<EksikKodu, EksikKey>> = {
+  cozum: "cozumsuz",
+  hata_tipi: "hatatipsiz",
+  seviye: "seviyesiz",
+  kazanim: "l1kazanimsiz",
+};
 
 /*
  * Ek içerik süzgeci — ipucu, video, adımlı çözüm. Tek seçim kutusu: listenin
@@ -57,6 +73,13 @@ export interface ListeSuzgeci {
   /** "acik": çözülmemiş öğrenci bildirimi olan sorular. */
   bildirim: "acik" | "";
   icerik: IcerikKey | "";
+  /**
+   * Yazan personelin kimliği (backend users.id, damganın "(#12)" kısmı).
+   * Adreste e-posta değil kimlik durur; "Benim sorularım" kendi kimliğin.
+   */
+  yazan: string;
+  /** Seviye (L1_TEMEL, L2_ORTA, L3_ANALIZ); seviyesizler için "Eksik" süzgeci. */
+  seviye: string;
   sayfa: number;
 }
 
@@ -80,6 +103,8 @@ export function listeSuzgeci(sp: Params): ListeSuzgeci {
     not: tek(sp.not) === "acik" ? "acik" : "",
     bildirim: tek(sp.bildirim) === "acik" ? "acik" : "",
     icerik: Object.hasOwn(ICERIK, tek(sp.icerik)) ? (tek(sp.icerik) as IcerikKey) : "",
+    yazan: /^\d{1,10}$/.test(tek(sp.yazan)) ? tek(sp.yazan) : "",
+    seviye: (QUESTION_LEVELS as readonly string[]).includes(tek(sp.seviye)) ? tek(sp.seviye) : "",
     sayfa: Math.max(1, Math.floor(Number(tek(sp.sayfa) || 1)) || 1),
   };
 }
@@ -115,9 +140,37 @@ export function listeKosulu(s: ListeSuzgeci): Prisma.QuestionWhereInput {
     ...(s.bildirim ? [{ notes: { some: ACIK_BILDIRIM } }] : []),
     ...(s.eksik ? [EKSIK[s.eksik].where] : []),
     ...(s.icerik ? [ICERIK[s.icerik].where] : []),
+    ...(s.yazan ? [yazanKosulu(s.yazan)] : []),
+    ...(s.seviye ? [{ level: s.seviye as Prisma.QuestionWhereInput["level"] }] : []),
     ...(arama ? [arama] : []),
   ];
   return kosullar.length ? { AND: kosullar } : {};
+}
+
+/**
+ * Yazan personel: damga "e-posta (#kimlik)" biçiminde, kimlik değişmez.
+ * Parantez de aranır: "(#12)" "(#112)" ile karışmasın.
+ */
+export function yazanKosulu(kimlik: string): Prisma.QuestionWhereInput {
+  return { createdByStaff: { endsWith: "(#" + kimlik + ")" } };
+}
+
+/** Listede ve kuyrukta "Yazan" seçenekleri: soru yazmış personel, en çok yazan üstte. */
+export async function yazanlar(): Promise<{ kimlik: string; ad: string; sayi: number }[]> {
+  const satirlar = await db.question.groupBy({
+    by: ["createdByStaff"],
+    where: { createdByStaff: { not: null } },
+    _count: { _all: true },
+  });
+  const kisiler = new Map<string, { kimlik: string; ad: string; sayi: number }>();
+  for (const r of satirlar) {
+    const m = r.createdByStaff?.match(/^(.*)\s*\(#(\d+)\)$/);
+    if (!m) continue;
+    // Aynı kişinin e-postası değiştiyse iki damga olur: kimlikte birleşir.
+    const onceki = kisiler.get(m[2]);
+    kisiler.set(m[2], { kimlik: m[2], ad: onceki?.ad ?? m[1].trim(), sayi: (onceki?.sayi ?? 0) + r._count._all });
+  }
+  return [...kisiler.values()].sort((a, b) => b.sayi - a.sayi || a.ad.localeCompare(b.ad, "tr"));
 }
 
 /** Son düzenlenen üstte; eşitlikte kimlik — sayfalama ve komşular kararlı olsun. */

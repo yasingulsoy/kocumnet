@@ -125,6 +125,12 @@ jobs:
       - run: npm run test:hoca-icerik
       - name: HOCAYA-SORULAR.md içerikle eşit mi
         run: npm run hoca:belge -- --check
+      # Koç ve pilot ekranlarının saf kuralları (panel modülü): risk, davet kodu,
+      # sıfırlama jetonu, "<5" gizleme, öğrenme kazancı; veritabanı istemez.
+      - run: npm run test:koc-panel
+      - run: npm run test:pilot-panel
+      # İçerik: yayına hazır mı listesi, ondalık virgül, esnek içe aktarma biçimi
+      - run: npm run test:icerik-panel
       - run: npm run test:leak
       - run: npm run test:levels
       - run: npm run test:practice
@@ -139,6 +145,10 @@ jobs:
       - run: npm run test:plan
       # Ölçüm akışı: cron kapısı, işaretsiz test, yeniden puanlama
       - run: npm run test:tutarlilik
+      # Hesap ve ölçüm: yarım test, kayan oturum, girişten sonra dönüş, davet bağlantısı, kayıt kaynağı
+      - run: npm run test:hesap
+      # Öğrenci ekranları: plan işinin ilerlemesi, hatırlatıcı, hata kodları, veli raporunda ödev
+      - run: npm run test:ekran
 
   backend:
     name: backend

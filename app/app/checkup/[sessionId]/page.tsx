@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, girisAdresi } from "@/lib/auth";
 import { getStudentSession, CheckupError } from "@/lib/checkup";
 import { sonGunMetni } from "@/lib/deneme";
 import { MathContent } from "@/components/MathContent";
@@ -17,7 +17,8 @@ export default async function CheckupPage({ params }: PageProps<"/checkup/[sessi
   const { sessionId } = await params;
 
   const user = await getCurrentUser();
-  if (!user) redirect("/giris");
+  // Girişten sonra bu sayfaya dönülsün (?sonra=, lib/auth.ts girisAdresi).
+  if (!user) redirect(await girisAdresi());
 
   let session;
   try {

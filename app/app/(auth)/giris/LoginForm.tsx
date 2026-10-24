@@ -11,12 +11,14 @@ import { Button } from "@/components/tailadmin/ui/Button";
 
 const initial: FormState = {};
 
-export function LoginForm() {
+/** `sonra`: girişten sonra dönülecek yol (sayfa süzdü, eylem yeniden süzer). */
+export function LoginForm({ sonra }: { sonra?: string | null }) {
   const [state, formAction, pending] = useActionState(loginAction, initial);
 
   return (
     <form action={formAction} className="space-y-5">
       {state.error ? <Alert variant="error">{state.error}</Alert> : null}
+      {sonra ? <input type="hidden" name="sonra" value={sonra} /> : null}
 
       <Field label="E-posta" error={state.fields?.email}>
         <Input

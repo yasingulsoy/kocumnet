@@ -37,6 +37,24 @@ import {
 } from "@/lib/checkup/content-limits";
 import { KILITLI_DENEME_SORUSU, kilitliDenemeler } from "@/lib/checkup/mock";
 import { KILITLI_DENEME_KONU_MESAJI, KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
+import { NOT_SINIRI, notuTemizle } from "@/lib/checkup/question-note";
+import { HAZIRLIK_ALANLARI, atlamaOzeti, satirHazirligi, yayinaAl } from "@/lib/checkup/yayin-kapisi";
+import {
+  KENDI_SORUSUNU_ONAYLAYABILIR,
+  kaynakOneki,
+  kendiSorusuMu,
+  kuyrukAdresi,
+  kuyrukSorgusu,
+  yenisininDurumu,
+  type AtlamaOzeti,
+} from "@/lib/checkup/soru-akisi";
+import {
+  EKSIK_KISA,
+  eksikOzeti,
+  yayinaHazirMi,
+  type Hazirlik,
+  type KontrolMaddesi,
+} from "@/lib/checkup/shared/question-readiness";
 
 export interface QuestionFormState {
   error?: string;
@@ -83,6 +101,7 @@ const schema = z.object({
 });
 
 type QuestionInput = z.infer<typeof schema>;
+type KurulanSoru = Extract<ReturnType<typeof buildQuestion>, { data: unknown }>["data"];
 
 /** Formdan gelen ham alanları okur. */
 function readForm(formData: FormData) {
@@ -336,6 +355,30 @@ function revalidateQuestionScreens() {
   revalidatePath("/checkup/kazanimlar");
   revalidatePath("/checkup/havuz");
   revalidatePath("/checkup/sorular");
+  revalidatePath("/checkup/sorular/incele");
+}
+
+/**
+ * Formdan kaydedilecek sorunun "yayına hazır mı" listesi (shared/question-readiness.ts).
+ * Listedeki durum seçici, toplu yayın ve inceleme kuyruğu aynı kuralı
+ * veritabanındaki satıra uygular (lib/checkup/yayin-kapisi.ts).
+ */
+async function kayitHazirligi(input: QuestionInput, soru: KurulanSoru): Promise<Hazirlik> {
+  const [konu, kazanim] = await Promise.all([
+    db.topic.findUnique({ where: { id: input.topicId }, select: { examScope: true, examScopes: true } }),
+    input.objectiveId ? db.objective.findUnique({ where: { id: input.objectiveId }, select: { status: true } }) : null,
+  ]);
+  return yayinaHazirMi({
+    stem: soru.stem,
+    solution: soru.solution,
+    hints: soru.hints,
+    // Kayıtta yazılacak hata tipi (choiceRows): doğru şıkta ve listede olmayanda boş.
+    choices: choiceRows(soru.drafts, soru.errorTypes),
+    level: input.level || null,
+    kazanim: kazanim ? { arsivde: kazanim.status === "ARCHIVED" } : null,
+    examScopes: input.examScopes,
+    konu,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -361,6 +404,13 @@ export async function createQuestionAction(
   const seviyeHatasi = await levelFieldsError(parsed.data);
   if (seviyeHatasi) return { fields: seviyeHatasi };
 
+  // Yayın kapısı: eksiği olan soru doğrudan yayında kaydedilmez (taslakta serbest).
+  const yayinda = parsed.data.status === "PUBLISHED";
+  if (yayinda) {
+    const h = await kayitHazirligi(parsed.data, built.data);
+    if (!h.hazir) return { fields: { status: eksikOzeti(h.eksikler) } };
+  }
+
   const damga = staffStamp(auth.staff);
   let yeniId: string;
   try {
@@ -383,6 +433,7 @@ export async function createQuestionAction(
         examScopes: parsed.data.examScopes,
         createdByStaff: damga,
         updatedByStaff: damga,
+        ...(yayinda ? { publishedAt: new Date(), publishedByStaff: damga } : {}),
         choices: { create: choiceRows(built.data.drafts, built.data.errorTypes) },
       },
     });
@@ -403,16 +454,20 @@ export async function createQuestionAction(
   if (formData.get("sonra") === "yeni") {
     /*
      * "Kaydet ve yenisini ekle": yazar aynı konudan art arda soru giriyor.
-     * Sınıflandırma (konu, seviye, kazanım, zorluk, durum, süre) taşınır;
-     * metin, şıklar, çözüm ve kaynak boş gelir.
+     * Sınıflandırma (konu, seviye, kazanım, zorluk, süre, hedef sınav) ve
+     * kaynağın numarasız öneki ("2023 TYT / 12" → "2023 TYT / ") taşınır;
+     * metin, şıklar ve çözüm boş gelir. DURUM TAŞINMAZ (soru-akisi.ts
+     * yenisininDurumu): yeni soru taslak ya da incelemede başlar.
      */
     const u = new URLSearchParams({
       kaydedildi: yeniId,
       konuId: parsed.data.topicId,
       zorluk: String(parsed.data.difficulty),
-      durum: parsed.data.status,
+      durum: yenisininDurumu(parsed.data.status),
       sure: String(parsed.data.targetTimeSeconds),
     });
+    const onek = kaynakOneki(parsed.data.sourceRef ?? "");
+    if (onek) u.set("kaynak", onek);
     if (parsed.data.level) u.set("seviye", parsed.data.level);
     if (parsed.data.objectiveId) u.set("kazanimId", parsed.data.objectiveId);
     if (parsed.data.examScopes.length) u.set("hedef", parsed.data.examScopes.join(","));
@@ -479,6 +534,36 @@ export async function updateQuestionAction(
     }
     if (Object.keys(kilitHatalari).length) return { fields: kilitHatalari };
   }
+
+  /*
+   * Yayın kapısı. Yayına GİRİŞTE bütün liste geçmeli. Zaten yayında olan soru
+   * için yalnızca bu kayıtla YENİ bir eksik açılamaz (ör. çözümü silmek):
+   * kuraldan önce yayına girmiş eksik bir soru, eksiğini gidermek ya da başka
+   * bir düzeltme için kaydedilebilsin. Kilitli denemedeki soru yayından
+   * alınamadığı için ona da bu yol gerekli.
+   */
+  const yayinaGiriyor = parsed.data.status === "PUBLISHED" && mevcut.status !== "PUBLISHED";
+  if (parsed.data.status === "PUBLISHED") {
+    const yeni = await kayitHazirligi(parsed.data, built.data);
+    if (yayinaGiriyor && !yeni.hazir) return { fields: { status: eksikOzeti(yeni.eksikler) } };
+    if (!yayinaGiriyor && !yeni.hazir) {
+      const eski = await db.question.findUnique({ where: { id }, select: HAZIRLIK_ALANLARI });
+      const eskiKodlar = new Set(eski ? satirHazirligi(eski).eksikler.map((e) => e.kod) : []);
+      const acilan = yeni.eksikler.filter((e) => !eskiKodlar.has(e.kod));
+      if (acilan.length) {
+        return {
+          fields: {
+            status:
+              "Yayındaki soruda bu değişiklik yapılamaz: " +
+              acilan.map((e) => EKSIK_KISA[e.kod]).join(", ") +
+              ". Eksiği gider" +
+              (kilit.has(id) ? "." : " ya da soruyu önce taslağa çek."),
+          },
+        };
+      }
+    }
+  }
+  const damga = staffStamp(auth.staff);
 
   /*
    * Cevap anahtarı değiştiyse sürüm artar (SessionItem.questionVersion, PLAN §4):
@@ -565,7 +650,9 @@ export async function updateQuestionAction(
           level: parsed.data.level || null,
           objectiveId: parsed.data.objectiveId || null,
           examScopes: parsed.data.examScopes,
-          updatedByStaff: staffStamp(auth.staff),
+          updatedByStaff: damga,
+          // Kim yayına aldı: yalnızca yayına girişte (son onay; yayından çıkınca silinmez).
+          ...(yayinaGiriyor ? { publishedAt: new Date(), publishedByStaff: damga } : {}),
           version: anahtarDegisti ? mevcut.version + 1 : mevcut.version,
         },
       }),
@@ -583,6 +670,8 @@ export async function updateQuestionAction(
 
   revalidateQuestionScreens();
   revalidatePath("/checkup/sorular/" + id);
+  // İnceleme kuyruğundan "Düzenle" ile gelindiyse kuyruğa, aynı soruya dönülür.
+  if (formData.has("kuyruk")) redirect(kuyrukAdresi(kuyrukSorgusu(String(formData.get("kuyruk"))), { id }));
   const geri = listeSorgusu(String(formData.get("geri") ?? ""));
   const sonrakiId = String(formData.get("sonrakiId") ?? "");
   // "Kaydet ve sonrakine geç": listedeki sıradaki soru (form açılırken hesaplandı).
@@ -608,14 +697,26 @@ export async function setQuestionStatusAction(
     return { ok: false, error: "Geçersiz istek." };
   }
 
-  // Kilitli denemenin sorusu yayından alınamaz; koşul güncellemenin İÇİNDE
-  // (denetim ile yazma arasında deneme başlatılsa da düşmesin).
+  // Yayına alma kapıdan geçer (lib/checkup/yayin-kapisi.ts): hazır değilse eksikler söylenir.
+  if (status === "PUBLISHED") {
+    const s = await yayinaAl([id], staffStamp(auth.staff));
+    if (s.alinan.length || s.zatenYayinda) {
+      revalidateQuestionScreens();
+      return { ok: true };
+    }
+    if (s.atlanan.length) return { ok: false, error: eksikOzeti(s.atlanan[0].hazirlik.eksikler) };
+    return { ok: false, error: s.degisen ? "Soru bu arada değişti; sayfayı yenileyip tekrar dene." : "Soru bulunamadı." };
+  }
+
+  // Buradan sonrası yayından alma ya da yayın dışı durumlar. Kilitli denemenin
+  // sorusu yayından alınamaz; koşul güncellemenin İÇİNDE (denetim ile yazma
+  // arasında deneme başlatılsa da düşmesin).
   const sonuc = await db.question.updateMany({
-    where: { id, ...(status !== "PUBLISHED" ? { NOT: KILITLI_DENEME_SORUSU } : {}) },
+    where: { id, NOT: KILITLI_DENEME_SORUSU },
     data: { status, updatedByStaff: staffStamp(auth.staff) },
   });
   if (sonuc.count === 0) {
-    const kilitli = status !== "PUBLISHED" && (await db.question.count({ where: { id, ...KILITLI_DENEME_SORUSU } })) > 0;
+    const kilitli = (await db.question.count({ where: { id, ...KILITLI_DENEME_SORUSU } })) > 0;
     return { ok: false, error: kilitli ? KILITLI_DENEME_MESAJI : "Soru bulunamadı." };
   }
 
@@ -635,7 +736,7 @@ const TOPLU_SINIR = 100;
 export async function setQuestionsStatusAction(
   ids: unknown,
   status: string
-): Promise<{ ok: boolean; count?: number; kilitli?: number; error?: string }> {
+): Promise<{ ok: boolean; count?: number; kilitli?: number; atlanan?: AtlamaOzeti; degisen?: number; error?: string }> {
   const auth = await staffForAction(CONTENT_ROLES);
   if (!auth.ok) return { ok: false, error: auth.error };
   if (
@@ -649,18 +750,35 @@ export async function setQuestionsStatusAction(
   }
 
   const idler = [...new Set(ids as string[])];
+
+  /*
+   * Yayına alma kapıdan geçer: hazır olanlar yayına girer, olmayanlar atlanır
+   * ve neden atlandıkları türüne göre sayılır ("çözüm yok (2)"). Liste bu
+   * özetten `?eksik=` süzgecine bağlantı kurar.
+   */
+  if (status === "PUBLISHED") {
+    const s = await yayinaAl(idler, staffStamp(auth.staff));
+    revalidateQuestionScreens();
+    return {
+      ok: true,
+      count: s.alinan.length,
+      kilitli: 0,
+      ...(s.atlanan.length ? { atlanan: atlamaOzeti(s.atlanan) } : {}),
+      ...(s.degisen ? { degisen: s.degisen } : {}),
+    };
+  }
+
   /*
    * Yayından alırken kilitli denemenin soruları ATLANIR (ötekiler değişir) ve
    * kaç tane olduğu döner: istemci önceden uyarıyor, ama denetim ile yazma
    * arasında deneme başlatılmış olabilir. Koşul güncellemenin içinde.
    */
-  const kaldiriliyor = status !== "PUBLISHED";
   const sonuc = await db.question.updateMany({
-    where: { id: { in: idler }, status: { not: status }, ...(kaldiriliyor ? { NOT: KILITLI_DENEME_SORUSU } : {}) },
+    where: { id: { in: idler }, status: { not: status }, NOT: KILITLI_DENEME_SORUSU },
     data: { status, updatedByStaff: staffStamp(auth.staff) },
   });
   // Atlananlar yayında kaldığı için güncellemeden sonra sayılabilir.
-  const kilitli = kaldiriliyor ? await db.question.count({ where: { id: { in: idler }, ...KILITLI_DENEME_SORUSU } }) : 0;
+  const kilitli = await db.question.count({ where: { id: { in: idler }, ...KILITLI_DENEME_SORUSU } });
 
   revalidateQuestionScreens();
   return { ok: true, count: sonuc.count, kilitli };
@@ -739,4 +857,130 @@ export async function videoBaglantisiAction(
   if (typeof raw !== "string" || raw.length > VIDEO_ADRES_SINIRI) return { ok: false, error: "Video adresi çok uzun." };
   const v = parseVideoUrl(raw.trim());
   return v ? { ok: true, url: v.canonicalUrl } : { ok: false, error: VIDEO_HATASI };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Yayın denetim listesi (formdaki canlı liste) ve inceleme kuyruğu
+// ─────────────────────────────────────────────────────────────
+
+export type HazirlikYaniti = { ok: true; hazir: boolean; maddeler: KontrolMaddesi[] } | { ok: false; error: string };
+
+/** Formun canlı listesinde bir alan için üst sınır: kayıt yolu kendi sınırını ayrıca uygular. */
+const CANLI_ALAN_SINIRI = 20_000;
+
+/**
+ * Soru formunun "Yayına hazır mı" canlı listesi. Kural shared/question-readiness.ts
+ * ve o modül istemciye alınamıyor (parmak izi node:crypto kullanıyor), bu
+ * yüzden form yazdıkça (gecikmeli) buraya sorar. Kayıt aynı kuralı ayrıca
+ * uygular; bu yalnızca anında geri bildirim.
+ *
+ * Şıklar formdaki gibi gelir (5 kutu): son dolu kutuya kadar alınır, aradaki
+ * boş kutu "boş şık" olarak listede görünür (kayıt zaten reddeder).
+ */
+export async function yayinHazirligiAction(girdi: unknown): Promise<HazirlikYaniti> {
+  const auth = await staffForAction(ANY_STAFF);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const g = (girdi ?? {}) as Record<string, unknown>;
+  const metin = (v: unknown) => (typeof v === "string" && v.length <= CANLI_ALAN_SINIRI ? v : null);
+  const liste = (v: unknown, n: number) =>
+    Array.isArray(v) && v.length <= n && v.every((x) => metin(x) !== null) ? (v as string[]) : null;
+  const stem = metin(g.stem);
+  const solution = metin(g.solution);
+  const choices = liste(g.choices, 5);
+  const errorTypes = liste(g.errorTypes, 5);
+  const hints = liste(g.hints, MAX_HINTS + 2);
+  const examScopes = liste(g.examScopes, EXAM_SCOPES.length);
+  const level = metin(g.level) ?? "";
+  const topicId = metin(g.topicId)?.slice(0, 64) ?? "";
+  const objectiveId = metin(g.objectiveId)?.slice(0, 64) ?? "";
+  const correctIndex = typeof g.correctIndex === "number" ? g.correctIndex : -1;
+  if (stem === null || solution === null || !choices || !errorTypes || !hints || !examScopes) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+
+  const sonDolu = choices.map((c) => c.trim() !== "").lastIndexOf(true);
+  const [konu, kazanim] = await Promise.all([
+    topicId ? db.topic.findUnique({ where: { id: topicId }, select: { examScope: true, examScopes: true } }) : null,
+    objectiveId ? db.objective.findUnique({ where: { id: objectiveId }, select: { status: true } }) : null,
+  ]);
+  const h = yayinaHazirMi({
+    stem: markupToContent(stem),
+    solution: solution.trim() ? markupToContent(solution) : null,
+    hints: hints.filter((x) => x.trim()).map(markupToContent),
+    choices: choices.slice(0, sonDolu + 1).map((c, i) => ({
+      content: markupToContent(c),
+      isCorrect: i === correctIndex,
+      errorType: errorTypes[i] || null,
+    })),
+    level: level || null,
+    kazanim: kazanim ? { arsivde: kazanim.status === "ARCHIVED" } : null,
+    examScopes: examScopes.filter(isExamScope),
+    konu,
+  });
+  return { ok: true, hazir: h.hazir, maddeler: h.maddeler };
+}
+
+/**
+ * İnceleme kuyruğu › Onayla: soruyu yayına alır, kapı geçerli
+ * (lib/checkup/yayin-kapisi.ts). Yetki listedeki durum değiştirmeyle aynı
+ * (içerik rolleri). Yazanın kendi sorusunu onaylaması şimdilik serbest
+ * (soru-akisi.ts KENDI_SORUSUNU_ONAYLAYABILIR, hocaya sorulacak).
+ */
+export async function incelemeOnaylaAction(id: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof id !== "string" || !/^[a-z0-9]{1,64}$/i.test(id)) return { ok: false, error: "Geçersiz istek." };
+
+  if (!KENDI_SORUSUNU_ONAYLAYABILIR) {
+    const q = await db.question.findUnique({ where: { id }, select: { createdByStaff: true } });
+    if (q && kendiSorusuMu(q.createdByStaff, auth.staff.id)) {
+      return { ok: false, error: "Kendi yazdığın soruyu onaylayamazsın; başka bir inceleyici onaylamalı." };
+    }
+  }
+
+  const s = await yayinaAl([id], staffStamp(auth.staff));
+  if (s.atlanan.length) return { ok: false, error: eksikOzeti(s.atlanan[0].hazirlik.eksikler) };
+  if (!s.alinan.length && !s.zatenYayinda) {
+    return { ok: false, error: s.degisen ? "Soru bu arada değişti; ekranı yenileyip tekrar bak." : "Soru bulunamadı." };
+  }
+  revalidateQuestionScreens();
+  revalidatePath("/checkup/sorular/" + id);
+  return { ok: true };
+}
+
+/** Düzeltme notunun başı: soru ekranındaki not listesinde ayırt edilsin. */
+const DUZELTME_ONEKI = "Düzeltme istendi: ";
+
+/**
+ * İnceleme kuyruğu › Düzeltme iste: not ZORUNLU (yazar neyi düzelteceğini
+ * bilsin). Not sorunun inceleme notlarına (QuestionNote) yazılır, soru
+ * Taslağa döner. İkisi tek işlemde ve yalnızca soru hâlâ İncelemedeyse:
+ * başka bir inceleyici aynı anda onayladıysa not da yazılmaz.
+ */
+export async function duzeltmeIsteAction(id: unknown, not: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await staffForAction(CONTENT_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (typeof id !== "string" || !/^[a-z0-9]{1,64}$/i.test(id) || typeof not !== "string" || not.length > NOT_SINIRI * 5) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+  const metin = notuTemizle(not);
+  if (!metin) return { ok: false, error: "Düzeltme notunu yaz: yazar neyi düzelteceğini bilsin." };
+  const sinir = NOT_SINIRI - DUZELTME_ONEKI.length;
+  if (metin.length > sinir) return { ok: false, error: `Not en fazla ${sinir} karakter olabilir (şu an ${metin.length}).` };
+
+  const damga = staffStamp(auth.staff);
+  const yazildi = await db.$transaction(async (tx) => {
+    const r = await tx.question.updateMany({ where: { id, status: "REVIEW" }, data: { status: "DRAFT", updatedByStaff: damga } });
+    if (r.count === 0) return false;
+    await tx.questionNote.create({ data: { questionId: id, body: DUZELTME_ONEKI + metin, authorStaff: damga } });
+    return true;
+  });
+  if (!yazildi) return { ok: false, error: "Bu soru artık incelemede değil; başka biri işlem yapmış olabilir." };
+
+  // Notun metni günlüğe yazılmaz (actions/notes.ts ile aynı kural); yalnızca kim, hangi soru.
+  console.info("[checkup] düzeltme istendi — soru " + id + " · " + damga);
+  revalidateQuestionScreens();
+  revalidatePath("/checkup/sorular/" + id);
+  return { ok: true };
 }

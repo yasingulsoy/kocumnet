@@ -31,8 +31,9 @@ export const menu: NavSection[] = [
       { ...GELISIM, label: "Gelişim" },
     ],
   },
-  // Koçla olan işler. Telefonda alt çubukta yok (beş sekme sığıyor); ödev
-  // "Bugün" kartında, yeni cevap ana sayfadaki kartta çıkıyor.
+  // Koçla olan işler. Telefonda alt çubukta kendi sekmeleri yok (beş sekme
+  // sığıyor): ana sayfada "Ödevlerin" satırı ve koçun cevabı kartı, profilde
+  // "Koçum" bölümü var; bu sayfalarda "Profil" sekmesi yanar.
   {
     title: "Koçum",
     items: [
@@ -43,11 +44,15 @@ export const menu: NavSection[] = [
   { title: "Hesap", items: [{ href: "/profil", label: "Profil", icon: <UserRound /> }] },
 ];
 
-/** Telefonda alt sekmeler: kısa adlar (beş sekme 375 piksele sığsın). */
+/**
+ * Telefonda alt sekmeler: kısa adlar (beş sekme 375 piksele sığsın). Altıncı
+ * sekme yok: ödevler ve koça sorular profildeki "Koçum" bölümünden açılıyor,
+ * o sayfalardayken "Profil" sekmesi yanıyor (öğrenci nerede olduğunu bilsin).
+ */
 export const altMenu: NavItem[] = [
   { href: "/panel", label: "Ana sayfa", icon: <LayoutDashboard /> },
   { ...TESTLER, label: "Testler" },
   { href: "/defter", label: "Defter", icon: <NotebookPen /> },
   { ...GELISIM, label: "Gelişim" },
-  { href: "/profil", label: "Profil", icon: <UserRound /> },
+  { href: "/profil", label: "Profil", icon: <UserRound />, match: ["/odevler", "/sorularim"] },
 ];

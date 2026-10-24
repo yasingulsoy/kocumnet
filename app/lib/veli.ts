@@ -3,7 +3,7 @@
  * Veritabanı tarafı lib/veli-raporu.ts, eylemler lib/actions/veli.ts,
  * sayfa app/veli/[token].
  *
- * Karar (HOCAYA-SORULAR 10.10 bekliyor): veli yalnızca GENEL TABLOYU görür.
+ * Karar (Hocaya sorular: motivasyon.veli-kapsam bekliyor): veli yalnızca GENEL TABLOYU görür.
  * Soru, cevap, çözüm, e-posta ve başka kişisel bilgi görünmez. Karar
  * değişirse önce lib/veli-raporu.ts'teki VeliRaporu tipi ve /gizlilik değişir.
  */

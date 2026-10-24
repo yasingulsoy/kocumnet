@@ -158,7 +158,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Ön lisans mezunu",
     mathQuestionCount: 30,
     mockDurationMinutes: 35,
-    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (Hocaya sorular: sinav.kurallar) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 18,
@@ -172,7 +172,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Ön lisans mezunu / son sınıf",
     mathQuestionCount: 60,
     mockDurationMinutes: 90,
-    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (Hocaya sorular: sinav.kurallar) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 35,
@@ -186,7 +186,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Lisans mezunu",
     mathQuestionCount: 50,
     mockDurationMinutes: 75,
-    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (Hocaya sorular: sinav.kurallar) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 30,
@@ -243,7 +243,7 @@ export function daysUntilExam(scope: string | null | undefined, now: Date): numb
 /**
  * Bu sınavda yanlışın bedeli var mı? Cezasız sınavda net = doğru sayısı ve
  * yan yana iki aynı sayı yazmak hata gibi görünüyor. Şu an bütün sınavlar
- * cezalı (KPSS, DGS ve ALES'te 0.25 bir varsayım, HOCAYA 1.1). Sonuç ekranı
+ * cezalı (KPSS, DGS ve ALES'te 0.25 bir varsayım, Hocaya sorular: sinav.kurallar). Sonuç ekranı
  * bunu değil OTURUMUN oranını kullanıyor: seviyeli aşamalar cezasız açılıyor.
  */
 export function hasPenalty(scope: string | null | undefined): boolean {

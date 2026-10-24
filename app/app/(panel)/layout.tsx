@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, girisAdresi } from "@/lib/auth";
 import { StudentShell } from "@/components/shell/StudentShell";
 
 /**
@@ -10,7 +10,8 @@ import { StudentShell } from "@/components/shell/StudentShell";
  */
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/giris");
+  // Girişten sonra bu sayfaya dönülsün (?sonra=, lib/auth.ts girisAdresi).
+  if (!user) redirect(await girisAdresi());
 
   /*
    * Tanışmadan panele girilmiyor: hangi sınava hazırlandığını bilmeden

@@ -8,6 +8,21 @@ sorular taslak girer, hatalılar atlanır. Geçmişten bir içe aktarma **geri
 alınabilir** (öğrenci testine girmiş soru silinmez). Örnek dosya:
 `scripts/fixtures/ornek-import.md`.
 
+Aynı ekranda üç indirme bağlantısı var: **Şablonu indir** (bu belge), **Örnek
+dosya** (3 soru, biri şekilli; örnek şekil ayrıca indirilir) ve **Konu ve
+kazanım kodları** (veritabanından o an üretilir, hep güncel).
+
+> **Pilot (24 Ekim 2026) — elle yazmayı kolaylaştıran esneklikler** (eski
+> dosyalar aynen geçer):
+> - Alan ve şık satırı `* ` yerine `- ` ile de başlayabilir:
+>   `- **Zorluk:** 2`, `- [x] B) 18`.
+> - İki nokta kalının dışında da olabilir: `* **Zorluk**: 2`.
+> - Hata tipi kodu yerine panelde görünen Türkçe adı yazılabilir:
+>   `(İşlem hatası: açıklama)`. Büyük-küçük harf ve Türkçe harf farkı önemsiz.
+> - Okunamayan satır (alana benzeyip tanınmayan, şık biçimine uymayan) artık
+>   sessizce düşmez: satır numarasıyla uyarılır.
+> - Hata kodu **taslak için isteğe bağlı, yayın için zorunlu** (Bölüm 1).
+
 Komut satırı karşılığı (aynı kurallar): `npm run import:questions -- dosya.md`
 (yalnızca denetler; `--uygula` ile kaydeder).
 
@@ -44,7 +59,7 @@ söylersen ona göre düzenlerim.
 | **Konu başına en az 3 soru** | Puanlama 2 soruda seviye verir ama "düşük güven" diye işaretler; haftalık plana ancak 3 soruda ölçülen konu girer. 2 soruyla öğrenci "zayıfsın" yazısını görür, ne çalışacağını göremez. |
 | **Her soru tek bir konuya ait** | Konu haritası buna dayanıyor. Karma soru yazılacaksa ağırlık merkezi hangi konuysa o. |
 | **Şık sayısı: A–E.** LGS'de A–D | LGS 4 şıklıdır; 5 şık yazmak sınav gerçeğini bozar. |
-| **Her yanlış şıkta hata kodu zorunlu** | "Yanlışlarının ortak yanı" ekranı bu kodlarla çalışır. Kod yoksa o soru teşhise katkı vermez. |
+| **Her yanlış şıkta hata kodu: yayın için zorunlu** | "Yanlışlarının ortak yanı" ekranı bu kodlarla çalışır. Kod yoksa o soru teşhise katkı vermez. Taslak için isteğe bağlı: kodu eksik soru uyarıyla **taslak** girer ama yayına alınamaz (Bölüm 9, "Yayına hazır mı"). |
 | **Doğru cevap iki yerde yazılır** | `[x]` işareti ve `Doğru Şık` satırı. İkisi çelişirse içe aktarma **durur**. Cevap anahtarı hatası sessizce geçmesin diye bilerek çift yazılıyor. |
 
 ---
@@ -162,6 +177,10 @@ yargılarından hangileri kesinlikle doğrudur?
 
 Metinde gerçek dolar işareti gerekiyorsa `\$` yaz.
 
+**Ondalık sayı** virgülle, boşluksuz yazılır: `$3,5$`. Ekranda "3,5" bitişik
+görünür (formül çizerken virgül sayının parçası sayılır). Boşluklu `$3, 5$`
+liste ya da koordinat yazımıdır, "3, 5" görünür: `$A(3, 5)$`.
+
 **Çözümü adım adım** yazmak için adımları tek başına bir `---` satırıyla ayır.
 Öğrenci çözümü adım adım açar ("Adım 1/3"):
 
@@ -250,8 +269,9 @@ yeni konu gerekiyorsa önce bana söyle, ağaca ekleyeyim.
 | `tablo-grafik-yorumlama` | Tablo - Grafik Yorumlama |
 | `sayisal-mantik` | Sayısal Mantık |
 
-Diğer sınavların konu kodları için: `app/prisma/seed.ts` içindeki ağaç, ya da
-yönetim panelinde **Check-up → Havuz** ekranı (her konunun kodu orada yazılı).
+Bütün sınavların konu kodları ve kayıtlı kazanım kodları: yönetim panelinde
+**Check-up → Sorular → Toplu içe aktar** ekranındaki **Konu ve kazanım kodları**
+dosyası. Veritabanından o an üretilir, her zaman güncel.
 
 ### Sınav kodları (`Hedef Sınav` alanı için)
 
@@ -267,17 +287,27 @@ Her yanlış şıkta, parantez içinde **önce kod**, sonra açıklama:
 * [ ] A) 21 (EKSIK_OKUMA: "pozitif tam sayı" şartı atlanmış, b=0 alınmış)
 ```
 
-| Kod | Ne zaman |
-| --- | --- |
-| `ISLEM_HATASI` | Yol doğru, dört işlemde kayıp |
-| `ISARET_HATASI` | Eksi işareti / parantez açma hatası |
-| `TERS_ISLEM` | Toplama yerine çıkarma, tersine oran gibi |
-| `KAVRAM_YANILGISI` | Tanımı yanlış biliyor |
-| `EKSIK_OKUMA` | Soruda verilen bir koşulu atlamış |
-| `BIRIM_HATASI` | dakika/saat, cm/m karışıklığı |
-| `YAKLASIK_DEGER` | Erken yuvarlama |
-| `FORMUL_KARISTIRMA` | Benzer iki formülü karıştırmış |
-| `DIGER` | Yukarıdakilerin hiçbiri (mümkün olduğunca kullanma) |
+Kod yerine panelde görünen Türkçe adı da yazabilirsin; büyük-küçük harf ve
+Türkçe harf farkı önemsiz (`İşlem hatası`, `islem hatasi`, `ISLEM HATASI` aynı):
+
+```
+* [ ] A) 21 (Eksik okuma: "pozitif tam sayı" şartı atlanmış)
+```
+
+Kod taslak için isteğe bağlı, **yayın için zorunlu**. Kodu eksik şık uyarı
+verir, soru taslak girer; kod girilene kadar yayına alınamaz.
+
+| Kod | Türkçe adı | Ne zaman |
+| --- | --- | --- |
+| `ISLEM_HATASI` | İşlem hatası | Yol doğru, dört işlemde kayıp |
+| `ISARET_HATASI` | İşaret hatası | Eksi işareti / parantez açma hatası |
+| `TERS_ISLEM` | Ters işlem | Toplama yerine çıkarma, tersine oran gibi |
+| `KAVRAM_YANILGISI` | Kavram yanılgısı | Tanımı yanlış biliyor |
+| `EKSIK_OKUMA` | Eksik okuma | Soruda verilen bir koşulu atlamış |
+| `BIRIM_HATASI` | Birim hatası | dakika/saat, cm/m karışıklığı |
+| `YAKLASIK_DEGER` | Yaklaşık değer | Erken yuvarlama |
+| `FORMUL_KARISTIRMA` | Formül karıştırma | Benzer iki formülü karıştırmış |
+| `DIGER` | Diğer | Yukarıdakilerin hiçbiri (mümkün olduğunca kullanma) |
 
 `DIGER` seçilen şık için öğrenciye tavsiye üretilmez — gerçekten başka
 karşılığı yoksa kullan.
@@ -339,7 +369,8 @@ almaz ve satır numarasıyla rapor eder**:
 1. `Konu Kodu` listede yok
 2. Doğru şık yok, ya da birden fazla `[x]` var
 3. `[x]` ile `Doğru Şık` satırı çelişiyor
-4. Bir yanlış şıkta hata kodu yok ya da kod listede yok
+4. Bir yanlış şıktaki hata kodu listede yok (yazım hatası; kodun **hiç yazılmaması**
+   ret değil, uyarı)
 5. Aynı `ID` daha önce girilmiş
 6. **Soru metni bire bir aynı** (farklı ID'yle bile) — aynı soru iki kez havuza
    girerse öğrenci aynı soruyu iki testte görür, istatistik bölünür
@@ -360,7 +391,11 @@ almaz ve satır numarasıyla rapor eder**:
 yazar, panel hepsini gösterir:
 
 - bir kazanımın tek Seviye 1 sorusu varsa (telafi turunda boş kalır),
+- bir yanlış şıkta hata kodu yok (soru taslak girer, yayına alınamaz),
 - tanınmayan alan adı (ör. yazım hatası: `Hedef Sınavlar`) ya da v2'den kalan alan,
+- okunamayan satır (satır numarasıyla): alana benzeyip tanınmayan satır
+  (`Zorluk: 2` gibi kalınsız yazım) ya da `Seçenekler` altında şık biçimine
+  uymayan satır,
 - `Çözüm Açıklaması` boş,
 - boş bırakılmış `İpucu` alanı (yok sayılır),
 - formül çizilemiyor (öğrenci kırmızı hata metni görür),
@@ -371,6 +406,21 @@ Panel her sorunun **bütün** hatalarını ve uyarılarını tek seferde göster
 komut satırı her reddedilen soru için ilk hatayı yazar.
 
 Rapor: `42 soru alındı, 3 soru reddedildi` + her ret için sebep.
+
+### Yayına hazır mı
+
+Panel bir soruyu yayına alırken (soru formu, liste, toplu yayın, inceleme
+kuyruğu ve içe aktarmadaki **Doğrudan yayına al**) aynı denetim listesine bakar:
+
+- çözüm yazılmış,
+- her yanlış şıkta hata tipi var,
+- seviye seçilmiş, Seviye 1 sorusunda kazanım var (arşivde değil),
+- formüller çiziliyor,
+- şıklar geçerli ve birbirinden farklı,
+- şık sayısı sınava uygun (LGS 4, diğerleri 5).
+
+Eksiği olan soru yayına alınmaz. **Doğrudan yayına al** işaretliyken hazır
+olmayan soru **İncelemede** girer ve raporda neyin eksik olduğu yazar.
 
 ---
 

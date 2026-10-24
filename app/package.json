@@ -31,6 +31,11 @@
     "test:plan": "tsx scripts/plan-test.mts",
     "test:hoca-cevap": "tsx scripts/hoca-cevap-test.mts",
     "test:hoca-icerik": "tsx scripts/hoca-icerik-test.mts",
+    "test:hesap": "tsx scripts/hesap-test.mts",
+    "test:ekran": "tsx scripts/ekran-test.mts",
+    "test:koc-panel": "tsx scripts/koc-panel-test.mts",
+    "test:pilot-panel": "tsx scripts/pilot-panel-test.mts",
+    "test:icerik-panel": "tsx scripts/icerik-panel-test.mts",
     "hoca:belge": "tsx scripts/hoca-belgesi.mts"
   },
   "dependencies": {

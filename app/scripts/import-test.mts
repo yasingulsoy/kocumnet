@@ -112,7 +112,6 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
     'İdeal Süre 10-600 arası tam sayı olmalı (şu an "hızlı").',
     "Seviye 2 ve 3 sorusuna Kazanım Kodu yazılmaz.",
     "Birden fazla doğru şık işaretli: A, B.",
-    "C şıkkında hata kodu yok (satır 79).",
     "E şıkkındaki hata kodu listede yok: UYDURMA_KOD.",
   ];
   check(
@@ -120,6 +119,9 @@ console.log("\nÖrnek dosya (fixtures/ornek-import.md):");
     JSON.stringify(q3.hatalar) === JSON.stringify(beklenen),
     q3.hatalar.join(" | ")
   );
+  // Pilot kararı: hata kodu taslakta isteğe bağlı, yayın için zorunlu. Eksik kod
+  // reddetmez, satır numaralı uyarı olur (listede olmayan kod yine reddedilir).
+  check("eksik hata kodu uyarı (satırıyla), ret değil", uyariVar(q3, "C şıkkında hata kodu yok (satır 79)"), q3.uyarilar.join(" | "));
   check("3. sorunun etiketi ID", q3.id === "ORNEK-HATALI-03" && q3.baslik === "Soru 03");
 
   const h1 = q1.hazir!;

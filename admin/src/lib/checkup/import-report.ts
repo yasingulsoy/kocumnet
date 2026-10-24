@@ -82,6 +82,11 @@ export interface RaporSorusu {
   } | null;
   /** Çift kayıt: aynı metnin dosyadaki ilk satırı ya da havuzdaki soru. */
   cift: { dosyadaSatir?: number; havuzdakiSoruId?: string } | null;
+  /**
+   * Geçerli sorunun "yayına hazır mı" eksikleri (sade cümleler). Boşsa
+   * "doğrudan yayına al" onu yayına alır; doluysa İncelemede girer.
+   */
+  yayinEksikleri: string[];
   /** Önizleme için ham yazım (görseller dosya adıyla). */
   onizleme: {
     soru: string;
@@ -104,6 +109,8 @@ export interface IceAktarmaRaporu {
     /** Geçerli sorulardan ipucu / video çözüm içerenler. */
     ipuclu: number;
     videolu: number;
+    /** Geçerli sorulardan "yayına hazır mı" listesinden geçenler. */
+    yayinaHazir: number;
   };
   /** Dosyanın geneline dair uyarılar (tek sorulu kazanım, kullanılmayan görsel…). */
   genelUyarilar: string[];
@@ -120,6 +127,8 @@ export type KayitYaniti =
       yazilan: number;
       atlanan: number;
       yayinda: boolean;
+      /** Doğrudan yayında: hazır olmadığı için İncelemede girenler. */
+      incelemede: number;
       yeniKazanimlar: string[];
     }
   | { ok: false; hata: string; rapor?: IceAktarmaRaporu };

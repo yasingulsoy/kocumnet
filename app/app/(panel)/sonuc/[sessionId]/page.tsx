@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
-import { getCheckupReview } from "@/lib/checkup";
+import { getCheckupReview, zorlukSorulur } from "@/lib/checkup";
+import { olcumDisi, yarimKaldi } from "@/lib/insights";
 import { errorPattern, dominantError, compareProgress } from "@/lib/diagnosis";
 import {
   bosStratejisi,
@@ -57,8 +58,12 @@ import { Badge } from "@/components/tailadmin/ui/Badge";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
 import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
+import { Alert } from "@/components/tailadmin/ui/Alert";
+import { hataMesaji } from "@/lib/hata-kodlari";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
 import { AnswerReview, type ReviewItemView } from "./AnswerReview";
+import { YarimTestKutusu } from "./YarimTestKutusu";
+import { ZorlukGeriBildirimi } from "./ZorlukGeriBildirimi";
 
 export const metadata: Metadata = { title: "Sonuç" };
 
@@ -78,8 +83,10 @@ function bant(oran: number) {
   return oran >= 0.75 ? "success" : oran >= 0.45 ? "warning" : "error";
 }
 
-export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionId]">) {
+export default async function ResultPage({ params, searchParams }: PageProps<"/sonuc/[sessionId]">) {
   const { sessionId } = await params;
+  // "5 soruluk test" gibi eylemler hatada buraya ?hata=<kod> ile döner; cümle sabit tablodan.
+  const eylemHatasi = hataMesaji((await searchParams).hata);
   const user = await requirePageUser();
 
   const [result, review] = await Promise.all([
@@ -105,6 +112,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             focusTopicId: true,
             focusTopic: { select: { name: true } },
             mode: true,
+            // Yarım test kuralı (lib/insights.ts yarimKaldi): blankCount yukarıda, endedBy burada.
+            endedBy: true,
+            perceivedDifficulty: true,
             levelRunId: true,
             levelRun: { select: { status: true } },
             stageLevel: true,
@@ -145,6 +155,16 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
 
   const odakKonu = retest ? result.session.focusTopicId : null;
 
+  /*
+   * Yarım kalan test (süre doldu ya da yeniden başlatıldı, yarısından azı
+   * işaretli): ölçüm değil. Ekran karar cümlesi, öncelikler, konu haritası ve
+   * kaynak göstermez; üstte sade bir kutu ve "Yeniden çöz", altında yalnızca
+   * sayılar ve cevap incelemesi (aşağıda, seviyeli aşamadan sonra).
+   */
+  const kayit = { ...result, endedBy: result.session.endedBy };
+  const yarim = !seviyeAsamasi && yarimKaldi(kayit);
+  const zorlukSor = zorlukSorulur({ ...kayit, kind: result.session.kind });
+
   // Bu haftanın sonucuysa haftalık planla bağı: plan bu sonuçtan mı çıktı?
   // Plan anahtarı TARİH (haftaBasi); computedAt ile karşılaştırma AN
   // (haftaBasiAni): pazartesi 00:00-03:00 arası önceki haftaya kaymasın.
@@ -152,15 +172,33 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const buHafta = haftaBasi(simdi);
   const buHaftaninSonucu = !retest && !seviyeAsamasi && result.computedAt >= haftaBasiAni(simdi);
 
-  const [onceki, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani, benzerler, alistirmaKalan, deftereGiren] =
+  /*
+   * Karşılaştırmalar (geçen deneme, kontrol testinin önceki ölçümü) yalnızca
+   * ÖLÇÜMLERLE: araya giren yarım ya da boş bir test "geçen deneme" sayılınca
+   * her konu "gelişti" görünüyordu. Ölçüm kuralı tek yerde (olcumDisi); sorgu
+   * bu yüzden sayıları ve endedBy'ı da seçer, birkaç aday getirir.
+   */
+  const olcumSecimi = {
+    topicBreakdown: true,
+    netScore: true,
+    correctCount: true,
+    wrongCount: true,
+    blankCount: true,
+    session: { select: { endedBy: true } },
+  } as const;
+  const olcumMu = (r: { correctCount: number; wrongCount: number; blankCount: number; session: { endedBy: string | null } }) =>
+    !olcumDisi({ ...r, endedBy: r.session.endedBy });
+
+  const [oncekiler, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani, benzerler, alistirmaKalan, deftereGiren] =
     await Promise.all([
-    prisma.checkupResult.findFirst({
+    prisma.checkupResult.findMany({
       where: {
         session: { userId: user.id, package: { slug: result.session.package.slug } },
         computedAt: { lt: result.computedAt },
       },
       orderBy: { computedAt: "desc" },
-      select: { topicBreakdown: true, netScore: true },
+      take: 5,
+      select: olcumSecimi,
     }),
     prisma.topic.findMany({
       where: { id: { in: breakdown.topics.map((t) => t.topicId) } },
@@ -172,7 +210,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           where: { session: { userId: user.id }, computedAt: { lt: result.computedAt } },
           orderBy: { computedAt: "desc" },
           take: 30,
-          select: { topicBreakdown: true },
+          select: olcumSecimi,
         })
       : Promise.resolve([]),
     // Kontrol testi: plandaki hangi işi kapattı (döngü burada kapanıyor).
@@ -198,8 +236,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
     prisma.notebookItem.count({ where: { userId: user.id, lastSessionId: sessionId, resolvedAt: null } }),
   ]);
 
+  const onceki = oncekiler.find(olcumMu) ?? null;
   const oncekiOran = (() => {
-    for (const r of eskiSonuclar) {
+    for (const r of eskiSonuclar.filter(olcumMu)) {
       const t = (r.topicBreakdown as unknown as TopicBreakdown).topics.find(
         (x) => x.topicId === odakKonu && x.asked > 0
       );
@@ -428,6 +467,51 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
     );
   }
 
+  if (yarim) {
+    return (
+      <div className="mx-auto w-full max-w-5xl animate-fade">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <Link
+            href="/gelisim"
+            className="inline-flex min-h-9 items-center gap-1.5 text-theme-sm font-medium text-gray-500 transition hover:text-gray-800 print:hidden"
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> Gelişim
+          </Link>
+        </div>
+        <PageBreadcrumb
+          pageTitle={baslik}
+          badge={
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Badge size="sm">{examShort(sinav)}</Badge>
+              <Badge size="sm" color="warning">
+                Yarım kaldı
+              </Badge>
+            </span>
+          }
+        />
+        <div className="space-y-4 md:space-y-6">
+          <YenidenPuanlamaBandi sessionId={sessionId} userId={user.id} />
+          <YarimTestKutusu
+            toplam={toplam}
+            isaretli={result.correctCount + result.wrongCount}
+            packageSlug={retest ? null : result.session.package.slug}
+            kontrolKonusu={
+              retest && result.session.focusTopicId
+                ? { id: result.session.focusTopicId, ad: result.session.focusTopic?.name ?? "Konu" }
+                : null
+            }
+          />
+          <div className="grid grid-cols-3 gap-4 md:gap-6">
+            <MetricCard compact label="Doğru" value={<span className="text-success-700">{result.correctCount}</span>} />
+            <MetricCard compact label="Yanlış" value={<span className="text-error-700">{result.wrongCount}</span>} />
+            <MetricCard compact label="Boş" value={result.blankCount} />
+          </div>
+          {incelemeKarti}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl animate-fade">
       {/* Geri bağlantısı ve yazdırma tek satırda: telefonda iz + başlık +
@@ -464,6 +548,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       />
 
       <div className="space-y-4 md:space-y-6">
+        {eylemHatasi ? <Alert variant="error">{eylemHatasi}</Alert> : null}
         <YenidenPuanlamaBandi sessionId={sessionId} userId={user.id} />
         {/* ── Özet: telefonda yatay, gösterge küçük ───────── */}
         <Card className="flex items-center gap-4 p-4 sm:gap-6 sm:p-6">
@@ -520,6 +605,11 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             </p>
           ) : null}
         </div>
+
+        {/* ── İsteğe bağlı tek dokunuş: test nasıl geldi (yalnızca ölçüm sayılan paket testi) ── */}
+        {zorlukSor ? (
+          <ZorlukGeriBildirimi sessionId={sessionId} ilkDeger={result.session.perceivedDifficulty} />
+        ) : null}
 
         {/* ── Kontrol testi: plan döngüsü burada kapanıyor ── */}
         {retest ? (

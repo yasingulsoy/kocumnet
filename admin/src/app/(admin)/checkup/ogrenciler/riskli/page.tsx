@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { UserRoundCheck } from "lucide-react";
+import { db } from "@/lib/checkup/db";
 import { MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { loadRiskliOgrenciler } from "@/lib/checkup/risk-data";
 import { RISK_ESIK, RISK_META, RISK_SIRASI, type RiskKey } from "@/lib/checkup/risk";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
 import { GateNotice } from "@/components/checkup/GateNotice";
+import { GrupSuzgeci } from "@/components/checkup/GrupSuzgeci";
 import { BULGU_COLOR, qs } from "@/components/checkup/ui";
 import { Avatar } from "@/components/tailadmin/ui/Avatar";
 import { Badge } from "@/components/tailadmin/ui/Badge";
@@ -31,7 +33,14 @@ export default async function RiskliOgrencilerPage({ searchParams }: PageProps<"
   const tur = typeof sp.tur === "string" && (RISK_SIRASI as string[]).includes(sp.tur) ? (sp.tur as RiskKey) : null;
 
   const now = new Date();
-  const { liste, toplam } = await loadRiskliOgrenciler(now);
+  // Grup süzgeci (?grup=): yalnızca etkin gruplar; bilinmeyen kimlik süzgeçsiz sayılır.
+  const gruplar = await db.studyGroup.findMany({
+    where: { archivedAt: null },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, _count: { select: { members: true } } },
+  });
+  const grup = typeof sp.grup === "string" ? (gruplar.find((g) => g.id === sp.grup) ?? null) : null;
+  const { liste, toplam } = await loadRiskliOgrenciler(now, { grupId: grup?.id });
   const gorunen = tur ? liste.filter((o) => o.bulgular.some((b) => b.key === tur)) : liste;
 
   return (
@@ -44,35 +53,41 @@ export default async function RiskliOgrencilerPage({ searchParams }: PageProps<"
         pageTitle="Riskli öğrenciler"
         description={
           (liste.length
-            ? trNumber(liste.length) + " öğrenci dikkat istiyor (" + trNumber(toplam) + " kayıtlı öğrenciden). "
+            ? trNumber(liste.length) +
+              " öğrenci dikkat istiyor (" +
+              (grup ? grup.name + " grubunun " + trNumber(toplam) + " öğrencisinden" : trNumber(toplam) + " kayıtlı öğrenciden") +
+              "). "
             : "") + "Kişisel veri: yalnızca yönetici ve müdür görür."
         }
       />
 
       <Card>
-        <div className="border-b border-gray-100 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-6">
           <SegmentedTabs
             label="Bulgu süzgeci"
             items={[
-              { key: "hepsi", href: BASE, label: "Tümü", active: !tur, count: liste.length },
+              { key: "hepsi", href: qs(BASE, { grup: grup?.id }), label: "Tümü", active: !tur, count: liste.length },
               ...RISK_SIRASI.map((k) => ({
                 key: k,
-                href: qs(BASE, { tur: k }),
+                href: qs(BASE, { tur: k, grup: grup?.id }),
                 label: RISK_META[k].baslik,
                 active: tur === k,
                 count: liste.filter((o) => o.bulgular.some((b) => b.key === k)).length,
               })),
             ]}
           />
+          <GrupSuzgeci action={BASE} gruplar={gruplar} secili={grup?.id ?? null} gizli={{ tur: tur ?? undefined }} />
         </div>
 
         {gorunen.length === 0 ? (
           <EmptyState
             icon={<UserRoundCheck />}
-            title={liste.length === 0 ? "Şu an riskli öğrenci yok" : "Bu bulguda öğrenci yok"}
+            title={liste.length === 0 ? (grup ? "Bu grupta riskli öğrenci yok" : "Şu an riskli öğrenci yok") : "Bu bulguda öğrenci yok"}
             description={
               liste.length === 0
-                ? "Herkes son " + RISK_ESIK.pasifGun + " günde etkin, planını büyük ölçüde yapıyor ve son testinde düşmemiş."
+                ? "Herkes son " +
+                  RISK_ESIK.pasifGun +
+                  " günde etkin, ödevlerini yapmış, planını büyük ölçüde yapıyor ve son testinde düşmemiş."
                 : undefined
             }
           />
@@ -111,7 +126,9 @@ export default async function RiskliOgrencilerPage({ searchParams }: PageProps<"
                     <TableCell nowrap>{sinif.length ? sinif.join(" · ") : "—"}</TableCell>
                     <TableCell nowrap title={trDate(o.sonEtkinlik, { time: true })}>
                       {relativeDay(o.sonEtkinlik, now)}
-                      <span className="block text-theme-xs">{o.testSayisi} test</span>
+                      <span className="block text-theme-xs" title="Ölçüm sayılan test; boş ve yarım kalanlar hariç">
+                        {o.testSayisi} test
+                      </span>
                     </TableCell>
                     <TableCell align="end" nowrap className="tabular">
                       {son === null ? (
@@ -163,8 +180,10 @@ export default async function RiskliOgrencilerPage({ searchParams }: PageProps<"
           ))}
         </ul>
         <p className="mt-4 border-t border-gray-100 pt-3 text-theme-xs">
-          Eşikler araç içindir ve tek dosyada durur (lib/checkup/risk.ts). Son etkinlik: son giriş, son test ve
-          kayıt tarihinin en yenisi. Hafta, öğrenci uygulamasındaki gibi pazartesi başlar (Türkiye saati).
+          Eşikler araç içindir ve tek dosyada durur (lib/checkup/risk.ts). Son etkinlik: uygulamada son görülme, son
+          giriş, son başlatılan test ya da alıştırma ve kayıt tarihinin en yenisi. Ödev yalnızca etkin gruplardan ve
+          öğrenci gruba son tarihten önce katıldıysa sayılır. Hafta, öğrenci uygulamasındaki gibi pazartesi başlar
+          (Türkiye saati).
         </p>
       </details>
     </>

@@ -103,8 +103,9 @@ export function VeliBaglantisi({ baglantilar }: { baglantilar: VeliBaglantisiOze
     <div className="space-y-5">
       <p className="text-sm leading-relaxed text-gray-500">
         Velin bu bağlantıyla giriş yapmadan genel durumunu görür: ilk adın, hedef sınavın, son ölçümün ve gelişimin,
-        güçlü ve zayıf konuların, son 5 testin, bu haftaki planının ne kadarını yaptığın ve yanlış defterinde kaç soru
-        beklediği. Soruları, cevaplarını ve e-postanı göremez.{" "}
+        güçlü ve zayıf konuların, son 5 testin, bu haftaki planının ne kadarını yaptığın, yanlış defterinde kaç soru
+        beklediği ve koçunun ödevlerinin adı, son tarihi ve yapıp yapmadığın. Soruları, cevaplarını ve e-postanı
+        göremez.{" "}
         <a href="/gizlilik#veli-baglantisi" className="font-medium text-brand-500 underline hover:text-brand-600">
           Ayrıntı
         </a>

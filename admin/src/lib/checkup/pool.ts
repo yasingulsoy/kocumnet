@@ -83,6 +83,58 @@ export async function loadTopicPool(): Promise<TopicPoolRow[]> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Havuzun tükenmesi: konu başına tekrar soru
+// ─────────────────────────────────────────────────────────────
+
+/** Havuz ekranı: son kaç günün oturumları. */
+export const HAVUZ_TUKENME_GUN = 14;
+
+/**
+ * Konu başına, son HAVUZ_TUKENME_GUN günde o konudan soru içeren oturum ve
+ * bunlardan o konuda öğrenciye daha önce gördüğü soru gelenler.
+ *
+ * Oturumun relaxedExposureCount'u (havuz yetmedi, tekrar engeli gevşedi)
+ * konuyu söylemiyor: 8 konulu bir pakette tek konunun havuzu bitince sekiz
+ * konu birden "tükeniyor" görünürdü. Bu yüzden gevşeyen oturumda konu başına
+ * bakılır: o konunun bir sorusu aynı öğrenciye pencere içinde (öğrenci
+ * uygulamasının tekrar engeliyle aynı gün sayısı) başka bir oturumda da
+ * sorulmuş mu. Deneme sayılmaz: soruları sabit, havuzdan seçilmiyor.
+ * Alıştırma sayılır: o da havuzdan seçiyor ve tekrar engeline yazıyor.
+ */
+export async function loadHavuzTukenmesi(
+  now: Date,
+  pencereGun: number
+): Promise<Map<string, { oturum: number; tekrarli: number }>> {
+  const bas = new Date(now.getTime() - HAVUZ_TUKENME_GUN * 86_400_000);
+  const rows = await db.$queryRaw<{ topicId: string; oturum: number; tekrarli: number }[]>`
+    WITH kalem AS (
+      SELECT s.id AS oturum, q."topicId",
+             (s."relaxedExposureCount" > 0 AND EXISTS (
+               SELECT 1
+               FROM "SessionItem" i2
+               JOIN "CheckupSession" s2 ON s2.id = i2."sessionId"
+               WHERE i2."questionId" = i."questionId"
+                 AND s2."userId" = s."userId"
+                 AND s2.id <> s.id
+                 AND s2."startedAt" < s."startedAt"
+                 AND s2."startedAt" >= s."startedAt" - (${pencereGun}::int * interval '1 day')
+             )) AS tekrar
+      FROM "CheckupSession" s
+      JOIN "Package" p ON p.id = s."packageId"
+      JOIN "SessionItem" i ON i."sessionId" = s.id
+      JOIN "Question" q ON q.id = i."questionId"
+      WHERE s."startedAt" >= ${bas} AND p.kind <> 'MOCK'
+    )
+    SELECT "topicId",
+           count(DISTINCT oturum)::int AS oturum,
+           (count(DISTINCT oturum) FILTER (WHERE tekrar))::int AS tekrarli
+    FROM kalem
+    GROUP BY "topicId"
+  `;
+  return new Map(rows.map((r) => [r.topicId, { oturum: Number(r.oturum), tekrarli: Number(r.tekrarli) }]));
+}
+
+// ─────────────────────────────────────────────────────────────
 // Paketler
 // ─────────────────────────────────────────────────────────────
 

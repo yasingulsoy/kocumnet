@@ -135,7 +135,7 @@ saf fonksiyonlar olarak duruyor; hepsi `npm run smoke` ile test ediliyor.
 | **RETEST işi elle işaretlenemez** | "40 soru çözdüm" demek kolay, 5 soruluk kontrol testini geçmek değil. Planın dürüstlüğü buna dayanır. |
 | **İş silinebilir** | Koç da "bu hafta vaktim yok" itirazını dinler. Kabul edilmiş plan yapılır. |
 | **Konu tekrar testi yalnızca ÖLÇÜLEN konuda** | Hem anlam (kontrol = yeniden ölçüm) hem güvenlik: bu uç nokta paket hakkına bakmaz, denetimsiz bırakılsa havuz beşer beşer boşaltılırdı. Günlük sınır `GUNLUK_TEKRAR_SINIRI`. |
-| **Boş bırakma tavsiyesi sınava göre** | Oran gerçek sınavın kuralından (`lib/exams.ts`), yalnızca paket testinde. Cezasız sınavda "boş bırak" demek net kaybettirir. KPSS, DGS ve ALES'te 0,25 bir varsayım (HOCAYA 1.1, Özgür Hoca'ya soruldu). |
+| **Boş bırakma tavsiyesi sınava göre** | Oran gerçek sınavın kuralından (`lib/exams.ts`), yalnızca paket testinde. Cezasız sınavda "boş bırak" demek net kaybettirir. KPSS, DGS ve ALES'te 0,25 bir varsayım (Hocaya sorular: sinav.kurallar, Özgür Hoca'ya soruldu). |
 | **Havuz daraldıysa söylenir** (`relaxedExposureCount`) | Şişmiş bir sonucu gerçek sanan öğrenci çalışmayı bırakır. |
 | **Kontrol testi ölçüm değil, doğrulama** | Eğilim grafiğine, tahmini nete ve panodaki genel başarıya girmez (konu haritasına girer). Sonuç ekranı paket kararı yerine `kontrolKarari` kullanır ve planla bağı gösterir: tek zayıf konuluk 5 soru genel çizgiyi sebepsiz düşürüyordu. |
 
@@ -184,7 +184,7 @@ verdiğinde yalnızca orası değişir. Veritabanı tarafı `lib/practice.ts` ve
 
 Öğrenci profilden velisine girişsiz, salt okunur, süreli bir rapor adresi verir
 (`/veli/<jeton>`; kopyala ya da WhatsApp). Kurallar `lib/veli.ts`'te, veri
-`lib/veli-raporu.ts`'te. Velinin ne göreceği hocaya soruldu (HOCAYA-SORULAR 10.10);
+`lib/veli-raporu.ts`'te. Velinin ne göreceği hocaya soruldu (Hocaya sorular: motivasyon.veli-kapsam);
 cevap gelene kadar **yalnızca genel tablo**.
 
 | Kural | Neden |

@@ -47,10 +47,15 @@ function Asama({ stage }: { stage: number }) {
  * Konu sırası "en acil önce": en erken vadeli maddesi olan konu üstte.
  * Soru gövdesi sunucuda çizilir (KaTeX istemciye gitmez); öğrenci bu
  * soruların çözümünü zaten sonuç ekranında gördü, defter yalnızca hatırlatır.
+ *
+ * `?konu=<id>`: o konunun grubu (`#konu-<id>`) kazanım özetleri AÇIK gelir;
+ * ana sayfadaki plan işi "Kazanım özetleri" bağlantısı buraya gönderir.
  */
-export default async function DefterPage() {
+export default async function DefterPage({ searchParams }: PageProps<"/defter">) {
   const user = await requirePageUser();
   const now = new Date();
+  const { konu } = await searchParams;
+  const acikKonu = typeof konu === "string" ? konu : null;
 
   const [durum, { acik, cozulen }] = await Promise.all([
     bugunkuTekrarDurumu(user.id, now),
@@ -60,13 +65,25 @@ export default async function DefterPage() {
     defterBenzerDurumu(user.id, acik),
     prisma.checkupSession.findMany({
       where: { id: { in: [...new Set(acik.map((m) => m.lastSessionId))] }, userId: user.id },
-      select: { id: true, kind: true, result: { select: { id: true } } },
+      select: {
+        id: true,
+        kind: true,
+        result: { select: { id: true } },
+        // "Testte gör" o soruya gitsin: sorunun testteki sırası (sonuç ekranında #soru-<sıra>).
+        items: { where: { questionId: { in: acik.map((m) => m.questionId) } }, select: { questionId: true, sortOrder: true } },
+      },
     }),
   ]);
   // "Testte gör" yalnızca sonuç ekranı olan testlerde (seviyeli aşamanın yok).
   const sonucuOlan = new Set(
     oturumlar.filter((o) => (o.kind === "PACKAGE" || o.kind === "TOPIC_RETEST") && o.result).map((o) => o.id)
   );
+  const sira = new Map(oturumlar.flatMap((o) => o.items.map((i) => [`${o.id}:${i.questionId}`, i.sortOrder] as const)));
+  /** Sonuç ekranında sorunun adresi; sıra bulunamazsa (soru testten çıkmış) testin başı. */
+  const testteGor = (sessionId: string, questionId: string) => {
+    const n = sira.get(`${sessionId}:${questionId}`);
+    return `/sonuc/${sessionId}${n === undefined ? "" : `#soru-${n}`}`;
+  };
 
   // Maddeler vadeye göre sıralı geliyor: konunun ilk görüldüğü yer en erken vadesi.
   type Grup = { ad: string; maddeler: typeof acik; kazanimlar: Map<string, KazanimOzeti> };
@@ -109,12 +126,21 @@ export default async function DefterPage() {
           </Card>
         ) : (
           [...gruplar].map(([topicId, g]) => (
-            <ComponentCard key={topicId} title={g.ad} desc={`${g.maddeler.length} madde`} flush>
-              {/* Kazanım özetleri kapalı gelir: defter bir hatırlatma listesi, ders notu değil. */}
+            <ComponentCard
+              key={topicId}
+              id={`konu-${topicId}`}
+              // Bağlantıyla gelinen grup yapışkan üst çubuğun altında kalmasın.
+              className="scroll-mt-[calc(var(--ta-header-h)+1rem)]"
+              title={g.ad}
+              desc={`${g.maddeler.length} madde`}
+              flush
+            >
+              {/* Kazanım özetleri kapalı gelir: defter bir hatırlatma listesi, ders notu değil.
+                  Plandan "Kazanım özetleri"yle gelinen konuda açık. */}
               {g.kazanimlar.size > 0 ? (
                 <div className="space-y-2 border-b border-gray-100 px-5 py-4 sm:px-6">
                   {[...g.kazanimlar].map(([id, k]) => (
-                    <KazanimKarti key={id} ad={k.ad} ozet={k.ozet} acilir />
+                    <KazanimKarti key={id} ad={k.ad} ozet={k.ozet} acilir acik={acikKonu === topicId} />
                   ))}
                 </div>
               ) : null}
@@ -137,7 +163,7 @@ export default async function DefterPage() {
                         ) : null}
                         {sonucuOlan.has(m.lastSessionId) ? (
                           <Link
-                            href={`/sonuc/${m.lastSessionId}`}
+                            href={testteGor(m.lastSessionId, m.questionId)}
                             className="ms-auto inline-flex min-h-9 items-center gap-1 font-medium text-brand-500 transition hover:text-brand-600"
                           >
                             Testte gör <ArrowUpRight className="size-3.5" aria-hidden />

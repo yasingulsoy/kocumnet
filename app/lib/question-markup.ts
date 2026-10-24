@@ -186,6 +186,22 @@ export function contentToMarkup(content: QuestionContent): string {
 }
 
 /**
+ * Formülün ÇİZİLEN hâli. Saklanan LaTeX kaynağı DEĞİŞMEZ; bu fonksiyon yalnızca
+ * KaTeX'e verilmeden hemen önce çağrılır (öğrenci tarafı MathContent, panelin
+ * önizlemesi ContentPreview ve formül denetimleri aynı dönüşümü görür).
+ *
+ * Ondalık virgül: KaTeX virgülü noktalama sayar ve arkasına boşluk koyar;
+ * `$3,5$` ekranda "3, 5" görünür. Rakam-virgül-rakam (arada boşluk YOK)
+ * `{,}` olur: `3{,}5` bitişik çizilir. Boşluklu `3, 5` koordinat ya da liste
+ * yazımıdır, dokunulmaz. Kaynağa yazılsaydı (markupToContent'te) düzenleme
+ * formunda yazarın yazmadığı `{,}` belirir, gidiş-dönüş değişir ve parmak izi
+ * (çift kayıt denetimi) eski sorularla tutmazdı; bu yüzden yalnızca çizimde.
+ */
+export function latexCizimi(latex: string): string {
+  return latex.replace(/(\d),(?=\d)/g, "$1{,}");
+}
+
+/**
  * Metne çevrilince geri dönüşü bozulacak bloklar var mı?
  * Varsa düzenleme formu kaydetmeye izin VERMEMELİ — yoksa içerik sessizce silinir.
  *

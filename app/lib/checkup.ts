@@ -13,7 +13,8 @@ import { planOlustur, retestIsiniKapat } from "@/lib/plan";
 import { konuSinavdaMi } from "@/lib/exam-scope";
 import { examShort } from "@/lib/exams";
 import { defteriGuncelle, dogruCikanlariKapat } from "@/lib/notebook";
-import { isaretsiz } from "@/lib/insights";
+import { olcumDisi, yarimKaldi } from "@/lib/insights";
+import type { SessionEndReason } from "@/lib/generated/prisma/enums";
 // İnceleme (getCheckupReview) için: video, kazanım özeti, bildirim ve koça soru durumu.
 import { parseVideoUrl, safeParseQuestionContent, type VideoRef } from "@/lib/question-content";
 import { raporDurumlari } from "@/lib/hata-bildirimi";
@@ -188,11 +189,12 @@ export async function startCheckup(
      * ne konu haritası. Cevaplar veritabanında duruyordu ama kimse
      * hesaplamıyordu.
      */
-    await submitCheckup(existing.id, userId).catch(async () => {
+    // Öğrenci bitirmedi, testi yeniden başlattı (RESTART): yarım kaldıysa ölçüm sayılmaz.
+    await submitCheckup(existing.id, userId, undefined, "RESTART").catch(async () => {
       // Koşul IN_PROGRESS: arada başka bir çağrı (cron, öbür sekme) bitirdiyse SUBMITTED'ı ezmesin.
       await prisma.checkupSession.updateMany({
         where: { id: existing.id, status: "IN_PROGRESS" },
-        data: { status: "EXPIRED" },
+        data: { status: "EXPIRED", endedBy: "RESTART" },
       });
     });
   }
@@ -994,13 +996,41 @@ function sonucAlanlari(score: CheckupScore) {
 }
 
 /**
+ * Öğrencinin "Bitir"i mi, süre bitince ekranın kendiliğinden bitirmesi mi?
+ *
+ * Sınav ekranı söyler (submitCheckupAction): düğmeye basıldıysa STUDENT, sayaç
+ * sıfıra indiyse TIMEOUT. Ekranın sözüne güvenmek güvenli: STUDENT demek
+ * testi ölçüme sokar, öğrenciye bir kazanç sağlamaz. Bekleyen cevaplar
+ * yazılırken süre geçmiş olsa da düğmeye basan öğrenci bitirmiştir.
+ * Ekran söylemediyse (eski sürümün açık sekmesi) saate bakılır: süre (kayıt
+ * toleransıyla) dolmadıysa öğrenci bitirmiştir.
+ */
+export function bitirmeSebebi(
+  istek: "STUDENT" | "TIMEOUT" | undefined,
+  expiresAt: Date,
+  now: Date
+): SessionEndReason {
+  if (istek) return istek;
+  return now.getTime() <= expiresAt.getTime() + KAYIT_TOLERANSI_MS ? "STUDENT" : "TIMEOUT";
+}
+
+/**
  * Testi kapatır ve sonucu hesaplar. Süre dolmuşsa da çalışır (otomatik bitiş):
  * öğrencinin cevapları kaybolmaz.
+ *
+ * `sebep` CheckupSession.endedBy'a yazılır: öğrencinin "Bitir"i (STUDENT,
+ * varsayılan), bakım işinin süresi dolan testi kapatması (TIMEOUT) ya da
+ * aynı testi yeniden başlatınca eskinin kapanması (RESTART). Öğrencinin
+ * bitirmediği ve yarısından azını işaretlediği test ölçüm sayılmaz
+ * (lib/insights.ts yarimKaldi): plan kurmaz, kontrol testi işini kapatmaz,
+ * deftere yalnızca işaretli yanlışları yazar. Seviyeli aşamanın kapısı
+ * yine değerlendirilir (boş bırakmak kapıdan kalmaktır).
  */
 export async function submitCheckup(
   sessionId: string,
   userId: string,
-  times?: Record<string, number>
+  times?: Record<string, number>,
+  sebep: SessionEndReason = "STUDENT"
 ): Promise<CheckupScore> {
   if (times && Object.keys(times).length > 0) {
     const oturum = await prisma.checkupSession.findUnique({
@@ -1075,7 +1105,7 @@ export async function submitCheckup(
     // Koşullu: yalnızca süren test kapanır (kilit varken de; koşul kuralın parçası).
     const kapanan = await tx.checkupSession.updateMany({
       where: { id: sessionId, status: "IN_PROGRESS" },
-      data: { status: "SUBMITTED", submittedAt: simdi },
+      data: { status: "SUBMITTED", submittedAt: simdi, endedBy: sebep },
     });
     if (kapanan.count === 0) return null;
 
@@ -1174,11 +1204,12 @@ export async function submitCheckup(
       // Bakım işi (level-run.ts seviyeliKapilariOnar) kapısız kalan aşamayı yeniden dener.
       console.error("Seviye kapısı değerlendirilemedi:", sessionId, e);
     }
-  } else if (!isaretsiz(score)) {
+  } else if (!olcumDisi({ ...score, endedBy: sebep })) {
     /*
-     * Hiç işaret konmadan kapanan test (boş gönderim, cron'un kapattığı
-     * terk edilmiş test) ölçüm değil: plandaki kontrol testi işini kapatmaz,
-     * bütün konuları "zayıf" sayan bir plan kurmaz (lib/insights.ts isaretsiz).
+     * Ölçüm sayılmayan test (lib/insights.ts olcumDisi): hiç işaret konmadan
+     * kapanan (boş gönderim) ya da yarım kalan (süre doldu / yeniden
+     * başlatıldı ve yarısından azı işaretli). Plandaki kontrol testi işini
+     * kapatmaz, bütün konuları "zayıf" sayan bir plan kurmaz.
      */
     try {
       if (session.kind === "TOPIC_RETEST") {
@@ -1210,7 +1241,8 @@ export async function submitCheckup(
    * Plandan ayrı korumada: biri başarısız olursa öteki yine yazılsın. İşlev
    * idempotent; aynı test ikinci kez işlense de madde çoğalmaz, ilerleme
    * sıfırlanmaz. Cron'un puanladığı süresi dolmuş testler de buradan geçer;
-   * işaretsiz testi defter kendisi atlar.
+   * işaretsiz testi defter kendisi atlar, yarım testten yalnızca işaretli
+   * yanlışları yazar (endedBy'ı oturumdan okur, yukarıda yazıldı).
    */
   try {
     await defteriGuncelle(sessionId);
@@ -1407,11 +1439,12 @@ export async function expireStaleSessions(): Promise<number> {
         // cevaplanmayanların cevabı açılmaz (lib/practice.ts).
         await prisma.checkupSession.updateMany({
           where: { id: s.id, status: "IN_PROGRESS" },
-          data: { status: "EXPIRED" },
+          data: { status: "EXPIRED", endedBy: "TIMEOUT" },
         });
         continue;
       }
-      await submitCheckup(s.id, s.userId);
+      // Süre doldu, öğrenci bitirmedi: yarım kaldıysa ölçüm sayılmaz.
+      await submitCheckup(s.id, s.userId, undefined, "TIMEOUT");
     } catch (e) {
       console.error("[expireStaleSessions] puanlanamadı:", s.id, e);
       // Yedek: oturum en azından kapansın (sınav ekranı "süre doldu" desin).
@@ -1419,7 +1452,7 @@ export async function expireStaleSessions(): Promise<number> {
       try {
         await prisma.checkupSession.updateMany({
           where: { id: s.id, status: "IN_PROGRESS" },
-          data: { status: "EXPIRED" },
+          data: { status: "EXPIRED", endedBy: "TIMEOUT" },
         });
       } catch (e2) {
         console.error("[expireStaleSessions] kapatılamadı:", s.id, e2);
@@ -1648,17 +1681,23 @@ export async function yenidenPuanlamaBilgisi(
  *   cevapları biliyor. İlk oturumu kâğıtta olan da havuza girmez: soruları
  *   kitapçıktan görmüş, sonraki ekran oturumu artık prova değil.
  * - Kâğıt havuza girmez: süreyi öğrenci kendisi tutuyor, aynı koşul değil.
- * - Hiç işaret konmadan gönderilen oturum havuza girmez: "cevaplara bakayım"
- *   diye boş gönderilen deneme dağılımın dibine sahte bir sıfır ekliyordu.
+ * - Ölçüm sayılmayan oturum havuza girmez (lib/insights.ts olcumDisi): "cevaplara
+ *   bakayım" diye boş gönderilen deneme dağılımın dibine sahte bir sıfır
+ *   ekliyordu; süresi dolan ve yarısından azı işaretli deneme de aynı. Kişinin
+ *   ikinci oturumu onun yerine geçmez: ilk oturumda soruları görmüştü.
  *
  * Satır başına yalnızca kullanıcı kimliği (kendi kaydını ayırmak için) ve net
  * döner; ekrana hiçbir kimlik gitmez (lib/deneme.ts karsilastir).
  */
 export async function denemeHavuzu(packageId: string): Promise<HavuzKaydi[]> {
-  const satirlar = await prisma.$queryRaw<{ userId: string; net: Prisma.Decimal }[]>`
-    SELECT ilk."userId", r."netScore" AS net
+  // Ölçüm kuralı SQL'de değil insights.ts'te (tek tanım): sorgu alanları getirir, süzgeç orada.
+  const satirlar = await prisma.$queryRaw<
+    { userId: string; net: Prisma.Decimal; dogru: number; yanlis: number; bos: number; endedBy: string | null }[]
+  >`
+    SELECT ilk."userId", r."netScore" AS net, r."correctCount" AS dogru, r."wrongCount" AS yanlis,
+           r."blankCount" AS bos, ilk."endedBy"::text AS "endedBy"
     FROM (
-      SELECT DISTINCT ON (s."userId") s.id, s."userId", s.mode, s.status
+      SELECT DISTINCT ON (s."userId") s.id, s."userId", s.mode, s.status, s."endedBy"
       FROM "CheckupSession" s
       WHERE s."packageId" = ${packageId} AND s.kind = 'PACKAGE'
       ORDER BY s."userId", s."startedAt" ASC, s.id ASC
@@ -1666,9 +1705,12 @@ export async function denemeHavuzu(packageId: string): Promise<HavuzKaydi[]> {
     JOIN "CheckupResult" r ON r."sessionId" = ilk.id
     WHERE ilk.mode = 'ONLINE'
       AND ilk.status IN ('SUBMITTED', 'EXPIRED')
-      AND r."correctCount" + r."wrongCount" > 0
   `;
-  return satirlar.map((s) => ({ userId: s.userId, net: Number(s.net) }));
+  return satirlar
+    .filter(
+      (s) => !olcumDisi({ correctCount: s.dogru, wrongCount: s.yanlis, blankCount: s.bos, endedBy: s.endedBy })
+    )
+    .map((s) => ({ userId: s.userId, net: Number(s.net) }));
 }
 
 export type DenemeKarsilastirmasi = Karsilastirma & {
@@ -1693,11 +1735,16 @@ export async function denemeKarsilastirmasi(
       userId: true,
       mode: true,
       packageId: true,
+      endedBy: true,
       package: { select: { kind: true, questionCount: true } },
-      result: { select: { netScore: true } },
+      result: { select: { netScore: true, correctCount: true, wrongCount: true, blankCount: true } },
     },
   });
   if (!s || s.userId !== userId || s.package.kind !== "MOCK" || !s.result) return null;
+  // Yarım kalan denemenin yeri yok: "çözenlerin çoğunun altındasın" demek, 24
+  // sorudan 2'sini işaretleyip süresi dolan öğrenci için yanlış. Bilerek boş
+  // gönderilen (öğrencinin bitirdiği) deneme eskisi gibi konumunu görür.
+  if (yarimKaldi({ ...s.result, endedBy: s.endedBy })) return null;
 
   const havuz = await denemeHavuzu(s.packageId);
   const net = Number(s.result.netScore);
@@ -1770,4 +1817,57 @@ export async function sureAnaliziGetir(
       };
     }),
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Zorluk geri bildirimi (sonuç ekranı)
+// ─────────────────────────────────────────────────────────────
+
+/** CheckupSession.perceivedDifficulty: 1 kolay, 2 uygun, 3 zor. */
+export const ZORLUK_SECENEKLERI = [
+  { deger: 1, etiket: "Kolay" },
+  { deger: 2, etiket: "Uygun" },
+  { deger: 3, etiket: "Zor" },
+] as const;
+
+/**
+ * "Bu test sana nasıl geldi?" sorulur mu: yalnızca paket testinde (deneme
+ * dahil) ve ölçüm sayılan sonuçta. Yarım ya da boş testin "zor"u testin
+ * zorluğunu değil kesintiyi anlatır; madde analizindeki gerçek doğru oranıyla
+ * kıyaslanınca gürültü olur.
+ */
+export function zorlukSorulur(s: {
+  kind: string;
+  correctCount: number;
+  wrongCount: number;
+  blankCount: number;
+  endedBy: string | null;
+}): boolean {
+  return s.kind === "PACKAGE" && !olcumDisi(s);
+}
+
+/**
+ * Öğrencinin zorluk dokunuşunu yazar; değiştirilebilir (son dokunuş kalır).
+ * Yalnızca KENDİ oturumuna ve sorulan oturuma: başkasının oturumu, kontrol
+ * testi, yarım test ve geçersiz değer false döner, hiçbir şey yazılmaz.
+ */
+export async function zorlukGeriBildirimiYaz(sessionId: string, userId: string, deger: unknown): Promise<boolean> {
+  if (!ZORLUK_SECENEKLERI.some((z) => z.deger === deger)) return false;
+  const s = await prisma.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      userId: true,
+      kind: true,
+      endedBy: true,
+      result: { select: { correctCount: true, wrongCount: true, blankCount: true } },
+    },
+  });
+  if (!s || s.userId !== userId || !s.result) return false;
+  if (!zorlukSorulur({ kind: s.kind, endedBy: s.endedBy, ...s.result })) return false;
+  // Sahiplik koşulu sorguda da: okumadan sonra oturum el değiştiremez ama kural tek yerde dursun.
+  const { count } = await prisma.checkupSession.updateMany({
+    where: { id: sessionId, userId },
+    data: { perceivedDifficulty: deger as number },
+  });
+  return count > 0;
 }

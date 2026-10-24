@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { startTopicRetest, CheckupError } from "@/lib/checkup";
 import { haftaBasi } from "@/lib/coaching";
 import { examShort } from "@/lib/exams";
 import { kontrolTestiSinavi, planKaynagi, planOlustur } from "@/lib/plan";
+import { guvenliDonusYolu, hataAdresi, kontrolTestiHataKodu } from "@/lib/hata-kodlari";
 
 /**
  * Plandaki bir işi işaretler / işareti kaldırır.
@@ -60,16 +62,40 @@ export async function planIsiSilAction(itemId: string): Promise<{ ok: boolean; e
 }
 
 /**
+ * Hata olursa dönülecek sayfa: formdaki `donus` alanı, yoksa isteğin
+ * Referer'ı (yalnızca bu uygulamanınki). İkisi de bilinen bir sayfanın
+ * göreli yolu değilse ana sayfa (lib/hata-kodlari.ts guvenliDonusYolu).
+ * Eskiden her hata ana sayfaya atıyordu: sonuç ekranındaki "5 soruluk test"
+ * düğmesine basan öğrenci, hakkı dolunca sonucunu kaybediyordu.
+ */
+async function donusYolu(formData: FormData): Promise<string> {
+  const alan = formData.get("donus");
+  if (typeof alan === "string" && alan) return guvenliDonusYolu(alan);
+  const h = await headers();
+  const referer = h.get("referer");
+  const host = h.get("host");
+  if (!referer || !host) return "/panel";
+  try {
+    const u = new URL(referer);
+    // Başka kökenden gelen Referer'ın yolu da güvenilmez: ana sayfa.
+    return u.host === host ? guvenliDonusYolu(u.pathname) : "/panel";
+  } catch {
+    return "/panel";
+  }
+}
+
+/**
  * Konu tekrar testini başlatır ve test ekranına gönderir.
  *
  * Form action'ı olarak doğrudan kullanılıyor (useActionState gerekmiyor):
- * başarılıysa zaten test ekranına gidiyoruz, başarısızsa kullanıcı plan
- * sayfasında uyarıyı görüyor.
+ * başarılıysa test ekranına gidiyoruz, başarısızsa öğrenci geldiği sayfaya
+ * döner ve uyarıyı orada görür. Adrese hatanın metni değil KODU yazılır;
+ * sayfa sabit cümleyi lib/hata-kodlari.ts'ten okur (sahte uyarı gösterilemesin).
  */
 export async function konuTekrarBaslat(formData: FormData): Promise<void> {
   const user = await requireUser();
   const topicId = String(formData.get("topicId") ?? "");
-  if (!topicId) redirect("/panel?hata=konu-secilmedi");
+  if (!topicId) redirect(hataAdresi(await donusYolu(formData), "konu-secilmedi"));
 
   // Plandaki iş planın sınavıyla, değilse güncel hedefle (lib/plan.ts).
   const sinav = await kontrolTestiSinavi(user.id, topicId, new Date(), user.targetExam);
@@ -80,7 +106,7 @@ export async function konuTekrarBaslat(formData: FormData): Promise<void> {
     sessionId = await startTopicRetest(user.id, topicId, sinav);
   } catch (e) {
     if (e instanceof CheckupError) {
-      redirect("/panel?hata=" + encodeURIComponent(e.message));
+      redirect(hataAdresi(await donusYolu(formData), kontrolTestiHataKodu(e.message)));
     }
     throw e;
   }

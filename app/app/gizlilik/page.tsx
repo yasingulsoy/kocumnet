@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CircleCheck } from "lucide-react";
 import { SUPPORT_EMAIL } from "@/lib/site";
-import { COLLECTED_DATA, NOT_COLLECTED, LAST_UPDATED, VELI_ONAYI_METNI } from "@/lib/legal";
+import { COLLECTED_DATA, NOT_COLLECTED, LAST_UPDATED, PILOT_DEGERLENDIRMESI, VELI_ONAYI_METNI } from "@/lib/legal";
 import { Wordmark } from "@/components/ui/logo";
 import { Badge } from "@/components/tailadmin/ui/Badge";
 import { Card } from "@/components/tailadmin/ui/Card";
@@ -80,6 +80,10 @@ export default function PrivacyPage() {
           </Table>
         </Card>
 
+        {/* HUKUK: pilot değerlendirmesinin işleme sebebi (lib/legal.ts PILOT_DEGERLENDIRMESI). */}
+        <h2 className={BASLIK}>Pilot değerlendirmesi</h2>
+        <p className={METIN}>{PILOT_DEGERLENDIRMESI}</p>
+
         <h2 className={BASLIK}>Toplamadıklarımız</h2>
         <ul className="mt-3 space-y-2 text-base leading-relaxed text-gray-700">
           {NOT_COLLECTED.map((n) => (
@@ -93,8 +97,9 @@ export default function PrivacyPage() {
         <h2 className={BASLIK}>Kim görür</h2>
         <p className={METIN}>
           Verilerinizi yalnızca Koçum.Net&apos;in yetkili personeli görür. Sonuçlarınızı,
-          planınızı, grup ve ödevlerinizi, koça yazdığınız soruları ve otomatik takip
-          uyarılarını öğrenci verisi yetkisi olan koçlar ve yöneticiler görür. Soru yazan
+          planınızı, grup ve ödevlerinizi (davet bağlantısıyla katıldığınız dahil), son
+          etkinlik zamanınızı, koça yazdığınız soruları ve otomatik takip uyarılarını öğrenci
+          verisi yetkisi olan koçlar ve yöneticiler görür. Soru yazan
           içerik personeli hata bildirimlerinizin sebebini ve açıklamasını görür; bildirimi
           kimin yaptığını yalnızca öğrenci verisi yetkisi olanlar görür. Velinize ancak siz
           bir veli bağlantısı oluşturursanız sınırlı bir özet gider (aşağıda).
@@ -141,7 +146,8 @@ export default function PrivacyPage() {
         </ul>
         <p className={METIN}>
           Tarayıcınızın site verilerini temizlediğinizde bunlar da silinir. Tek çerez,
-          oturumunuzu açık tutan giriş çerezidir.
+          oturumunuzu açık tutan giriş çerezidir; uygulamayı kullandıkça süresi uzar, uzun
+          süre (en az 15 gün) hiç kullanmazsanız oturum kapanır ve yeniden giriş istenir.
         </p>
 
         <h2 className={BASLIK}>Saklama süresi</h2>
@@ -174,7 +180,7 @@ export default function PrivacyPage() {
           &ldquo;{VELI_ONAYI_METNI}&rdquo;
         </p>
 
-        {/* TASLAK: hukuki inceleme bekliyor (lib/legal.ts başındaki not). Hoca kararı HOCAYA-SORULAR 10.10. */}
+        {/* TASLAK: hukuki inceleme bekliyor (lib/legal.ts başındaki not). Hoca kararı Hocaya sorular: motivasyon.veli-kapsam. */}
         <h2 id="veli-baglantisi" className={`${BASLIK} flex flex-wrap items-center gap-2 scroll-mt-6`}>
           Veli bağlantısı
           <Badge size="sm" color="warning">
@@ -185,7 +191,8 @@ export default function PrivacyPage() {
           Profil sayfanızdan velinizle paylaşmak için salt okunur bir bağlantı oluşturabilirsiniz. Bağlantıyı açan
           kişi giriş yapmadan yalnızca genel durumu görür: adınızın ilk kelimesi, hedef sınavınız, son ölçümünüz ve
           gelişim grafiğiniz, güçlü ve zayıf konularınız, son 5 check-up&apos;ınızın tarihi, adı ve puanı, bu haftaki
-          planınızın ne kadarının tamamlandığı ve yanlış defterinizde bekleyen soru sayısı. Sorular, cevaplarınız,
+          planınızın ne kadarının tamamlandığı, yanlış defterinizde bekleyen soru sayısı ve koçunuzun verdiği
+          ödevlerin adı, son tarihi ve tamamlanıp tamamlanmadığı. Sorular, cevaplarınız,
           çözümler, alıştırmalarınız, e-posta adresiniz ve diğer kişisel bilgileriniz bu sayfada yer almaz.
         </p>
         <p className={METIN}>

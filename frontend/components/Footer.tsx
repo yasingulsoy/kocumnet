@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { SITE_BRAND } from "@/lib/site-brand";
-import { CHECKUP_URL } from "@/lib/site";
+import { checkupAdresi } from "@/lib/site";
 import { Wordmark } from "./LogoMark";
 import { InstagramIcon } from "./icons";
 import type { Locale } from "@/lib/i18n/config";
@@ -31,6 +31,7 @@ const BAGLANTI = "text-gray-300 transition hover:text-white hover:underline";
 export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const year = new Date().getFullYear();
   const servicesHref = localizedPath("services", locale);
+  const checkupAltbilgi = checkupAdresi("altbilgi");
 
   return (
     <footer className="zemin-koyu mt-auto bg-brand-950 text-gray-300">
@@ -63,9 +64,9 @@ export function Footer({ locale, dict }: { locale: Locale; dict: Dictionary }) {
                   </Link>
                 </li>
               ))}
-              {CHECKUP_URL ? (
+              {checkupAltbilgi ? (
                 <li>
-                  <a href={CHECKUP_URL} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 ${BAGLANTI}`}>
+                  <a href={checkupAltbilgi} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 ${BAGLANTI}`}>
                     {dict.nav.checkup}
                     <ArrowUpRight className="size-3.5 rtl:-scale-x-100" aria-hidden />
                     <span className="sr-only"> ({dict.nav.opensInNewTab})</span>

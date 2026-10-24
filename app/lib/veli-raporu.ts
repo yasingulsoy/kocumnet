@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { aktifPlan } from "@/lib/plan";
+import { ogrenciOdevleri } from "@/lib/odev-sorgu";
+import { tamamlandiMi } from "@/lib/odev";
 import { aggregateTopics, egilimeGirer, konuHaritasinaGirer, studentStats, type ResultLike } from "@/lib/insights";
 import { EXAMS, daysUntilExam, isExamScope } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
@@ -154,6 +156,17 @@ export interface VeliTesti {
   net: number;
 }
 
+/**
+ * Koçun ödevi, velinin gördüğü kadarıyla: ad, son tarih, tamamlandı mı.
+ * Koçun notu, grup adı, soru ve sonuç YOK (ödevin sonucu öğrencinin sonuç
+ * ekranında). "Gecikti" son tarih ile tamamlanmadan türer.
+ */
+export interface VeliOdevi {
+  ad: string;
+  sonTarih: Date;
+  tamamlandi: boolean;
+}
+
 /** Grafik noktası (components/BasariGrafikleri BasariNoktasi ile aynı biçim; etiket grafikTarihleri'nden). */
 export interface VeliEgilimNoktasi {
   etiket: ReturnType<typeof grafikTarihleri>[number];
@@ -179,7 +192,14 @@ export interface VeliRaporu {
   sonTestler: VeliTesti[];
   plan: { biten: number; toplam: number } | null;
   acikDefter: number;
+  /** Öğrencinin gruplarındaki açık ödevler ve son 7 günde tamamlananlar, son tarihe göre. */
+  odevler: VeliOdevi[];
 }
+
+/** Veli raporunda en fazla bu kadar ödev. */
+const RAPOR_ODEV_SINIRI = 10;
+/** Tamamlanan ödev raporda bu kadar gün kalır ("bu hafta"). */
+const RAPOR_ODEV_GUN = 7;
 
 /** Konu haritası için en fazla bu kadar sonuç okunur (en yeniler). */
 const SONUC_SINIRI = 200;
@@ -196,7 +216,7 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
   });
   const sinav = isExamScope(user.targetExam) ? user.targetExam : null;
 
-  const [ham, plan, acikDefter] = await Promise.all([
+  const [ham, plan, acikDefter, odevListesi] = await Promise.all([
     prisma.checkupResult.findMany({
       where: {
         // Alıştırma zaten sonuç üretmez; yine de açıkça süzülür: ölçüm değil.
@@ -215,15 +235,31 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
         computedAt: true,
         topicBreakdown: true,
         examScope: true,
-        session: { select: { kind: true, package: { select: { name: true } } } },
+        // Yarım test kuralı (lib/insights.ts yarimKaldi) endedBy ve blankCount ister.
+        session: { select: { kind: true, endedBy: true, package: { select: { name: true } } } },
       },
     }),
     aktifPlan(userId, now),
     prisma.notebookItem.count({ where: { userId, resolvedAt: null } }),
+    // Ödevler öğrencinin ekranıyla AYNI kuraldan (lib/odev-sorgu.ts): yalnızca
+    // kendi gruplarının, iptal edilmemiş ödevleri; tamamlanma türetilir.
+    ogrenciOdevleri(userId, now),
   ]);
+  const odevSiniri = now.getTime() - RAPOR_ODEV_GUN * GUN_MS;
+  const odevler: VeliOdevi[] = [
+    ...odevListesi.acik,
+    ...odevListesi.gecmis.filter(
+      (o) => tamamlandiMi(o.ilerleme.durum) && (o.ilerleme.tamamlanmaAni?.getTime() ?? 0) >= odevSiniri
+    ),
+  ]
+    .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
+    .slice(0, RAPOR_ODEV_SINIRI)
+    // Alan alan: ödev satırı (kimlik, not, grup) yayılmaz.
+    .map((o) => ({ ad: o.title, sonTarih: o.dueAt, tamamlandi: tamamlandiMi(o.ilerleme.durum) }));
 
   const sonuclar = ham.reverse().map((r) => ({
     kind: r.session.kind,
+    endedBy: r.session.endedBy,
     examScope: r.examScope,
     paket: r.session.package.name,
     correctCount: r.correctCount,
@@ -236,7 +272,7 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
   }));
 
   // Eğilim, son ölçüm ve test listesi yalnızca ÖLÇÜMLERDEN: paket testi,
-  // işaretli (lib/insights.ts egilimeGirer; pano ve gelişimle aynı süzgeç).
+  // işaretli, yarım kalmamış (lib/insights.ts egilimeGirer; pano ve gelişimle aynı süzgeç).
   // Kontrol testi tek zayıf konuyu ölçer, seviyeli aşama cezasız, boş
   // gönderilen test sıfır. Konu haritası kontrol testini ve aşamayı da toplar.
   const olcumler = sonuclar.filter((r) => egilimeGirer(r, sinav));
@@ -285,5 +321,6 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
     sonTestler: olcumler.slice(-RAPOR_TEST_SAYISI).reverse().map(testOf),
     plan: plan ? { biten: plan.biten, toplam: plan.items.length } : null,
     acikDefter,
+    odevler,
   };
 }

@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { Search, UserMinus, UserPlus } from "lucide-react";
-import { ogrenciAraAction, uyeCikarAction, uyeEkleAction, type AramaSonucu } from "@/lib/checkup/actions/gruplar";
+import { ListPlus, Search, UserMinus, UserPlus } from "lucide-react";
+import {
+  ogrenciAraAction,
+  topluUyeEkleAction,
+  uyeCikarAction,
+  uyeEkleAction,
+  type AramaSonucu,
+  type TopluEklemeSonucu,
+} from "@/lib/checkup/actions/gruplar";
 import { examLabel, gradeLabel } from "@/lib/checkup/format";
-import { ARAMA_EN_AZ } from "@/lib/checkup/grup-kurallari";
+import { ARAMA_EN_AZ, TOPLU_EKLEME_SINIRI, TOPLU_METIN_SINIRI } from "@/lib/checkup/grup-kurallari";
 import { Field } from "@/components/tailadmin/form/Field";
 import { Input } from "@/components/tailadmin/form/Input";
+import { TextArea } from "@/components/tailadmin/form/TextArea";
+import { Alert } from "@/components/tailadmin/ui/Alert";
 import { Avatar } from "@/components/tailadmin/ui/Avatar";
 import { Badge } from "@/components/tailadmin/ui/Badge";
 import { Button } from "@/components/tailadmin/ui/Button";
+import { Modal, useModal } from "@/components/tailadmin/ui/Modal";
 import { useOnay } from "./Onay";
 
 /*
@@ -179,5 +189,94 @@ export function UyeCikarDugmesi({ groupId, userId, ad }: { groupId: string; user
     >
       Çıkar
     </Button>
+  );
+}
+
+/**
+ * Toplu ekleme: e-posta listesini yapıştır (satır, virgül ya da boşlukla
+ * ayrılmış). Kayıtlı öğrenciler eklenir; sonuçta sayılar ve kayıtlı olmayan
+ * e-postalar görünür, koç onlara davet bağlantısını gönderir. Ayrıştırma ve
+ * sınır sunucuda yeniden yapılır (grup-kurallari.ts epostaListesiAyristir).
+ */
+export function TopluUyeEkle({ groupId }: { groupId: string }) {
+  const { isOpen, openModal, closeModal } = useModal();
+  const [metin, setMetin] = useState("");
+  const [sonuc, setSonuc] = useState<TopluEklemeSonucu | null>(null);
+  const [hata, setHata] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const kapat = () => {
+    closeModal();
+    setSonuc(null);
+    setHata(null);
+  };
+
+  const gonder = (e: FormEvent) => {
+    e.preventDefault();
+    start(async () => {
+      const r = await topluUyeEkleAction(groupId, metin);
+      if (!r.ok) {
+        setHata(r.error);
+        setSonuc(null);
+        return;
+      }
+      setHata(null);
+      setSonuc(r);
+      // Eklenmeyenler kalsın: koç kayıt olmayanları kopyalayıp davet gönderebilsin.
+      setMetin(r.kayitYok.join("\n"));
+      if (r.eklendi > 0) toast.success(r.eklendi + " öğrenci gruba eklendi.");
+    });
+  };
+
+  return (
+    <>
+      <Button variant="ghost" size="xs" startIcon={<ListPlus />} onClick={openModal}>
+        E-posta listesiyle ekle
+      </Button>
+      <Modal isOpen={isOpen} onClose={kapat} title="E-posta listesiyle ekle" size="md">
+        <form onSubmit={gonder} className="space-y-4">
+          {hata ? (
+            <Alert variant="error" compact>
+              {hata}
+            </Alert>
+          ) : null}
+          {sonuc ? (
+            <Alert variant={sonuc.kayitYok.length || sonuc.gecersiz.length ? "warning" : "success"} compact title="Sonuç">
+              <ul className="tabular space-y-0.5">
+                <li>Eklendi: {sonuc.eklendi}</li>
+                <li>Zaten üye: {sonuc.zatenUye}</li>
+                <li>Kayıt yok: {sonuc.kayitYok.length}</li>
+                {sonuc.gecersiz.length ? <li>E-posta değil: {sonuc.gecersiz.join(", ")}</li> : null}
+              </ul>
+              {sonuc.kayitYok.length ? (
+                <p className="mt-2">Kayıtlı olmayanlar aşağıda kaldı. Onlara grubun davet bağlantısını gönder; kayıt olunca gruba kendileri katılır.</p>
+              ) : null}
+            </Alert>
+          ) : null}
+          <Field
+            label="E-postalar"
+            hint={`Her satıra bir e-posta, ya da virgülle ayır. Bir seferde en çok ${TOPLU_EKLEME_SINIRI}. Yalnızca kayıtlı öğrenciler eklenir.`}
+          >
+            <TextArea
+              rows={8}
+              value={metin}
+              onChange={(e) => setMetin(e.target.value)}
+              maxLength={TOPLU_METIN_SINIRI}
+              placeholder={"ayse@ornek.com\nmehmet@ornek.com"}
+              spellCheck={false}
+              className="font-mono text-theme-xs"
+            />
+          </Field>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" size="xs" onClick={kapat} disabled={pending}>
+              Kapat
+            </Button>
+            <Button type="submit" size="xs" loading={pending} startIcon={<UserPlus />} disabled={!metin.trim()}>
+              {pending ? "Ekleniyor…" : "Ekle"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }
