@@ -1,12 +1,16 @@
 /**
  * Deneme (MOCK paket) kuralları — SAF modül. Düzenleyici (istemci) göstergeleri
  * ve "Dağılıma göre doldur" (sunucu) aynı hesabı kullanır; sunucu her kuralı
- * yeniden denetler. Hiçbir şey içe aktarmaz: app/scripts/deneme-test.mts bu
- * dosyayı doğrudan yükleyip sınıyor.
+ * yeniden denetler. Yalnızca öğrenci uygulamasının hazırlık kuralını
+ * (shared/deneme.ts, app/lib/deneme.ts'in kopyası) içe aktarır:
+ * app/scripts/deneme-panel-test.mts bu dosyayı doğrudan yükleyip sınıyor (tsx
+ * göreli importu çözer).
  *
  * Deneme = gerçek sınavın provası: sorular pakette SABİT (PackageQuestion),
  * herkes aynı soruları aynı sırayla çözer. Yüzdelik dilim ancak böyle anlamlı.
  */
+
+import { denemeHazirMi } from "./shared/deneme";
 
 /** Denemenin soru sayısı. En büyük gerçek değer DGS 60; pay bırakıldı. */
 export const DENEME_SORU_SINIRI = { min: 5, max: 120 } as const;
@@ -240,11 +244,33 @@ export interface ListeDurumu {
 }
 
 /**
- * Deneme ancak liste uzunluğu = soru sayısı ve bütün sorular yayında (ve
- * paketin sınavında sorulabilir) ise yayınlanabilir. Engel yoksa boş liste;
- * varsa her biri ekranda ve yayın reddinde ayrı satır.
+ * Öğrenci bu denemeyi şu an başlatabilir mi — öğrenci uygulamasının KENDİ
+ * kuralı (shared/deneme.ts denemeHazirMi: liste tam ve tamamı yayında).
+ * Panelin "yayınlanabilir" rozeti, yayın reddi, alarm sayımı ve ödev denetimi
+ * buna bakar; öğrenci "hazırlanıyor" görürken panel "hazır" demesin.
  */
-export function denemeEngelleri(d: ListeDurumu): string[] {
+export function denemeBaslatilabilir(d: Pick<ListeDurumu, "soruSayisi" | "listede" | "yayindaOlmayan">): boolean {
+  const yayindaDegil = Object.values(d.yayindaOlmayan).reduce((t, n) => t + n, 0);
+  return denemeHazirMi({ toplam: d.listede, yayinda: d.listede - yayindaDegil }, d.soruSayisi);
+}
+
+/**
+ * Paket sağlığı satırından (lib/checkup/pool.ts PackageHealth) aynı karar:
+ * yayındaki denemelerin alarm sayımı (Paketler, Genel bakış) bunu kullanır.
+ */
+export function sagliktanBaslatilabilir(p: {
+  questionCount: number;
+  mock: { listede: number; yayindaOlmayan: Readonly<Record<string, number>> } | null;
+}): boolean {
+  return denemeBaslatilabilir({ soruSayisi: p.questionCount, listede: p.mock?.listede ?? 0, yayindaOlmayan: p.mock?.yayindaOlmayan ?? {} });
+}
+
+/**
+ * Hazırlık engelleri: denemeBaslatilabilir'in nedenleri, her biri ayrı satır
+ * (ekranda ve yayın reddinde). Boş liste ⇔ öğrenci başlatabilir; sondaki
+ * güvence metinlerle öğrencinin kuralı ayrışmasın diye.
+ */
+export function denemeHazirlikEngelleri(d: ListeDurumu): string[] {
   const r: string[] = [];
   if (d.listede < d.soruSayisi) r.push(`Listede ${d.listede} soru var, deneme ${d.soruSayisi} istiyor (${d.soruSayisi - d.listede} eksik).`);
   else if (d.listede > d.soruSayisi) r.push(`Listede ${d.listede} soru var, deneme ${d.soruSayisi} istiyor (${d.listede - d.soruSayisi} fazla).`);
@@ -253,8 +279,27 @@ export function denemeEngelleri(d: ListeDurumu): string[] {
   if (toplam) {
     r.push(`${toplam} soru yayında değil (${olmayan.map(([s, n]) => n + " " + (DURUM_ADI[s] ?? s)).join(", ")}): yayına al ya da yerine başkasını koy.`);
   }
-  if (d.sinavDisi) r.push(`${d.sinavDisi} soru bu denemenin sınavında sorulamıyor (hedef sınavı başka): çıkar.`);
+  if (r.length === 0 && !denemeBaslatilabilir(d)) r.push("Deneme hazır değil: soru sayısı ile liste uyuşmuyor.");
   return r;
+}
+
+/**
+ * Sınav dışı soru: UYARI, hazırlık engeli DEĞİL. Öğrenci uygulaması bu
+ * soruyla da denemeyi başlatır; kural oraya taşınsaydı bir sorunun hedef
+ * sınavını değiştirmek yayındaki denemeyi sessizce kapatırdı (yeni bir kapanma
+ * yolu). Panel bunu kayıtta uyarır: düzenleyicide satır işaretlenir, listeye
+ * YENİ eklenen sınav dışı soru kaydedilmez (lib/checkup/mock.ts denemeyiKaydet).
+ */
+export function denemeUyarilari(d: ListeDurumu): string[] {
+  return d.sinavDisi ? [`${d.sinavDisi} soru bu denemenin sınavında sorulamıyor (hedef sınavı başka): çıkar.`] : [];
+}
+
+/**
+ * Düzenleyicinin bütün sorun listesi: hazırlık engelleri, sonra uyarılar.
+ * Yayın kararı bununla VERİLMEZ (denemeHazirlikEngelleri).
+ */
+export function denemeEngelleri(d: ListeDurumu): string[] {
+  return [...denemeHazirlikEngelleri(d), ...denemeUyarilari(d)];
 }
 
 /** Listedeki satırlardan ListeDurumu (düzenleyici bunu canlı hesaplar). */
@@ -262,4 +307,74 @@ export function listeDurumu(soruSayisi: number, liste: readonly { status: string
   const yayindaOlmayan: Record<string, number> = {};
   for (const q of liste) if (q.status !== "PUBLISHED") yayindaOlmayan[q.status] = (yayindaOlmayan[q.status] ?? 0) + 1;
   return { soruSayisi, listede: liste.length, yayindaOlmayan, sinavDisi: liste.filter((q) => !q.sinavda).length };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Başlatılmış deneme: soru kilidi
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Soru, yayındaki ve en az bir kez başlatılmış bir denemenin listesindeyse
+ * (lib/checkup/mock.ts kilitliDenemeler) yayından alınamaz. Arşivlemek
+ * denemeyi kalıcı kapatır: öğrenci uygulaması eksik listeli denemeyi
+ * başlatmıyor, başlatılmış denemenin listesi de değişemiyor (yüzdelik); yani
+ * "önce yerine başka soru koy" yolu yok. Çıkış düzeltmek: cevap anahtarı
+ * düzeltmesi bitmiş testleri yeniden puanlar (öğrenci uygulamasının cron'u).
+ */
+export const KILITLI_DENEME_MESAJI =
+  "Bu soru öğrencilerin çözdüğü bir denemede. Arşivlemek denemeyi kapatır; yanlışsa soruyu düzelt: cevap anahtarı düzeltmesi bitmiş testleri yeniden puanlar.";
+
+/**
+ * Aynı kilit konu ve hedef sınav için: konu değişirse çözülmüş denemenin konu
+ * dağılımı ve sonuçların konu kırılımı kayar; hedef sınav değişirse soru
+ * denemenin sınavından düşebilir.
+ */
+export const KILITLI_DENEME_KONU_MESAJI =
+  "Bu soru öğrencilerin çözdüğü bir denemede: konusu ve hedef sınavı değiştirilemez (denemenin konu dağılımı ve sınavı buna bağlı). Yanlışsa soruyu düzelt: cevap anahtarı düzeltmesi bitmiş testleri yeniden puanlar.";
+
+// ─────────────────────────────────────────────────────────────
+// Konu ağırlıkları (examWeights) uyarısı
+// ─────────────────────────────────────────────────────────────
+
+/** Uyarıda adıyla sayılan en fazla konu; kalanı "ve N konu daha". */
+const ADLI_KONU_SINIRI = 8;
+
+const ondalik = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
+
+/**
+ * "Dağılıma göre doldur"un yanındaki uyarılar. Sayılar NORMALLEŞTİRİLMEZ:
+ * ağırlıklar hocanın işi (HOCAYA-SORULAR 12.2), panel yalnızca söyler.
+ *  · Sınavda ağırlığı olmayan yaprak konular: doldurma onlardan soru koymaz.
+ *  · Ağırlık toplamı sınavın matematik soru sayısından farklıysa: hedef
+ *    dağılım yine soru sayısına ölçeklenir ama oranlar gerçek sınavı tutmayabilir.
+ */
+export function agirlikUyarilari(g: {
+  hedefler: readonly DenemeHedefi[];
+  /** Sınavda ağırlığı olmayan yaprak konuların adları (konu sırasıyla). */
+  agirliksiz: readonly string[];
+  /** Sınavın gerçek matematik soru sayısı (shared/exams.ts); bilinmiyorsa null. */
+  sinavSoruSayisi: number | null;
+  sinavAdi: string;
+}): string[] {
+  const r: string[] = [];
+  if (g.agirliksiz.length) {
+    const adlar = g.agirliksiz.slice(0, ADLI_KONU_SINIRI).join(", ");
+    const kalan = g.agirliksiz.length - ADLI_KONU_SINIRI;
+    r.push(
+      `${g.agirliksiz.length} yaprak konunun ${g.sinavAdi} ağırlığı yok: ${adlar}${kalan > 0 ? ` ve ${kalan} konu daha` : ""}. ` +
+        "Dağılıma göre doldurma bu konulardan soru koymaz; gerekiyorsa elle ekle."
+    );
+  }
+  if (g.hedefler.length && g.sinavSoruSayisi) {
+    const toplam = g.hedefler.reduce((t, h) => t + h.agirlik, 0);
+    const fark = Math.round((toplam - g.sinavSoruSayisi) * 100) / 100;
+    if (fark !== 0) {
+      r.push(
+        `Ağırlıkların toplamı ${ondalik(toplam)}; ${g.sinavAdi} matematikte ${g.sinavSoruSayisi} soru var ` +
+          `(${ondalik(Math.abs(fark))} ${fark > 0 ? "fazla" : "eksik"}). Hedef yine deneme soru sayısına ölçeklenir; ` +
+          "konu oranları gerçek sınavı tutmayabilir."
+      );
+    }
+  }
+  return r;
 }

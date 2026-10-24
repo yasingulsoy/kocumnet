@@ -27,12 +27,15 @@ export function SeviyeSeridi({
   ulasilan,
   durduguSeviye,
   bitti,
+  birakildi = false,
 }: {
   /** Açılmış en yüksek seviye. */
   ulasilan: number;
   /** Durduysa hangi seviyede. */
   durduguSeviye: number | null;
   bitti: boolean;
+  /** Öğrenci denemeyi bıraktı: geçtikleri yeşil kalır, sıradaki "aktif" görünmez. */
+  birakildi?: boolean;
 }) {
   const adlar = ["Temel", "Çok adımlı", "Analiz"];
 
@@ -40,7 +43,7 @@ export function SeviyeSeridi({
     <ol className="flex items-center gap-1.5" aria-label="Seviye ilerlemesi">
       {[1, 2, 3].map((s, i) => {
         const gecildi = bitti ? true : s < ulasilan;
-        const aktif = !bitti && s === ulasilan && durduguSeviye === null;
+        const aktif = !bitti && !birakildi && s === ulasilan && durduguSeviye === null;
         const durdu = durduguSeviye === s;
         const durum: Durum = durdu ? "durdu" : gecildi ? "gecildi" : aktif ? "aktif" : "kilitli";
         const ton = TON[durum];

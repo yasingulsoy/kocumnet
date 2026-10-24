@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Uçtan uca motor testi + CEVAP ANAHTARI SIZINTI DENETİMİ (PLAN §3).
  *

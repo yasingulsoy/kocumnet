@@ -66,8 +66,12 @@ export interface CheckupScore {
   scoringVersion: number;
 }
 
-/** Seviye etiketi için gereken en az soru sayısı. */
-const MIN_FOR_LEVEL = 2;
+/**
+ * Seviye etiketi için gereken en az soru sayısı. Dışa aktarılıyor: ekranlar
+ * "seviye için en az N soru gerekir" metnini buradan üretsin (elle yazılan
+ * "3'ten az" eşikle çelişiyordu).
+ */
+export const MIN_FOR_LEVEL = 2;
 /** "HIGH" güven için gereken soru sayısı. */
 const MIN_FOR_HIGH_CONFIDENCE = 3;
 
@@ -150,7 +154,8 @@ function byActionability(a: TopicBreakdownEntry, b: TopicBreakdownEntry): number
 
 /**
  * Net hesabı. penaltyRatio pakete ait — koda gömülmez (PLAN §4):
- * YKS 0.25, LGS 0.3333, KPSS 0.
+ * YKS 0.25, LGS 0.3333; KPSS, DGS ve ALES için varsayım 0.25 (Özgür Hoca'ya
+ * soruldu, HOCAYA-SORULAR §1, soru 1.1). Seviyeli aşamalar cezasız (0).
  */
 export function calculateNet(correct: number, wrong: number, penaltyRatio: number): number {
   const net = correct - wrong * penaltyRatio;

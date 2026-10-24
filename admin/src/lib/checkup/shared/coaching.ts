@@ -15,11 +15,25 @@ import type { TopicBreakdownEntry } from "./scoring";
 /**
  * Bir haftada kaç konu?
  *
- * İki. Üç ancak üçü de küçükse. Bir koçu rapor üretecinden ayıran kural bu:
- * beş zayıf konuyu aynı hafta vermek, öğrencinin hiçbirini bitirememesi
- * demek — ve bitirilmeyen plan, plan olmaktan çıkıp duvar kâğıdı olur.
+ * En fazla iki. Bir koçu rapor üretecinden ayıran kural bu: beş zayıf konuyu
+ * aynı hafta vermek, öğrencinin hiçbirini bitirememesi demek — ve
+ * bitirilmeyen plan, plan olmaktan çıkıp duvar kâğıdı olur.
  */
 export const MAX_TOPICS_PER_WEEK = 2;
+
+/** Geçen haftanın bu oranından azı bittiyse plan kısalır. */
+export const KISA_PLAN_ESIGI = 0.5;
+
+/**
+ * Bu haftanın konu sınırı, geçen haftanın tamamlanma oranına göre.
+ *
+ * Geçen hafta listenin yarısı bitmediyse bu hafta tek konu. Eskiden koç notu
+ * "bu hafta daha kısa" diyordu ama plan yine iki konuyla kuruluyordu: söz
+ * verilen kısalma hiç olmuyordu. Hiç plan yoksa (null) tam sınır.
+ */
+export function haftalikKonuSiniri(oncekiTamamlama: number | null): number {
+  return oncekiTamamlama !== null && oncekiTamamlama < KISA_PLAN_ESIGI ? 1 : MAX_TOPICS_PER_WEEK;
+}
 
 /** Bir konu için haftalık iş yükü — koçun gerçekten söyleyeceği süreler. */
 export const SURE = {
@@ -58,6 +72,30 @@ export interface OncelikliKonu {
   kayip: number | null;
 }
 
+/**
+ * Konu haritası satırını öncelik satırına çevirir (süzmeden).
+ *
+ * Ayrı ihraç: sonuç ekranı, plan bu testten çıktıysa listeyi PLANIN
+ * konularıyla kuruyor ve satırları aynı biçimde çizmesi gerekiyor.
+ */
+export function oncelikliKonuyaCevir(
+  t: TopicBreakdownEntry,
+  agirliklar: Map<string, number>
+): OncelikliKonu {
+  const w = agirliklar.get(t.topicId) ?? null;
+  return {
+    topicId: t.topicId,
+    name: t.name,
+    ratio: t.ratio,
+    asked: t.asked,
+    correct: t.correct,
+    examWeight: w,
+    // "Bu konu sana sınavda kaç soru kaybettiriyor" — soyut yüzde yerine
+    // sınav parasıyla konuşmak koçun dili.
+    kayip: w === null ? null : Math.round(w * (1 - t.ratio) * 10) / 10,
+  };
+}
+
 export function oncelikSirasi(
   topics: TopicBreakdownEntry[],
   agirliklar: Map<string, number>,
@@ -65,20 +103,7 @@ export function oncelikSirasi(
 ): OncelikliKonu[] {
   return topics
     .filter((t) => t.level === "WEAK" && t.asked >= 3)
-    .map((t) => {
-      const w = agirliklar.get(t.topicId) ?? null;
-      return {
-        topicId: t.topicId,
-        name: t.name,
-        ratio: t.ratio,
-        asked: t.asked,
-        correct: t.correct,
-        examWeight: w,
-        // "Bu konu sana sınavda kaç soru kaybettiriyor" — soyut yüzde yerine
-        // sınav parasıyla konuşmak koçun dili.
-        kayip: w === null ? null : Math.round(w * (1 - t.ratio) * 10) / 10,
-      };
-    })
+    .map((t) => oncelikliKonuyaCevir(t, agirliklar))
     .sort((a, b) => a.ratio - b.ratio || (b.examWeight ?? 0) - (a.examWeight ?? 0))
     .slice(0, enFazla);
 }
@@ -94,12 +119,25 @@ export interface Karar {
   ton: "ok" | "warn" | "bad";
 }
 
+/**
+ * Sonucun bu haftanın planıyla bağı.
+ *
+ * BU_TEST: plan bu testten çıktı. BASKA_TEST: bu haftanın planı başka bir
+ * testten. YOK: bu hafta plan yok ya da sonuç eski bir haftanın.
+ *
+ * Neden karar()'ın parametresi: haftanın ikinci testi "bu hafta sadece C ve
+ * D, diğer konulara bakma" diyordu; plan ise A ve B istiyordu. "Sadece
+ * bunlar" ve "bakma" yalnızca plan bu testten çıktıysa doğru.
+ */
+export type PlanBagi = "BU_TEST" | "BASKA_TEST" | "YOK";
+
 export function karar(
   oran: number,
   oncelikler: OncelikliKonu[],
   guclu: TopicBreakdownEntry[],
   bosSayisi: number,
-  toplamSoru: number
+  toplamSoru: number,
+  planBagi: PlanBagi
 ): Karar {
   const yuzde = Math.round(oran * 100);
   const ilk = oncelikler[0];
@@ -123,11 +161,20 @@ export function karar(
       ilk?.kayip && ikinci?.kayip
         ? ` Bu ikisi sınavda ortalama ${Math.round(ilk.kayip + ikinci.kayip)} soru demek.`
         : "";
+    // Tek konuda tekil dil: plan geçen haftanın oranıyla tek konuya inebiliyor.
+    const eylem =
+      planBagi === "BU_TEST"
+        ? `Bu hafta sadece ${ikinci ? "bunlar" : "bu konu"}; diğer konulara bakma.`
+        : planBagi === "BASKA_TEST"
+          ? `Bu haftanın planı önceki testinden; önce onu bitir, sıradaki ${ikinci ? "konuların bunlar" : "konun bu"}.`
+          : `Çalışmaya ${ikinci ? "bunlarla" : "bununla"} başla.`;
     return {
       ton: "warn",
-      baslik: `%${yuzde} — temelin var, iki konu netini aşağı çekiyor.`,
+      // Konu sayısı listeyle aynı olsun: plan tek konuya kısaldığında ya da
+      // hiç kanıtlı zayıf konu yokken "iki konu" yazmasın.
+      baslik: `%${yuzde} — temelin var${ilk ? `, ${ikinci ? "iki konu" : "bir konu"} netini aşağı çekiyor` : ""}.`,
       metin: ilk
-        ? `${ilk.name}${ikinci ? ` ve ${ikinci.name}` : ""}.${kayipCumlesi} Bu hafta sadece bunlar; diğer konulara bakma.`
+        ? `${ilk.name}${ikinci ? ` ve ${ikinci.name}` : ""}.${kayipCumlesi} ${eylem}`
         : "Konu bazında kanıtlı bir zayıflık çıkmadı. Daha uzun bir paketle ölçümü derinleştir.",
     };
   }
@@ -137,11 +184,18 @@ export function karar(
     bosSayisi >= Math.ceil(toplamSoru * 0.3)
       ? ` ${bosSayisi} soruyu boş bıraktın; bu da başlı başına bir konu.`
       : "";
+  const ilkEylem = !ilk
+    ? ""
+    : planBagi === "BU_TEST"
+      ? `Aşağıdaki listeden sadece ${ilk.name} ile başla, bir hafta başka hiçbir şeye bakma.`
+      : planBagi === "BASKA_TEST"
+        ? `Önce bu haftanın planını bitir; sıradaki konun ${ilk.name}.`
+        : `Aşağıdaki listeden ${ilk.name} ile başla.`;
   return {
     ton: "bad",
     baslik: `%${yuzde} — bu bir yetenek meselesi değil, sıralama meselesi.`,
     metin: ilk
-      ? `Aynı anda her yere bakıyorsun.${bosUyari} Aşağıdaki listeden sadece ${ilk.name} ile başla, bir hafta başka hiçbir şeye bakma.`
+      ? `Aynı anda her yere bakıyorsun.${bosUyari} ${ilkEylem}`
       : `Ölçüm için yeterli veri çıkmadı.${bosUyari} Daha kısa bir paketle, dinlenmiş kafayla tekrar dene.`,
   };
 }
@@ -348,16 +402,20 @@ export function haftalikPlan(
 
 /**
  * Koçun o haftaki tek cümlesi. Plan ekranının en üstünde durur.
+ *
+ * `kisaltildi`: plan geçen haftanın oranı yüzünden GERÇEKTEN kısaldı mı
+ * (haftalikKonuSiniri bir konuyu dışarıda bıraktı mı). Tek zayıf konusu olan
+ * öğrenciye "bu hafta daha kısa" demek, kısalmayan planı kısa diye sunmaktı.
  */
-export function kocNotu(oncelikler: OncelikliKonu[], oncekiTamamlama: number | null): string {
+export function kocNotu(oncelikler: OncelikliKonu[], kisaltildi: boolean): string {
   if (oncelikler.length === 0) {
     return "Kanıtlı bir zayıf konun yok. Bu hafta kapsamı genişlet: daha önce ölçmediğin bir paketi çöz.";
   }
   const isimler = oncelikler.map((k) => k.name).join(" ve ");
   const temel = `Sadece ${isimler}. Diğer konulara bakma.`;
 
-  if (oncekiTamamlama !== null && oncekiTamamlama < 0.5) {
-    return `${temel} Geçen hafta listenin yarısını bitiremedin, bu yüzden bu hafta daha kısa.`;
+  if (kisaltildi) {
+    return `${temel} Geçen hafta listenin yarısını bitiremedin, bu yüzden bu hafta tek konu.`;
   }
   return temel;
 }
@@ -377,6 +435,22 @@ export function haftaBasi(now: Date): Date {
   const d = String(trTarih.getDate()).padStart(2, "0");
   // Saat dilimsiz bir "tarih" olarak saklıyoruz (@db.Date).
   return new Date(`${y}-${m}-${d}T00:00:00.000Z`);
+}
+
+/** Türkiye yıl boyu UTC+3 (2016'dan beri yaz saati yok). */
+const TR_FARK_MS = 3 * 3600_000;
+
+/**
+ * Haftanın başladığı AN: pazartesi 00:00 Türkiye = pazar 21:00 UTC.
+ *
+ * haftaBasi() bir TARİH döndürüyor (StudyPlan.weekStart, @db.Date) ve değeri
+ * UTC gece yarısı. Zaman damgalarıyla (computedAt, submittedAt) onunla
+ * karşılaştırmak pazartesi 00:00-03:00 arasını önceki haftaya atıyordu:
+ * pazartesi gecesi çözülen test "geçen haftanın sonucu" sayılıyordu.
+ * Zaman damgası karşılaştırmalarında bu kullanılır.
+ */
+export function haftaBasiAni(now: Date): Date {
+  return new Date(haftaBasi(now).getTime() - TR_FARK_MS);
 }
 
 /** "18–24 Kasım" biçiminde hafta etiketi. */

@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Alıştırma ve yanlış defteri — uçtan uca akış + CEVAP ANAHTARI KAPISI.
  *
@@ -560,6 +561,15 @@ async function main() {
 
   // ── 13. Sınav akışı aynen çalışıyor ────────────────────────
   console.log("\nSınav akışı:");
+  // Bir YANLIŞ işaret: hiç işaret konmadan gönderilen test ölçüm sayılmıyor ve
+  // deftere yazmıyor (lib/insights.ts isaretsiz; tutarlilik-test denetler).
+  // Burada sınanan, açıkken başlayan sınavın yanlışlarının ve BOŞLARININ girmesi.
+  const ilkSoru = acik.questions[0];
+  const yanlisSik = await prisma.choice.findFirstOrThrow({
+    where: { questionId: ilkSoru.id, isCorrect: false },
+    select: { id: true },
+  });
+  await saveAnswer({ sessionId: acikSinav, userId: user.id, questionId: ilkSoru.id, choiceId: yanlisSik.id, timeSpentMs: 1000 });
   const acikPuan = await submitCheckup(acikSinav, user.id);
   check(
     "alıştırmalar açıkken başlayan sınav normal puanlanıyor",

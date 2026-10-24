@@ -1,9 +1,10 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "./db";
-import type { ExamScope, Prisma } from "./generated/client";
+import { Prisma, type ExamScope } from "./generated/client";
 import { EXAMS } from "./shared/exams";
-import { soruSinavdaKosulu } from "./shared/exam-scope";
+import { konuSinavdaMi, soruSinavdaKosulu } from "./shared/exam-scope";
+import { denemeHazirMi, type DenemeListeDurumu } from "./shared/deneme";
 import { QUESTION_STATUSES, isExamScope } from "./format";
 import { AD_SINIR, OZET_SINIR, SLUG_KALIBI, SLUG_SINIR, SURE_SINIR } from "./package-rules";
 import {
@@ -11,7 +12,7 @@ import {
   DENEME_SORU_SINIRI,
   benzerSec,
   dagilimaGoreDoldur,
-  denemeEngelleri,
+  denemeHazirlikEngelleri,
   listeDurumu,
   type Aday,
   type DenemeHedefi,
@@ -45,7 +46,10 @@ export interface DenemeSorusu {
   shownCount: number;
   /** Bu deneme dışında kaç denemenin listesinde. */
   digerDeneme: number;
-  /** Paketin sınavında sorulabilir mi (shared/exam-scope.ts). Değilse kayıt reddeder. */
+  /**
+   * Paketin sınavında sorulabilir mi (shared/exam-scope.ts). Değilse listeye
+   * yeni eklenmesini kayıt reddeder; kayıtlı listede kaldıysa uyarıdır.
+   */
   sinavda: boolean;
 }
 
@@ -137,6 +141,31 @@ export async function denemeHedefleri(): Promise<Record<string, DenemeHedefi[]>>
       if (!isExamScope(sinav) || !Number.isFinite(n) || n <= 0) continue;
       (out[sinav] ??= []).push({ topicId: k.id, ad: k.name, agirlik: n });
     }
+  }
+  return out;
+}
+
+/**
+ * Sınav başına ağırlığı OLMAYAN yaprak konular (adları, konu sırasıyla):
+ * konusu o sınavda geçen (shared/exam-scope.ts) ama Topic.examWeights[sınav]
+ * boş ya da sıfır. "Dağılıma göre doldur" bunlardan soru koymaz; düzenleyici
+ * uyarır (mock-rules.ts agirlikUyarilari). Sayıların kendisi hocada.
+ */
+export async function agirliksizKonular(): Promise<Record<string, string[]>> {
+  const konular = await db.topic.findMany({
+    where: { children: { none: {} } },
+    orderBy: [{ parent: { sortOrder: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
+    select: { name: true, examScope: true, examScopes: true, examWeights: true },
+  });
+  const out: Record<string, string[]> = {};
+  for (const sinav of Object.values(EXAMS).map((e) => e.scope as string)) {
+    out[sinav] = konular
+      .filter((k) => konuSinavdaMi(k, sinav))
+      .filter((k) => {
+        const n = Number(((k.examWeights ?? {}) as Record<string, unknown>)[sinav]);
+        return !(Number.isFinite(n) && n > 0);
+      })
+      .map((k) => k.name);
   }
   return out;
 }
@@ -277,13 +306,70 @@ export async function denemeIcinAra(g: {
 
 /**
  * Denemenin yayın engelleri (veritabanındaki hâliyle): liste = soru sayısı
- * ve hepsi yayında, paketin sınavında sorulabilir. Boş liste: yayınlanabilir.
+ * ve hepsi yayında — öğrenci uygulamasının hazırlık kuralı (shared/deneme.ts
+ * denemeHazirMi). Boş liste: öğrenci başlatabilir, yayınlanabilir, ödev
+ * verilebilir. Sınav dışı soru engel değil (mock-rules.ts denemeUyarilari).
+ * Paket deneme değilse null.
  */
 export async function denemeYayinEngelleri(paketId: string): Promise<string[] | null> {
   const paket = await db.package.findUnique({ where: { id: paketId }, select: { kind: true, examScope: true, questionCount: true } });
   if (!paket || paket.kind !== "MOCK") return null;
   const liste = await denemeListesi(paketId, paket.examScope);
-  return denemeEngelleri(listeDurumu(paket.questionCount, liste));
+  return denemeHazirlikEngelleri(listeDurumu(paket.questionCount, liste));
+}
+
+/**
+ * Birden çok denemenin hazırlığı tek sorguda: paket kimliği → öğrenci şu an
+ * başlatabilir mi. Öğrenci uygulamasının katalog sayımının (app/lib/catalog.ts
+ * denemeDurumlari) SQL ikizi; karar ortak kuralda (shared/deneme.ts denemeHazirMi).
+ */
+export async function denemeHazirliklari(paketler: readonly { id: string; questionCount: number }[]): Promise<Map<string, boolean>> {
+  if (!paketler.length) return new Map();
+  const satirlar = await db.$queryRaw<{ packageId: string; toplam: number; yayinda: number }[]>`
+    SELECT pq."packageId",
+           count(*)::int AS toplam,
+           count(*) FILTER (WHERE q.status = 'PUBLISHED')::int AS yayinda
+    FROM "PackageQuestion" pq
+    JOIN "Question" q ON q.id = pq."questionId"
+    WHERE pq."packageId" IN (${Prisma.join(paketler.map((p) => p.id))})
+    GROUP BY pq."packageId"
+  `;
+  const durum = new Map<string, DenemeListeDurumu>(satirlar.map((s) => [s.packageId, { toplam: Number(s.toplam), yayinda: Number(s.yayinda) }]));
+  return new Map(paketler.map((p) => [p.id, denemeHazirMi(durum.get(p.id), p.questionCount)]));
+}
+
+/** Kilitli denemedeki soru (aşağıdaki kilitliDenemeler'in koşulu). */
+const KILITLI_DENEME_BAGI: Prisma.PackageQuestionWhereInput = {
+  package: { kind: "MOCK", status: "PUBLISHED", sessions: { some: {} } },
+};
+
+/**
+ * Yayından alınamayacak soru: yayında ve kilitli bir denemenin listesinde.
+ * Durum eylemleri bunu güncellemenin KOŞULUNA koyar (`NOT`): denetim ile
+ * yazma arasında deneme başlatılsa da soru yayından düşmez.
+ */
+export const KILITLI_DENEME_SORUSU: Prisma.QuestionWhereInput = {
+  status: "PUBLISHED",
+  packageLinks: { some: KILITLI_DENEME_BAGI },
+};
+
+/**
+ * Kilitli denemeler: soru kimliği → listesinde bulunduğu, YAYINDAKİ ve en az
+ * bir kez başlatılmış (her durumda oturumu olan) denemelerin adları. Böyle bir
+ * sorunun durumu yayından alınamaz, konusu ve hedef sınavı değişmez
+ * (mock-rules.ts KILITLI_DENEME_MESAJI). Oturum sayımı deneme
+ * düzenleyicisinin kilidiyle aynı (Package._count.sessions).
+ */
+export async function kilitliDenemeler(soruIdleri: readonly string[]): Promise<Map<string, string[]>> {
+  if (!soruIdleri.length) return new Map();
+  const baglar = await db.packageQuestion.findMany({
+    where: { questionId: { in: [...soruIdleri] }, ...KILITLI_DENEME_BAGI },
+    orderBy: { package: { name: "asc" } },
+    select: { questionId: true, package: { select: { name: true } } },
+  });
+  const out = new Map<string, string[]>();
+  for (const b of baglar) out.set(b.questionId, [...(out.get(b.questionId) ?? []), b.package.name]);
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -451,12 +537,22 @@ export async function denemeyiKaydet(girdi: unknown): Promise<DenemeKayitSonucu>
   const sira = new Map(idler.map((id, i) => [id, i]));
   satirlar.sort((a, b) => (sira.get(a.id) ?? 0) - (sira.get(b.id) ?? 0));
   const liste = await satirlariHazirla(satirlar, sinav, mevcut?.id);
-  for (const q of liste) if (!q.sinavda) soruHatalari[q.id] = "Bu soru denemenin sınavında sorulamıyor (hedef sınavı başka).";
+  /*
+   * Sınav dışı soru: listeye YENİ eklenemez (kayıt anındaki denetim). Kayıtlı
+   * listede olup sonradan sınav dışı kalmış soru ise kaydı engellemez, uyarı
+   * olarak görünür (mock-rules.ts denemeUyarilari): öğrenci uygulaması o
+   * denemeyi başlatıyor; kilitli denemede de soru çıkarılamıyor, ad ya da
+   * yayın durumu değişikliği bu yüzden takılmamalı.
+   */
+  const kayitli = new Set(mevcut?.liste ?? []);
+  for (const q of liste) {
+    if (!q.sinavda && !kayitli.has(q.id)) soruHatalari[q.id] = "Bu soru denemenin sınavında sorulamıyor (hedef sınavı başka).";
+  }
   if (Object.keys(soruHatalari).length) return { ok: false, sorular: soruHatalari, error: "Listede kaydedilemeyen sorular var (işaretli)." };
 
-  // ── Yayın kuralı ─────────────────────────────────────────────
+  // ── Yayın kuralı: öğrencinin hazırlık kuralı (shared/deneme.ts) ──
   if (v.status === "PUBLISHED") {
-    const engeller = denemeEngelleri(listeDurumu(v.questionCount, liste));
+    const engeller = denemeHazirlikEngelleri(listeDurumu(v.questionCount, liste));
     if (engeller.length) {
       return {
         ok: false,

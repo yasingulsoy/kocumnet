@@ -186,7 +186,8 @@ model Package {
   sortOrder       Int           @default(0)
 
   /// Yanlışın doğruyu götürme oranı. KODA GÖMÜLMEZ:
-  /// YKS 0.25 (4 yanlış 1 doğru), LGS 0.3333, KPSS 0. Bu oran ürünün öğrenciye
+  /// YKS 0.25 (4 yanlış 1 doğru), LGS 0.3333; KPSS, DGS ve ALES için varsayım
+  /// 0.25 (Özgür Hoca'ya soruldu, HOCAYA-SORULAR §1). Bu oran ürünün öğrenciye
   /// "emin değilsen işaretle" deyip demeyeceğini değiştirir (PLAN §4).
   penaltyRatio Decimal @default(0.25) @db.Decimal(5, 4)
 
@@ -717,6 +718,9 @@ enum LevelRunStatus {
   COMPLETED
   /// Bir kapıda durdu; stoppedAtLevel hangi seviyede olduğunu söyler.
   STOPPED
+  /// Öğrenci bıraktı ya da başka sınavın seviyelisini başlattı. Karnede
+  /// "bırakıldı" olarak durur; yeni koşuyu engellemez.
+  ABANDONED
 }
 
 /// Bir öğrencinin bir check-up denemesi.
@@ -860,6 +864,14 @@ model CheckupResult {
   computedAt     DateTime @default(now())
   /// Hangi sürümle hesaplandı — puanlama mantığı değişirse eski sonuçlar ayırt edilsin.
   scoringVersion Int      @default(1)
+
+  /// Cevap anahtarı sonradan düzeltildiği için yeniden puanlandıysa ne zaman.
+  /// Sonuç ekranı öğrenciye bunu söyler; tahmini net ve eğilim yeni değerle
+  /// hesaplanır.
+  rescoredAt  DateTime?
+  /// Yeniden puanlama dökümü: önceki doğru/yanlış/boş ve net, düzeltilen
+  /// soru sayısı. { onceki: { dogru, yanlis, bos, net }, soruSayisi }
+  rescoreNote Json?
 
   @@index([computedAt])
 }

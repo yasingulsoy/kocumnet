@@ -10,8 +10,10 @@
 
 export const RISK_ESIK = {
   /**
-   * Bu kadar gündür ne giriş ne test: öğrenci kopmuş olabilir. Haftalık plan
-   * döngüsünün iki turu — iki pazartesi postasına rağmen dönmemiş demek.
+   * Bu kadar gündür ne giriş ne test ne alıştırma: öğrenci kopmuş olabilir.
+   * Haftalık plan döngüsünün iki turu — iki pazartesi postasına rağmen
+   * dönmemiş demek. Etkinlik: son giriş, son biten test ve HER TÜRDEN
+   * oturumun son başlama anı (alıştırma, defter tekrarı dahil).
    */
   pasifGun: 14,
   /**
@@ -27,9 +29,13 @@ export const RISK_ESIK = {
    */
   planOrani: 0.4,
   /**
-   * Son iki PAKET testinin başarı oranı arasındaki düşüş (puan). Kontrol
-   * testleri (5 soru) ve seviyeli aşamalar hariç: uzunluk ve zorlukları
-   * farklı, iki farklı türü kıyaslamak yanıltıcı.
+   * Son iki PAKET testinin başarı oranı arasındaki düşüş (puan). Hangi testler:
+   * öğrenci uygulamasının eğilim kuralı (app/lib/insights.ts egilimeGirer:
+   * paket testi, işaretli, öğrencinin sınavında; kâğıt dahil) ve ikisi AYNI
+   * paket türünden (STANDARD, INTRO, MOCK). Kontrol testleri (5 soru), seviyeli
+   * aşamalar ve boş gönderilmiş testler hariç; deneme ile kısa test de
+   * kıyaslanmaz: uzunluk ve zorlukları farklı, iki farklı türü kıyaslamak
+   * yanıltıcı. Sorgu risk-data.ts'te.
    */
   dususPuan: 10,
 } as const;
@@ -42,13 +48,13 @@ export const RISK_META: Record<RiskKey, { baslik: string; ton: RiskTon; aciklama
   pasif: {
     baslik: "Pasif",
     ton: "bad",
-    aciklama: RISK_ESIK.pasifGun + " gündür ne giriş yaptı ne test çözdü.",
+    aciklama: RISK_ESIK.pasifGun + " gündür ne giriş yaptı ne test ya da alıştırma başlattı.",
     eylem: "Ara ya da mesaj at; plan çok mu ağır geldi, sor.",
   },
   dusus: {
     baslik: "Düşüşte",
     ton: "warn",
-    aciklama: "Son iki paket testinde başarı en az " + RISK_ESIK.dususPuan + " puan düştü.",
+    aciklama: "Hedef sınavındaki aynı türden son iki testte başarı en az " + RISK_ESIK.dususPuan + " puan düştü.",
     eylem: "Düşen konulara bak; planı o konulara daralt.",
   },
   plan: {
@@ -75,8 +81,13 @@ export interface RiskOzeti {
   lastLoginAt: Date | null;
   /** Son tamamlanan testin bitişi (her tür). */
   sonTest: Date | null;
+  /** Her türden oturumun (alıştırma dahil, bitmemiş de) son başlama anı. */
+  sonBaslama: Date | null;
   testSayisi: number;
-  /** Son iki paket testinin başarı oranı (0-1): [son, önceki]. */
+  /**
+   * Son iki paket testinin başarı oranı (0-1): [son, önceki]. İkisi de aynı
+   * paket türünden, işaretli ve öğrencinin sınavında (risk-data.ts).
+   */
   sonIkiPaket: [number | null, number | null];
   /** Geçen haftanın planı: tamamlanan / toplam iş. Plan yoksa null. */
   gecenHaftaPlan: { biten: number; toplam: number } | null;
@@ -92,9 +103,9 @@ export interface RiskBulgusu {
 
 const GUN = 86_400_000;
 
-/** Son etkinlik: son giriş, son test ve kayıt tarihinin en yenisi. */
-export function sonEtkinlik(o: Pick<RiskOzeti, "createdAt" | "lastLoginAt" | "sonTest">): Date {
-  return [o.createdAt, o.lastLoginAt, o.sonTest]
+/** Son etkinlik: son giriş, son test, son oturum başlangıcı ve kayıt tarihinin en yenisi. */
+export function sonEtkinlik(o: Pick<RiskOzeti, "createdAt" | "lastLoginAt" | "sonTest" | "sonBaslama">): Date {
+  return [o.createdAt, o.lastLoginAt, o.sonTest, o.sonBaslama]
     .filter((d): d is Date => d instanceof Date)
     .reduce((a, b) => (b > a ? b : a));
 }

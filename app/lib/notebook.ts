@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { isaretsiz } from "@/lib/insights";
 import { tekrarSonrasi, yanlisKarari, yanlisSonrasi } from "@/lib/review";
 
 /**
@@ -42,6 +43,17 @@ export async function defteriGuncelle(sessionId: string): Promise<{ yeni: number
     },
   });
   if (!s || !OLCUM_TURLERI.has(s.kind) || s.status !== "SUBMITTED") return { yeni: 0, sifirlanan: 0 };
+
+  /*
+   * Yalnızca İŞARETLİ ölçüm yazar (lib/insights.ts isaretsiz). Boş gönderilen
+   * ya da terk edilip cron'un kapattığı bir test, sorularının hepsini (40'a
+   * kadar) "yanlış" diye deftere açıyordu: öğrenci hiç çözmediği soruların
+   * tekrarına boğuluyordu. Sonuç satırına değil cevaplara bakıyoruz: aynı
+   * tanım, sonuç yazılmadan da çalışır.
+   */
+  const dogru = s.items.filter((i) => i.answer?.isCorrect === true).length;
+  const yanlis = s.items.filter((i) => i.answer?.isCorrect === false).length;
+  if (isaretsiz({ correctCount: dogru, wrongCount: yanlis })) return { yeni: 0, sifirlanan: 0 };
 
   // Ölçümün GERÇEKTEN bittiği an: süresi dolup cron'la puanlanan testte
   // cevaplar süre dolmadan verilmişti.
@@ -112,6 +124,34 @@ export async function defteriGuncelle(sessionId: string): Promise<{ yeni: number
   }
 
   return { yeni, sifirlanan };
+}
+
+/**
+ * Cevap anahtarı düzeltilip yeniden puanlanan oturumda ARTIK DOĞRU olan
+ * soruların maddelerini kapatır (lib/checkup.ts yenidenPuanla).
+ *
+ * Yalnızca maddeyi bu oturum açtıysa ya da en son bu oturum başa
+ * döndürdüyse (lastSessionId): soru başka bir testte de yanlış yapıldıysa
+ * madde o yanlış için durur. O test de aynı düzeltmeden etkilendiyse kendi
+ * yeniden puanlamasında kapanır.
+ */
+export async function dogruCikanlariKapat(args: {
+  userId: string;
+  sessionId: string;
+  questionIds: readonly string[];
+  now: Date;
+}): Promise<number> {
+  if (args.questionIds.length === 0) return 0;
+  const r = await prisma.notebookItem.updateMany({
+    where: {
+      userId: args.userId,
+      questionId: { in: [...args.questionIds] },
+      lastSessionId: args.sessionId,
+      resolvedAt: null,
+    },
+    data: { resolvedAt: args.now },
+  });
+  return r.count;
 }
 
 /** BEKLETILDI: ipucuyla doğru; madde ilerlemedi, yarın yine gelir (lib/review.ts). */

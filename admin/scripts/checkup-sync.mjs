@@ -57,6 +57,21 @@ const MODULLER = [
   // versin: tamamlanma saklanmıyor, iki tarafta da kayıtlardan türetiliyor.
   // Hiçbir şey içe aktarmıyor.
   "odev.ts",
+  // Deneme hazırlık kuralı (denemeHazirMi: liste tam ve hepsi yayında) ve
+  // kâğıt kuralları. Panelin "yayınlanabilir", alarm ve ödev denetimi
+  // öğrencinin "hazırlanıyor" gördüğü durumla birebir aynı karara varsın;
+  // eskiden panelde elle tutulan bir ikiz vardı ve sınav dışı soruda ayrışıyordu.
+  // Hiçbir şey içe aktarmıyor.
+  "deneme.ts",
+  // İçerik uzunluk sınırları (ipucu, kaynak, özet kartı…). Soru formu ile
+  // toplu içe aktarma aynı sayıyla reddetsin. Hiçbir şey içe aktarmıyor;
+  // panelin istemci bileşenleri de alıyor.
+  "content-limits.ts",
+  // Soru görselinin saklanan biçimi (WebP, 1200 px, üst veri atılır). Panelin
+  // yüklemesi, toplu içe aktarması ve komut satırı aynı görseli yazsın. Yalnızca
+  // paket importu (sharp, iki projede de bağımlılık); panel onu
+  // lib/checkup/media-image.ts ile sunucuya kilitliyor.
+  "media-image.ts",
 ];
 
 /**

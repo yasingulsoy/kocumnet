@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { appUrl, isMailConfigured, sendPasswordResetMail } from "@/lib/mailer";
 import { sinirAsildi } from "@/lib/rate-limit";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 export interface ResetState {
   error?: string;
@@ -47,8 +48,7 @@ export async function requestResetAction(
     // hesabının dışında bekletmenin en can sıkıcı yolu.
     return {
       error:
-        "Parola sıfırlama şu anda kapalı. Lütfen bizimle iletişime geçin: " +
-        (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "info@kocum.net"),
+        "Parola sıfırlama şu anda kapalı. Lütfen bizimle iletişime geçin: " + SUPPORT_EMAIL,
     };
   }
 

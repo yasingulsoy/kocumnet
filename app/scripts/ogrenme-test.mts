@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Öğrenme ve motivasyon — ipucu, adım adım çözüm, video, kazanım özeti,
  * hata bildirimi, koça soru, seri.

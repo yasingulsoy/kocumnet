@@ -9,7 +9,7 @@
  * koymak "kim ne zaman değiştirdi" sorusunu zorlaştırır, faydası olmaz.
  *
  * ⚠️ SORU SAYILARI VE YANLIŞ GÖTÜRME ORANLARI ÖSYM/MEB kararıyla yıldan yıla
- * değişebiliyor. Yayına çıkmadan önce Serhat Hoca ile doğrulanmalı; yanlış bir
+ * değişebiliyor. Özgür Hoca'ya soruldu (HOCAYA-SORULAR §1); yanlış bir
  * `penaltyRatio` bütün geçmiş netleri sessizce bozar (oturum başında paketten
  * kopyalanıyor, sonradan düzeltmek eski sonuçları düzeltmiyor).
  */
@@ -139,10 +139,11 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     mathQuestionCount: 30,
     mockDurationMinutes: 35,
     /*
-     * ⚠️ DOĞRULANACAK (Serhat Hoca): ÖSYM'nin klasik "dörtte bir" kuralı mı
-     * yürürlükte, yoksa yanlışlar dikkate alınmıyor mu? İkisi arasında
-     * seçim yaparken 0.25 alındı, çünkü risk simetrik değil: ceza varken
-     * "asla boş bırakma" demek öğrenciye net kaybettirir, tersi kaybettirmez.
+     * ⚠️ VARSAYIM: 0.25 (Özgür Hoca'ya soruldu, HOCAYA-SORULAR §1, soru 1.1).
+     * ÖSYM'nin klasik "dörtte bir" kuralı mı yürürlükte, yoksa yanlışlar
+     * dikkate alınmıyor mu? İkisi arasında seçim yaparken 0.25 alındı, çünkü
+     * risk simetrik değil: ceza varken "asla boş bırakma" demek öğrenciye net
+     * kaybettirir, tersi kaybettirmez.
      */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
@@ -157,7 +158,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Ön lisans mezunu",
     mathQuestionCount: 30,
     mockDurationMinutes: 35,
-    /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 18,
@@ -171,7 +172,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Ön lisans mezunu / son sınıf",
     mathQuestionCount: 60,
     mockDurationMinutes: 90,
-    /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 35,
@@ -185,7 +186,7 @@ export const EXAMS: Record<ExamScopeValue, ExamInfo> = {
     audience: "Lisans mezunu",
     mathQuestionCount: 50,
     mockDurationMinutes: 75,
-    /** ⚠️ DOĞRULANACAK — bkz. KPSS_LISANS notu. */
+    /** ⚠️ VARSAYIM (HOCAYA 1.1) — bkz. KPSS_LISANS notu. */
     penaltyRatio: 0.25,
     blankAdvice: "İki şıkkı eleyebiliyorsan işaretle; hiç fikrin yoksa boş bırak.",
     defaultTargetNet: 30,
@@ -240,9 +241,10 @@ export function daysUntilExam(scope: string | null | undefined, now: Date): numb
 }
 
 /**
- * Bu sınavda yanlışın bedeli var mı? Sonuç ekranı buna göre "net" gösterip
- * göstermeyeceğine karar veriyor: KPSS'de net = doğru sayısı olduğu için
- * yan yana iki aynı sayı yazmak hata gibi görünüyor.
+ * Bu sınavda yanlışın bedeli var mı? Cezasız sınavda net = doğru sayısı ve
+ * yan yana iki aynı sayı yazmak hata gibi görünüyor. Şu an bütün sınavlar
+ * cezalı (KPSS, DGS ve ALES'te 0.25 bir varsayım, HOCAYA 1.1). Sonuç ekranı
+ * bunu değil OTURUMUN oranını kullanıyor: seviyeli aşamalar cezasız açılıyor.
  */
 export function hasPenalty(scope: string | null | undefined): boolean {
   const info = examInfo(scope);

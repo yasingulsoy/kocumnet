@@ -18,6 +18,68 @@ export interface ResultLike {
   topicBreakdown: TopicBreakdown;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Ölçüm süzgeci: hangi sonuç hangi okumaya girer
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Süzgecin bir sonuçtan okuduğu alanlar. `kind` oturumun türüdür
+ * (SessionKind: PACKAGE | TOPIC_RETEST | LEVEL_STAGE | PRACTICE); burada
+ * Prisma tipi yok, panel de aynı dosyayı kullanıyor.
+ */
+export interface OlcumKaydi {
+  kind: string;
+  correctCount: number;
+  wrongCount: number;
+  /** Sonucun sınavı. Eski kayıtlarda boş: o zaman her sınava uyar sayılır. */
+  examScope?: string | null;
+}
+
+/**
+ * Hiç işaret konmadan kapanmış oturum: doğru + yanlış = 0.
+ *
+ * Öğrenci "cevaplara bakayım" diye boş gönderdi ya da sekmeyi kapattı ve
+ * süreyi cron doldurdu. Bu bir ölçüm değil: eğilime girerse grafik sıfıra
+ * çakılıyor, plana girerse bütün konular "zayıf" çıkıyor, deftere 40 madde
+ * yazılıyor. Deneme havuzu (lib/checkup.ts denemeHavuzu) aynı kuralla
+ * dışlıyor; tanım tek yerde, burada.
+ */
+export function isaretsiz(r: { correctCount: number; wrongCount: number }): boolean {
+  return r.correctCount + r.wrongCount === 0;
+}
+
+/** Sınav süzgeci: sınav verilmediyse ya da kayıtta yazmıyorsa (eski kayıt) geçer. */
+function sinavaUyar(s: OlcumKaydi, sinav?: string | null): boolean {
+  return !sinav || !s.examScope || s.examScope === sinav;
+}
+
+/**
+ * Eğilime (grafik, "son ölçüm", değişim puanı), tahmini nete ve özet
+ * sayılara giren sonuç: yalnızca PAKET testi ve işaretli.
+ *
+ * Deneme, tanışma, standart paket ve kâğıtta çözülen dahil: kâğıt da
+ * geçerli bir ölçüm, yalnızca süresi tutulmuyor. Dışarıda kalanlar:
+ *  - Kontrol testi: 5 soru, tek zayıf konu. Çizgiye girince plandaki kontrol
+ *    testini çözen öğrencinin grafiği sebepsiz düşüyordu.
+ *  - Seviyeli aşama: cezasız (ham doğru) ve kazanım başına tek soru; neti
+ *    paket testinin netiyle kıyaslanamaz, tahmini neti şişiriyordu.
+ *  - Alıştırma: ölçüm değil (sonuç satırı da yok).
+ */
+export function egilimeGirer(s: OlcumKaydi, sinav?: string | null): boolean {
+  return s.kind === "PACKAGE" && !isaretsiz(s) && sinavaUyar(s, sinav);
+}
+
+const KONU_HARITASI_TURLERI = new Set(["PACKAGE", "TOPIC_RETEST", "LEVEL_STAGE"]);
+
+/**
+ * Konu haritasına giren sonuç: paket, kontrol testi ya da seviyeli aşama;
+ * işaretli. Kontrol testi ve aşama o konunun GERÇEK ölçümüdür (eğilimden
+ * farkı bu): soru soruldu, öğrenci cevapladı. Alıştırma girmez.
+ */
+export function konuHaritasinaGirer(s: OlcumKaydi, sinav?: string | null): boolean {
+  return KONU_HARITASI_TURLERI.has(s.kind) && !isaretsiz(s) && sinavaUyar(s, sinav);
+}
+
 export interface AggregateTopic {
   topicId: string;
   name: string;

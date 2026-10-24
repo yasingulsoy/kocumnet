@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardList, Layers, Lock, Timer } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
-import { aktifKosu } from "@/lib/level-run";
+import { SEVIYELI_HAZIR_DEGIL, aktifKosu } from "@/lib/level-run";
+import { seviyeliHazirlik } from "@/lib/level-selection";
 import { ayarGetir, type Seviye } from "@/lib/levels";
 import { EXAMS, examShort, isExamScope } from "@/lib/exams";
 import { seviyeliBaslatAction } from "@/lib/actions/levels";
@@ -24,18 +25,30 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
   const sp = await searchParams;
   const hata = typeof sp.hata === "string" ? sp.hata : null;
 
-  // Devam eden deneme varsa doğrudan oraya.
-  const acik = await aktifKosu(user.id);
-  if (acik) redirect(`/seviye/${acik.id}`);
-
   const sinav = isExamScope(user.targetExam) ? user.targetExam : null;
   if (!sinav) redirect("/tanisma");
 
+  /*
+   * Bu sınavın süren denemesi varsa doğrudan oraya. Yalnızca BU sınavın:
+   * eskiden sınava bakılmıyordu, hedefini değiştiren öğrenci eski sınavın
+   * denemesine yönlendiriliyor ve yeni sınavın seviyelisini hiç
+   * başlatamıyordu. Başka sınavın süren denemesi aşağıda not olarak çıkar;
+   * bu sınavınki başlatılınca o bırakılır (lib/level-run.ts).
+   */
+  const [acik, baskaSinavinKosusu] = await Promise.all([aktifKosu(user.id, sinav), aktifKosu(user.id)]);
+  if (acik) redirect(`/seviye/${acik.id}`);
+  const yarimKalan = baskaSinavinKosusu && baskaSinavinKosusu.examScope !== sinav ? baskaSinavinKosusu : null;
+
   const ayar = ayarGetir(sinav);
-  const paket = await prisma.package.findFirst({
-    where: { kind: "LEVEL", examScope: sinav as never, status: "PUBLISHED" },
-    select: { id: true, name: true, isFree: true },
-  });
+  const [paket, hazirlik] = await Promise.all([
+    prisma.package.findFirst({
+      where: { kind: "LEVEL", examScope: sinav as never, status: "PUBLISHED" },
+      select: { id: true, name: true, isFree: true },
+    }),
+    // Üç seviyenin havuzu birlikte (koşu başlatmadaki denetimin aynısı).
+    seviyeliHazirlik(sinav),
+  ]);
+  const acilabilir = paket !== null && hazirlik.hazir;
 
   const erisim = paket ? await checkPackageAccess(user.id, paket.id, paket.isFree) : null;
 
@@ -123,12 +136,23 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
           </p>
         </ComponentCard>
 
-        {/* Başlat */}
-        {!paket ? (
-          <Alert variant="warning">
-            {examShort(sinav)} için seviyeli check-up henüz hazır değil. Soru havuzu
-            tamamlanınca burada görünecek.
+        {/* Başka sınavın yarım denemesi: başlatınca bırakılacağını önceden söyle. */}
+        {yarimKalan && acilabilir ? (
+          <Alert variant="info">
+            {examShort(yarimKalan.examScope)} seviyeli check-up&apos;ın yarım duruyor.{" "}
+            {examShort(sinav)} denemesini başlatırsan o deneme bırakılmış sayılır; karnesi
+            &quot;bırakıldı&quot; olarak kalır.{" "}
+            <Link href={`/seviye/${yarimKalan.id}`} className="font-medium underline">
+              {examShort(yarimKalan.examScope)} denemesine dön
+            </Link>
           </Alert>
+        ) : null}
+
+        {/* Başlat */}
+        {!acilabilir ? (
+          // Paket yayında değil ya da üç seviyeden birinin havuzu yetmiyor:
+          // eksik soruyla aşama açılmaz (lib/level-run.ts).
+          <Alert variant="warning">{SEVIYELI_HAZIR_DEGIL}</Alert>
         ) : erisim && !erisim.allowed ? (
           <Card className="p-5 sm:p-6">
             <div className="flex items-start gap-3">
@@ -187,10 +211,15 @@ export default async function SeviyeliPage({ searchParams }: PageProps<"/seviyel
                     href={`/seviye/${g.id}`}
                     className="flex min-h-12 items-center gap-3 rounded-lg px-3 py-2.5 transition hover:bg-gray-50"
                   >
-                    <Badge size="sm" color={g.status === "COMPLETED" ? "success" : "error"}>
+                    <Badge
+                      size="sm"
+                      color={g.status === "COMPLETED" ? "success" : g.status === "ABANDONED" ? "light" : "error"}
+                    >
                       {g.status === "COMPLETED"
                         ? "Seviye 3"
-                        : `Seviye ${g.stoppedAtLevel ?? g.reachedLevel}`}
+                        : g.status === "ABANDONED"
+                          ? "Bırakıldı"
+                          : `Seviye ${g.stoppedAtLevel ?? g.reachedLevel}`}
                     </Badge>
                     <span className="min-w-0 flex-1 truncate text-theme-sm font-medium text-gray-800">
                       {examShort(g.examScope)} seviyeli check-up

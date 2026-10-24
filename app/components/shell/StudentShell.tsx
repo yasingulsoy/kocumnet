@@ -58,7 +58,11 @@ export function StudentShell({ user, children }: { user: SessionUser; children: 
   );
 }
 
-/** Kenar çubuğunun altı (TailAdmin'in SidebarWidget yeri): yayınlara giden yol. */
+/**
+ * Kenar çubuğunun altı (TailAdmin'in SidebarWidget yeri): yayınlara giden
+ * yol. Ürün sayfasına gider; eskiden sitenin ana sayfasına gidiyordu ve
+ * "yayınlar" kutusundan gelen öğrenci kitapları aramak zorunda kalıyordu.
+ */
 function SiteKutusu() {
   return (
     <div className="rounded-2xl bg-gray-50 px-4 py-5 text-center">
@@ -66,8 +70,13 @@ function SiteKutusu() {
       <p className="mt-1 mb-4 text-theme-xs text-gray-500">
         Zayıf çıkan konular için soru bankaları ve fasiküller.
       </p>
-      <a href={SITE_URL} target="_blank" rel="noopener" className={buttonClass({ variant: "outline", size: "xs", block: true })}>
-        kocum.net <ArrowUpRight aria-hidden />
+      <a
+        href={`${SITE_URL}/urunlerimiz`}
+        target="_blank"
+        rel="noopener"
+        className={buttonClass({ variant: "outline", size: "xs", block: true })}
+      >
+        Yayınları gör <ArrowUpRight aria-hidden />
       </a>
     </div>
   );

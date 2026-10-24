@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Grup ödevi — saf tamamlanma kuralı + öğrencinin ödev listesi sorgusu.
  *

@@ -12,8 +12,8 @@ import { Button } from "@/components/tailadmin/ui/Button";
 import { useOnay } from "./Onay";
 
 /**
- * Bu haftanın planına koç notu. Öğrenci notu plan kartında ve pazartesi
- * postasında görür. Kurallar lib/checkup/coach-note.ts'te, yetki ve hafta
+ * Bu haftanın planına koç notu. Öğrenci notu panosunda, bu haftanın plan
+ * kartında görür. Kurallar lib/checkup/coach-note.ts'te, yetki ve hafta
  * denetimi sunucuda (actions/plans.ts).
  */
 export function CoachNoteEditor({ planId, note }: { planId: string; note: string | null }) {
@@ -56,7 +56,7 @@ export function CoachNoteEditor({ planId, note }: { planId: string; note: string
             <span className="tabular">
               {temiz.length}/{KOC_NOTU_SINIR}
             </span>{" "}
-            · Öğrenci plan kartında ve pazartesi postasında görür. Tek paragraf; satır sonları boşluğa döner.
+            · Öğrenci panosunda ve bu haftanın planında görür. Tek paragraf; satır sonları boşluğa döner.
           </>
         }
       >
@@ -77,7 +77,7 @@ export function CoachNoteEditor({ planId, note }: { planId: string; note: string
             onClick={async () => {
               const evet = await onayla({
                 title: "Koç notu kaldırılsın mı?",
-                description: "Pazartesi postasında genel bir cümle gider.",
+                description: "Öğrencinin plan kartında koç notu görünmez.",
                 confirmLabel: "Notu kaldır",
                 tone: "warning",
               });

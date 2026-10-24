@@ -1,10 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { CheckupError } from "@/lib/checkup";
-import { asamaAc, seviyeliSinavBaslat, telafiyiAc } from "@/lib/level-run";
+import { asamaAc, kosuyuBirak, seviyeliSinavBaslat, telafiyiAc } from "@/lib/level-run";
 import { isExamScope } from "@/lib/exams";
 import type { Seviye } from "@/lib/levels";
 
@@ -22,10 +22,9 @@ export async function seviyeliBaslatAction(formData: FormData): Promise<void> {
   const sinav = String(formData.get("examScope") ?? "");
   if (!isExamScope(sinav)) redirect("/seviyeli?hata=" + encodeURIComponent("Sınav seçilmedi."));
 
-  let sessionId: string;
+  let sonuc: { runId: string; sessionId: string | null };
   try {
-    const sonuc = await seviyeliSinavBaslat(user.id, sinav);
-    sessionId = sonuc.sessionId;
+    sonuc = await seviyeliSinavBaslat(user.id, sinav);
   } catch (e) {
     if (e instanceof CheckupError) {
       redirect("/seviyeli?hata=" + encodeURIComponent(e.message));
@@ -34,7 +33,8 @@ export async function seviyeliBaslatAction(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/panel");
-  redirect(`/checkup/${sessionId}`);
+  // Süren deneme açık aşamasızsa sıradaki adımı deneme sayfası söyler.
+  redirect(sonuc.sessionId ? `/checkup/${sonuc.sessionId}` : `/seviye/${sonuc.runId}`);
 }
 
 /** Bekleyen telafi turunu açar. */
@@ -42,7 +42,7 @@ export async function telafiBaslatAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const runId = String(formData.get("runId") ?? "");
 
-  let sessionId: string;
+  let sessionId: string | null;
   try {
     sessionId = await telafiyiAc(runId, user.id);
   } catch (e) {
@@ -52,7 +52,29 @@ export async function telafiBaslatAction(formData: FormData): Promise<void> {
     throw e;
   }
 
-  redirect(`/checkup/${sessionId}`);
+  // Tur açılmadan karar verildiyse (havuzda yeni soru yok) karne sıradakini gösterir.
+  revalidatePath("/panel");
+  redirect(sessionId ? `/checkup/${sessionId}` : `/seviye/${runId}`);
+}
+
+/**
+ * Süren denemeyi bırakır (karnedeki "Bu denemeyi bırak", onay penceresinden
+ * sonra). Sayfa yerinde yenilenir: karne "bırakıldı" olarak çizilir.
+ */
+export async function seviyeliBirakAction(runId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (typeof runId !== "string" || !runId || runId.length > 64) {
+    return { ok: false, error: "Geçersiz istek." };
+  }
+  try {
+    await kosuyuBirak(runId, user.id);
+  } catch (e) {
+    if (e instanceof CheckupError) return { ok: false, error: e.message };
+    throw e;
+  }
+  revalidatePath("/panel");
+  refresh();
+  return { ok: true };
 }
 
 /** Açılmış bir sonraki seviyeyi başlatır. */

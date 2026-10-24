@@ -14,7 +14,15 @@ import {
   trDate,
   trNumber,
 } from "@/lib/checkup/format";
-import { aggregateTopics, studentStats, type ResultLike } from "@/lib/checkup/shared/insights";
+import {
+  HARITA_EN_AZ_SORU,
+  aggregateTopics,
+  egilimeGirer,
+  konuHaritasinaGirer,
+  studentStats,
+  type OlcumKaydi,
+  type ResultLike,
+} from "@/lib/checkup/shared/insights";
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { GrantForm, RevokeButton } from "@/components/checkup/EntitlementControls";
@@ -33,6 +41,7 @@ import { ComponentCard } from "@/components/tailadmin/ui/Card";
 import { EmptyState } from "@/components/tailadmin/ui/EmptyState";
 import { MetricCard } from "@/components/tailadmin/ui/MetricCard";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { SegmentedTabs } from "@/components/tailadmin/ui/SegmentedTabs";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/tailadmin/ui/Table";
 
 export const metadata: Metadata = { title: "Check-up · Öğrenci" };
@@ -60,13 +69,15 @@ const KOSU_DURUMU: Record<string, { etiket: string; renk: BadgeColor }> = {
   IN_PROGRESS: { etiket: "Sürüyor", renk: "primary" },
   COMPLETED: { etiket: "Tamamlandı", renk: "success" },
   STOPPED: { etiket: "Kapıda durdu", renk: "warning" },
+  ABANDONED: { etiket: "Bırakıldı", renk: "light" },
 };
 
-export default async function StudentDetailPage({ params }: PageProps<"/checkup/ogrenciler/[id]">) {
+export default async function StudentDetailPage({ params, searchParams }: PageProps<"/checkup/ogrenciler/[id]">) {
   const gate = await checkStaff(MANAGE_ROLES);
   if (!gate.ok) return <GateNotice gate={gate} roles={MANAGE_ROLES} />;
 
   const { id } = await params;
+  const sp = await searchParams;
   const now = new Date();
 
   const [ogrenci, ucretliPaketler] = await Promise.all([
@@ -174,12 +185,21 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
 
   if (!ogrenci) notFound();
 
-  // Öğrenci panosuyla AYNI hesap (shared/insights): burada "zayıf" görünen
-  // konu, öğrencinin kendi ekranında da zayıf görünür.
-  const sonuclar: ResultLike[] = ogrenci.checkupSessions.flatMap((s) =>
+  /*
+   * Öğrenci panosuyla AYNI hesap ve AYNI süzgeç (shared/insights): burada
+   * "zayıf" görünen konu, öğrencinin kendi ekranında da zayıf görünür. Özet
+   * sayılar yalnızca işaretli paket testlerinden (egilimeGirer), konu haritası
+   * kontrol testi ve seviyeli aşamayla birlikte (konuHaritasinaGirer). İkisi
+   * de TEK SINAVDAN: LGS ile TYT sonuçlarını tek "genel başarı"da toplamak
+   * anlamsız. Varsayılan öğrencinin hedef sınavı (ölçümü varsa), yoksa en son
+   * ölçüldüğü sınav; ?sinav= ile değişir.
+   */
+  const sonuclar: (ResultLike & OlcumKaydi & { examScope: string })[] = ogrenci.checkupSessions.flatMap((s) =>
     s.result
       ? [
           {
+            kind: s.kind,
+            examScope: s.result.examScope ?? s.package.examScope,
             correctCount: s.result.correctCount,
             wrongCount: s.result.wrongCount,
             blankCount: s.result.blankCount,
@@ -191,8 +211,16 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
         ]
       : []
   );
-  const ozet = studentStats(sonuclar);
-  const konular = aggregateTopics(sonuclar).sort(
+  // Oturumlar yeniden eskiye sıralı: ilk görülen sınav en son ölçülen.
+  const olculenSinavlar = [...new Set(sonuclar.filter((r) => konuHaritasinaGirer(r)).map((r) => r.examScope))];
+  const istenenSinav = typeof sp.sinav === "string" ? sp.sinav : null;
+  const sinav =
+    (istenenSinav && olculenSinavlar.includes(istenenSinav) ? istenenSinav : null) ??
+    (ogrenci.targetExam && olculenSinavlar.includes(ogrenci.targetExam) ? ogrenci.targetExam : null) ??
+    olculenSinavlar[0] ??
+    null;
+  const ozet = studentStats(sonuclar.filter((r) => egilimeGirer(r, sinav)));
+  const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, sinav))).sort(
     (a, b) =>
       (a.level ? SEVIYE_SIRASI[a.level] : 3) - (b.level ? SEVIYE_SIRASI[b.level] : 3) || a.ratio - b.ratio
   );
@@ -208,11 +236,12 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
 
   /*
    * Başarı eğilimi yalnızca ÖLÇÜMLERDEN (öğrenci uygulamasının Gelişim
-   * ekranıyla aynı karar): 5 soruluk kontrol testi tek bir zayıf konuyu
-   * yeniden ölçüyor, çizgiye girerse grafik sebepsiz düşer. Sınavlar ayrı.
+   * ekranıyla aynı süzgeç, egilimeGirer): 5 soruluk kontrol testi tek bir
+   * zayıf konuyu yeniden ölçüyor, çizgiye girerse grafik sebepsiz düşer;
+   * seviyeli aşama cezasız, boş gönderilen test sıfır. Sınavlar grafikte ayrı.
    */
   const trend: PuanNoktasi[] = ogrenci.checkupSessions
-    .filter((s) => s.result && s.kind !== "TOPIC_RETEST")
+    .filter((s) => s.result && egilimeGirer({ kind: s.kind, ...s.result }))
     .map((s) => {
       const r = s.result!;
       const sorulan = r.correctCount + r.wrongCount + r.blankCount;
@@ -277,14 +306,33 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
         ]}
       />
 
+      {olculenSinavlar.length > 1 ? (
+        <SegmentedTabs
+          className="mb-4"
+          label="Özet ve konu haritası hangi sınavdan"
+          items={olculenSinavlar.map((x) => ({
+            key: x,
+            label: examLabel(x),
+            href: "/checkup/ogrenciler/" + ogrenci.id + "?sinav=" + x,
+            active: x === sinav,
+          }))}
+        />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 xl:grid-cols-4">
-        <MetricCard label="Tamamlanan test" value={ozet.testCount} icon={<CircleCheck />} tone="brand" />
+        <MetricCard
+          label="Tamamlanan test"
+          value={ozet.testCount}
+          icon={<CircleCheck />}
+          tone="brand"
+          hint={(sinav ? examLabel(sinav) + " paket testleri" : "paket testleri") + "; boş gönderilen hariç"}
+        />
         <MetricCard
           label="Genel başarı"
           value={ozet.testCount ? percent(ozet.avgRatio) : "—"}
           icon={<PieChart />}
           tone="success"
-          hint="tüm testlerde doğru / sorulan"
+          hint="bu testlerde doğru / sorulan"
         />
         <MetricCard
           label="Son net"
@@ -378,7 +426,13 @@ export default async function StudentDetailPage({ params }: PageProps<"/checkup/
           </ComponentCard>
 
           {/* ── Konu haritası ────────────────── */}
-          <ChartCard title="Konu haritası" description="Tüm testler birlikte. Seviye için bir konuda en az 3 soru görülmüş olmalı.">
+          <ChartCard
+            title="Konu haritası"
+            description={
+              (sinav ? examLabel(sinav) + ": " : "") +
+              `paket, kontrol testi ve seviyeli aşamalar birlikte. Seviye için bir konuda en az ${HARITA_EN_AZ_SORU} soru görülmüş olmalı.`
+            }
+          >
             {konular.length === 0 ? (
               <EmptyState title="Henüz veri yok" description="Öğrenci bir test tamamladığında konular burada görünür." />
             ) : (

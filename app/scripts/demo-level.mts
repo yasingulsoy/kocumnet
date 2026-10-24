@@ -74,6 +74,8 @@ async function oyna(sessionId: string, dogruAdet: number) {
 await prisma.levelRun.deleteMany({ where: { userId: user.id } });
 
 const { runId, sessionId: s1 } = await seviyeliSinavBaslat(user.id, sinav);
+// Koşu yeni açıldı (yukarıda silindi): ilk aşama her zaman açılır.
+if (!s1) throw new Error("Seviye 1 aşaması açılamadı.");
 const toplam1 = (await anahtar(s1)).length;
 
 if (durak === "dur") {
@@ -86,6 +88,8 @@ if (durak === "dur") {
 
   if (durak !== "telafi") {
     const telafiId = await telafiyiAc(runId, user.id);
+    // Havuzda yeni soru yoksa tur açılmaz, karar ilk turla verilir (lib/level-run.ts).
+    if (!telafiId) throw new Error("Teyit turu açılmadı: eksik kazanımlarda yeni soru yok.");
     const telafiToplam = (await anahtar(telafiId)).length;
     const anaDogru = Math.floor(toplam1 * ayar.seviye1.gecmeOrani) - 1;
     const gereken = Math.ceil(

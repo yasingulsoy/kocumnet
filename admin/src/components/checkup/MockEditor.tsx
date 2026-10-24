@@ -29,7 +29,9 @@ import {
   CEZA_SINIRI,
   DENEME_SORU_SINIRI,
   ZORLUKLAR,
-  denemeEngelleri,
+  agirlikUyarilari,
+  denemeHazirlikEngelleri,
+  denemeUyarilari,
   hedefDagilim,
   listeDurumu,
   zorlukHedefi,
@@ -85,6 +87,7 @@ export function MockEditor({
   deneme,
   sorular,
   hedefler,
+  agirliksiz = {},
   konuSirasi,
   varsayilanlar,
 }: {
@@ -93,6 +96,8 @@ export function MockEditor({
   sorular: DenemeSorusu[];
   /** Sınav → hedef ağırlıklar (Topic.examWeights, yaprak konular). */
   hedefler: Record<string, DenemeHedefi[]>;
+  /** Sınav → o sınavda ağırlığı olmayan yaprak konuların adları (lib/checkup/mock.ts agirliksizKonular). */
+  agirliksiz?: Record<string, string[]>;
   /** Konu → müfredat sırası ("Konu sırasına diz"). */
   konuSirasi: Record<string, number>;
   /** Sınav → yeni denemenin varsayılanları (shared/exams.ts). */
@@ -135,8 +140,20 @@ export function MockEditor({
   const hedefListesi = useMemo(() => hedefler[sinav] ?? [], [hedefler, sinav]);
   const hedef = useMemo(() => hedefDagilim(hedefListesi, sayiGecerli ? n : 0), [hedefListesi, n, sayiGecerli]);
   const durumOzeti = listeDurumu(sayiGecerli ? n : 0, liste);
-  const engeller = sayiGecerli ? denemeEngelleri(durumOzeti) : ["Soru sayısını gir."];
+  // Engel = öğrencinin hazırlık kuralı (shared/deneme.ts): liste tam ve hepsi
+  // yayında. Sınav dışı soru uyarı: öğrenci uygulaması o denemeyi başlatıyor.
+  const engeller = sayiGecerli ? denemeHazirlikEngelleri(durumOzeti) : ["Soru sayısını gir."];
+  const uyarilar = denemeUyarilari(durumOzeti);
   const yayinEngeli = durum === "PUBLISHED" && engeller.length > 0;
+  // Konu ağırlıklarının eksikleri: "Dağılıma göre doldur"un yanında söylenir, sayılar düzeltilmez (hocada).
+  const agirlikNotlari = sinav
+    ? agirlikUyarilari({
+        hedefler: hedefListesi,
+        agirliksiz: agirliksiz[sinav] ?? [],
+        sinavSoruSayisi: varsayilanlar[sinav]?.soruSayisi ?? null,
+        sinavAdi: EXAM_LABEL[sinav] ?? sinav,
+      })
+    : [];
 
   const dagilim = useMemo(() => {
     const listede = new Map<string, { ad: string; n: number }>();
@@ -484,6 +501,17 @@ export function MockEditor({
                 Listeyi boşalt
               </Button>
             </div>
+            {agirlikNotlari.length && !kilitli ? (
+              <div className="border-b border-gray-100 px-4 py-3 sm:px-6">
+                <Alert variant="warning" compact title="Konu ağırlıklarında eksik var">
+                  <ul className="mt-1 list-disc space-y-0.5 ps-4">
+                    {agirlikNotlari.map((e) => (
+                      <li key={e}>{e}</li>
+                    ))}
+                  </ul>
+                </Alert>
+              </div>
+            ) : null}
 
             {rapor ? (
               <div className="space-y-2 border-b border-gray-100 px-4 py-3 sm:px-6">
@@ -547,7 +575,8 @@ export function MockEditor({
                             </Badge>
                           ) : null}
                           {!q.sinavda ? (
-                            <Badge size="sm" color="error">
+                            // Uyarı (hazırlık engeli değil): kayıtlı listede kalabilir, yeni eklenemez.
+                            <Badge size="sm" color="warning">
                               bu sınavda sorulamaz
                             </Badge>
                           ) : null}
@@ -631,12 +660,18 @@ export function MockEditor({
               </Badge>
             </div>
 
-            {engeller.length ? (
+            {engeller.length || uyarilar.length ? (
               <ul className="mt-3 space-y-1.5">
                 {engeller.map((e) => (
                   <li key={e} className="flex gap-1.5 text-theme-xs text-error-600">
                     <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                     <span>{e}</span>
+                  </li>
+                ))}
+                {uyarilar.map((e) => (
+                  <li key={e} className="flex gap-1.5 text-theme-xs text-warning-700">
+                    <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                    <span>{e} Öğrenci yine başlatabilir; yeni eklenen sınav dışı soru kaydedilmez.</span>
                   </li>
                 ))}
               </ul>

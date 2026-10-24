@@ -10,7 +10,8 @@ import {
 } from "@/lib/checkup/actions/questions";
 import { ERROR_TYPE_LABELS } from "@/lib/checkup/shared/error-types";
 import { markupToContent } from "@/lib/checkup/shared/question-markup";
-import { IPUCU_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
+import { HEDEF_SURE_SINIRI, IPUCU_SINIRI, KAYNAK_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
+import { KILITLI_DENEME_KONU_MESAJI, KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
 import { EXAM_LABEL, EXAM_SCOPES, QUESTION_LEVELS, QUESTION_LEVEL_LABEL, QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
 import { listeAdresi } from "@/lib/checkup/question-list";
 import { cx } from "@/components/tailadmin/cx";
@@ -79,6 +80,11 @@ export interface SorununDenemesi {
   id: string;
   name: string;
   status: string;
+  /**
+   * Yayında ve en az bir kez başlatılmış: soru yayından alınamaz, konusu ve
+   * hedef sınavı değişmez (sunucu da reddeder; mock-rules.ts KILITLI_DENEME_MESAJI).
+   */
+  kilitli?: boolean;
 }
 
 const BOS: QuestionInitial = {
@@ -324,8 +330,17 @@ export function QuestionForm({
       return kopya;
     });
 
-  // Yayındaki soru bir denemedeyse, yayından kaldırmak denemeyi eksik bırakır.
-  const denemeUyarisi = denemeler.length > 0 && mevcut.status === "PUBLISHED" && status !== "PUBLISHED";
+  /*
+   * Deneme kilidi. Başlatılmış ve yayındaki denemenin sorusu yayından alınamaz
+   * (deneme kalıcı kapanırdı; listesi de değişemez, "yerine başka soru koy"
+   * yolu yok), konusu ve hedef sınavı değişmez: seçenekler kapalı, nedeni
+   * yazılı. Başlatılmamış denemede yalnızca uyarılır: orada soru değiştirilebilir.
+   */
+  const kilitliDenemeler = denemeler.filter((d) => d.kilitli);
+  const kilitli = kilitliDenemeler.length > 0;
+  const durumKilitli = kilitli && mevcut.status === "PUBLISHED";
+  const acikDenemeler = denemeler.filter((d) => !d.kilitli);
+  const denemeUyarisi = acikDenemeler.length > 0 && mevcut.status === "PUBLISHED" && status !== "PUBLISHED";
 
   const doluSikSayisi = choices.filter((c) => c.trim()).length;
   const hataSayisi = Object.keys(state.fields ?? {}).length;
@@ -374,9 +389,18 @@ export function QuestionForm({
           <Alert variant="info">Görüntüleyici rolündesin: formu inceleyebilirsin ama kaydedemezsin.</Alert>
         ) : null}
         {duzenleme && mevcut.shownCount > 0 ? (
+          // Öğrenci uygulamasının bakım işi (cron) sürümü eski kalan bitmiş
+          // cevapları yeni anahtarla yeniden puanlıyor; içerik değişikliğinde
+          // eşleştirilecek başka bir "doğru şık" yok, yalnızca madde analizi sıfırlanır.
           <Alert variant="warning">
-            Bu soru öğrencilere {mevcut.shownCount} kez soruldu. Cevap anahtarını değiştirirsen
-            sürüm artar (şu an v{mevcut.version}) ve eski sonuçlar ayırt edilebilir kalır.
+            Bu soru öğrencilere {mevcut.shownCount} kez soruldu (şu an v{mevcut.version}). Cevap anahtarı değişirse sürüm
+            artar; bitmiş testler en geç 15 dakika içinde yeniden puanlanır ve öğrenciye sonuç ekranında bildirilir. Doğru
+            şıkkın içeriği değişirse eski cevaplar yeniden puanlanamaz; madde analizi yeni sürümden başlar.
+          </Alert>
+        ) : null}
+        {kilitli ? (
+          <Alert variant="info" title={"Başlatılmış denemede: " + kilitliDenemeler.map((d) => d.name).join(", ")}>
+            Yayın durumu, konu ve hedef sınav kilitli. {KILITLI_DENEME_MESAJI}
           </Alert>
         ) : null}
       </div>
@@ -754,6 +778,9 @@ export function QuestionForm({
                   aria-label="Konu"
                   required
                   value={topicId}
+                  // Kilitli denemede konu değişmez; değer gizli alandan gider.
+                  disabled={kilitli}
+                  title={kilitli ? KILITLI_DENEME_KONU_MESAJI : undefined}
                   onChange={(e) => {
                     setTopicId(e.target.value);
                     // Kazanım konuya bağlı: konu değişince eskisi anlamsız.
@@ -787,6 +814,7 @@ export function QuestionForm({
                         <Checkbox
                           data-hedef-sinav
                           value={s}
+                          disabled={kilitli}
                           checked={hedefSinavlar.includes(s)}
                           onChange={(e) =>
                             setHedefSinavlar((prev) => (e.target.checked ? [...prev, s] : prev.filter((x) => x !== s)))
@@ -803,25 +831,34 @@ export function QuestionForm({
                   </div>
                 ) : (
                   <FieldHint>
-                    {hedefSinavlar.length
-                      ? "Yalnızca seçilen sınavların testlerine girer."
-                      : "Boş: konunun geçtiği her sınavda sorulabilir — normal durum. Yalnızca kısıtlama gerekiyorsa seç."}
+                    {kilitli
+                      ? "Kilitli: soru başlatılmış bir denemede."
+                      : hedefSinavlar.length
+                        ? "Yalnızca seçilen sınavların testlerine girer."
+                        : "Boş: konunun geçtiği her sınavda sorulabilir — normal durum. Yalnızca kısıtlama gerekiyorsa seç."}
                   </FieldHint>
                 )}
               </fieldset>
 
-              <Field label="Durum" error={state.fields?.status} hint="Yalnızca “Yayında” olan sorular teste seçilir.">
+              <Field
+                label="Durum"
+                error={state.fields?.status}
+                hint={durumKilitli ? "Kilitli: soru başlatılmış bir denemede, yayında kalmalı." : "Yalnızca “Yayında” olan sorular teste seçilir."}
+              >
                 <Select aria-label="Durum" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="DRAFT">Taslak</option>
-                  <option value="REVIEW">İncelemede</option>
-                  <option value="PUBLISHED">Yayında</option>
-                  <option value="ARCHIVED">Arşiv</option>
+                  {(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"] as const).map((s) => (
+                    <option key={s} value={s} disabled={durumKilitli && s !== "PUBLISHED"}>
+                      {QUESTION_STATUS_LABEL[s] ?? s}
+                      {durumKilitli && s !== "PUBLISHED" ? " — denemede kilitli" : ""}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               {denemeUyarisi ? (
+                // Yalnızca BAŞLATILMAMIŞ denemeler: orada liste değişebilir, yerine soru konabilir.
                 <Alert variant="warning" compact>
-                  Bu soru {denemeler.length === 1 ? "bir denemede" : denemeler.length + " denemede"} kullanılıyor (
-                  {denemeler.map((d) => d.name).join(", ")}). {QUESTION_STATUS_LABEL[status] ?? status} durumuna alırsan
+                  Bu soru {acikDenemeler.length === 1 ? "bir denemede" : acikDenemeler.length + " denemede"} kullanılıyor (
+                  {acikDenemeler.map((d) => d.name).join(", ")}). {QUESTION_STATUS_LABEL[status] ?? status} durumuna alırsan
                   deneme eksik kalır ve öğrenci başlatamaz; önce denemede yerine başka soru koy.
                 </Alert>
               ) : null}
@@ -892,8 +929,8 @@ export function QuestionForm({
                 <Input
                   name="targetTimeSeconds"
                   type="number"
-                  min={10}
-                  max={600}
+                  min={HEDEF_SURE_SINIRI.min}
+                  max={HEDEF_SURE_SINIRI.max}
                   value={targetTime}
                   onChange={(e) => setTargetTime(e.target.value)}
                 />
@@ -904,7 +941,7 @@ export function QuestionForm({
                   name="sourceRef"
                   value={sourceRef}
                   onChange={(e) => setSourceRef(e.target.value)}
-                  maxLength={200}
+                  maxLength={KAYNAK_SINIRI}
                   placeholder="2023 TYT / 12"
                 />
               </Field>

@@ -10,6 +10,7 @@
 
 import type { BadgeColor } from "@/components/tailadmin/ui/Badge";
 import type { OdevDurumu } from "./shared/odev";
+import { konuSinavdaMi } from "./shared/exam-scope";
 
 export const GRUP_ADI_SINIRI = 80;
 export const GRUP_NOTU_SINIRI = 500;
@@ -74,3 +75,16 @@ export const ODEV_TURU_ETIKETI: Record<string, string> = {
   PACKAGE: "Test",
   TOPIC_PRACTICE: "Konu alıştırması",
 };
+
+/**
+ * Konu ödevinin alıştırması hangi sınavdan soru seçer — ödev formunun havuz
+ * sayımı ve ödev verme denetimi bununla sayar. Öğrenci uygulaması
+ * (app/lib/practice.ts odevKonuCalismasiBaslat): grubun sınavı, yoksa
+ * öğrencinin hedef sınavı, o da konuyu kapsamıyorsa konunun ana sınavı.
+ * Grubun sınavı varsa: konuyu kapsıyorsa o, kapsamıyorsa konunun ana sınavı.
+ * Sınavsız grupta öğrenciye göre değişir: null (konunun bütün yayındaki soruları).
+ */
+export function odevKonuSinavi<S extends string>(grupSinavi: S | null, konu: { examScope: S; examScopes: readonly string[] }): S | null {
+  if (!grupSinavi) return null;
+  return konuSinavdaMi(konu, grupSinavi) ? grupSinavi : konu.examScope;
+}

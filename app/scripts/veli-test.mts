@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Veli bağlantısı — jeton yaşam döngüsü + VELİ RAPORU SIZINTI DENETİMİ.
  *

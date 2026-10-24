@@ -52,7 +52,7 @@ export function PlanOlusturKarti() {
           className={hata ? "mt-0.5 text-theme-sm font-medium text-error-600" : "mt-0.5 text-theme-sm text-gray-500"}
           role={hata ? "alert" : undefined}
         >
-          {hata ?? "Son check-up'ından iki konuluk bir haftalık plan çıkarabilirim."}
+          {hata ?? "Son check-up'ından bu haftaya bir plan çıkarabilirim."}
         </p>
       </div>
       <Button

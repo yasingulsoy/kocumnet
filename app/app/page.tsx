@@ -49,6 +49,14 @@ const OZELLIKLER = [
   },
 ];
 
+/** "15-25" ya da tek değer ("20"); liste boşsa null. */
+function aralik(degerler: number[]): string | null {
+  if (degerler.length === 0) return null;
+  const az = Math.min(...degerler);
+  const cok = Math.max(...degerler);
+  return az === cok ? String(az) : `${az}-${cok}`;
+}
+
 /**
  * Giriş yapmamış öğrencinin gördüğü sayfa. Girişliyse doğrudan panoya.
  *
@@ -68,6 +76,14 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
     orderBy: { sortOrder: "asc" },
     select: { slug: true, name: true, questionCount: true, durationMinutes: true, examScope: true },
   });
+
+  // Sayılar yayındaki paketlerden: elle yazılmış "15-25 soru" ve "15-30
+  // dakika" paketler değişince yalan oluyordu. Paket yoksa metin de yok.
+  const soruAraligi = aralik(paketler.map((p) => p.questionCount));
+  const sureAraligi = aralik(paketler.map((p) => p.durationMinutes));
+  const ozetMaddeler = ["Kredi kartı gerekmez", soruAraligi ? `${soruAraligi} soru` : null, "Anında sonuç"].filter(
+    (m): m is string => m !== null
+  );
 
   return (
     <div className="min-h-screen bg-white">
@@ -137,7 +153,7 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
                 </ButtonLink>
               </div>
               <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
-                {["Kredi kartı gerekmez", "15-25 soru", "Anında sonuç"].map((m) => (
+                {ozetMaddeler.map((m) => (
                   <li key={m} className="flex items-center gap-1.5">
                     <CircleCheck className="size-4 text-success-500" aria-hidden /> {m}
                   </li>
@@ -197,7 +213,7 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
           <div className="mx-auto max-w-6xl px-5">
             <div className="max-w-2xl">
               <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-gray-800 sm:text-title-md">
-                Deneme sana puan verir. Check-up yol gösterir.
+                Klasik deneme sana bir puan verir; Check-up nerede, neden kaybettiğini gösterir.
               </h2>
               <p className="mt-3 text-base leading-relaxed text-gray-500">
                 120 soruluk denemede bir konuya bir-iki soru düşer; tek soruya bakıp
@@ -220,51 +236,53 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
           </div>
         </section>
 
-        {/* Paketler */}
-        <section className="py-16 sm:py-20">
-          <div className="mx-auto max-w-6xl px-5">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-gray-800">
-                  Odaklı paketler
-                </h2>
-                <p className="mt-2 text-base text-gray-500">
-                  Neyi ölçmek istiyorsan onu seç. Her biri 15-30 dakika.
-                </p>
+        {/* Paketler: yayında paket yoksa bölüm hiç yok (boş ızgara ve "Hepsini gör" kalmasın). */}
+        {paketler.length > 0 ? (
+          <section className="py-16 sm:py-20">
+            <div className="mx-auto max-w-6xl px-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-title-sm font-bold tracking-tight text-balance text-gray-800">
+                    Odaklı paketler
+                  </h2>
+                  <p className="mt-2 text-base text-gray-500">
+                    Neyi ölçmek istiyorsan onu seç.{sureAraligi ? ` Her biri ${sureAraligi} dakika.` : ""}
+                  </p>
+                </div>
+                <ButtonLink href="/kayit" variant="soft" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
+                  Hepsini gör
+                </ButtonLink>
               </div>
-              <ButtonLink href="/kayit" variant="soft" endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}>
-                Hepsini gör
-              </ButtonLink>
-            </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
-              {paketler.map((p) => (
-                <Link key={p.slug} href="/kayit" className="group block rounded-2xl">
-                  <Card className="flex h-full items-center justify-between gap-4 p-4 transition group-hover:border-gray-300 group-hover:shadow-theme-md sm:p-5">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Badge size="sm">{examShort(p.examScope)}</Badge>
-                        <p className="truncate text-sm font-semibold text-gray-800">{p.name}</p>
+              <div className="mt-8 grid gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
+                {paketler.map((p) => (
+                  <Link key={p.slug} href="/kayit" className="group block rounded-2xl">
+                    <Card className="flex h-full items-center justify-between gap-4 p-4 transition group-hover:border-gray-300 group-hover:shadow-theme-md sm:p-5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge size="sm">{examShort(p.examScope)}</Badge>
+                          <p className="truncate text-sm font-semibold text-gray-800">{p.name}</p>
+                        </div>
+                        <p className="tabular mt-2 flex items-center gap-3 text-theme-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <ListChecks className="size-3.5" aria-hidden /> {p.questionCount} soru
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="size-3.5" aria-hidden /> {p.durationMinutes} dk
+                          </span>
+                        </p>
                       </div>
-                      <p className="tabular mt-2 flex items-center gap-3 text-theme-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <ListChecks className="size-3.5" aria-hidden /> {p.questionCount} soru
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="size-3.5" aria-hidden /> {p.durationMinutes} dk
-                        </span>
-                      </p>
-                    </div>
-                    <ArrowRight
-                      className="size-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500 rtl:rotate-180 rtl:group-hover:-translate-x-0.5"
-                      aria-hidden
-                    />
-                  </Card>
-                </Link>
-              ))}
+                      <ArrowRight
+                        className="size-4 shrink-0 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500 rtl:rotate-180 rtl:group-hover:-translate-x-0.5"
+                        aria-hidden
+                      />
+                    </Card>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         {/* Son çağrı: lacivert bant + kitin ızgara deseni, üstünde beyaz düğme */}
         <section className="px-5 pb-16 sm:pb-20">

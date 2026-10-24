@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Çekirdek mantığın duman testi: parola, içerik şeması, parmak izi, puanlama.
  *   npx tsx scripts/smoke.ts
@@ -9,14 +10,18 @@ import { errorPattern, dominantError, compareProgress } from "../lib/diagnosis";
 import {
   bosStratejisi,
   haftaBasi,
+  haftaBasiAni,
+  haftalikKonuSiniri,
   haftalikPlan,
   hataTavsiyesi,
   karar,
+  kocNotu,
   kontrolKarari,
   oncelikSirasi,
   tekrarTavsiyesi,
   MAX_TOPICS_PER_WEEK,
 } from "../lib/coaching";
+import { PRODUCTS, sinavinUrunleri, urunSinavaUygun } from "../lib/products";
 import { EXAMS, EXAM_SCOPES, SECILEBILIR_SINAVLAR } from "../lib/exams";
 import {
   ayarGetir,
@@ -340,15 +345,30 @@ console.log("");
 console.log("Koçluk — karar:");
 const sayiVar = (m: string) => /\d/.test(m);
 
-const yuksek = karar(0.8, [], [konu("Köklü Sayılar", 1, "STRONG")], 0, 20);
-const orta = karar(0.55, sirali, [], 2, 20);
-const dusuk = karar(0.2, sirali, [], 9, 20);
+const yuksek = karar(0.8, [], [konu("Köklü Sayılar", 1, "STRONG")], 0, 20, "BU_TEST");
+const orta = karar(0.55, sirali, [], 2, 20, "BU_TEST");
+const dusuk = karar(0.2, sirali, [], 9, 20, "BU_TEST");
 check("yüksek bant sayı içeriyor", sayiVar(yuksek.baslik) && yuksek.ton === "ok");
 check("orta bant sayı içeriyor", sayiVar(orta.baslik) && orta.ton === "warn");
 check("düşük bant sayı içeriyor", sayiVar(dusuk.baslik) && dusuk.ton === "bad");
 check("düşük bantta tek konu söyleniyor", dusuk.metin.includes("zayif-1"));
 check("çok boşta boş uyarısı var", dusuk.metin.includes("9 soruyu boş"));
 check("üç bant da farklı", new Set([yuksek.metin, orta.metin, dusuk.metin]).size === 3);
+
+// Plan bu testten değilse "sadece bunlar" ve "bakma" YOK (haftanın ikinci
+// testi planla çelişiyordu).
+const bakmaDili = (m: string) => /bakma|sadece/i.test(m);
+check("plan bu testtense 'sadece' ve 'bakma' var", bakmaDili(orta.metin) && bakmaDili(dusuk.metin));
+for (const bag of ["BASKA_TEST", "YOK"] as const) {
+  const o = karar(0.55, sirali, [], 2, 20, bag);
+  const d = karar(0.2, sirali, [], 9, 20, bag);
+  check(`plan bağı ${bag}: 'sadece'/'bakma' yok`, !bakmaDili(o.metin) && !bakmaDili(d.metin), o.metin + " | " + d.metin);
+  check(`plan bağı ${bag}: konu adı ve sayı kalıyor`, o.metin.includes("zayif-1") && d.metin.includes("zayif-1") && sayiVar(o.baslik));
+}
+check("başka testten plan: önce planı bitir deniyor", karar(0.55, sirali, [], 2, 20, "BASKA_TEST").metin.includes("önce onu bitir"));
+check("tek konuda başlık 'bir konu' diyor",
+  karar(0.55, sirali.slice(0, 1), [], 0, 20, "BU_TEST").baslik.includes("bir konu"));
+check("zayıf konu yoksa başlık konu saymıyor", !/konu/.test(karar(0.55, [], [], 0, 20, "YOK").baslik));
 
 // ── koçluk: kontrol testi kararı ──────────────────────────
 console.log("");
@@ -401,6 +421,14 @@ check("ürün eşleşen işe taşınıyor",
   plan.some((i) => i.topicId === "zayif-1" && i.productId === "urun-a"));
 check("boş öncelikte plan boş", haftalikPlan([], new Map()).length === 0);
 
+// Geçen hafta yarısı bitmediyse bu hafta tek konu; not yalnızca gerçekten
+// kısaldıysa "tek konu" der.
+check("geçen hafta %40 → tek konu", haftalikKonuSiniri(0.4) === 1);
+check("geçen hafta %50 → tam sınır", haftalikKonuSiniri(0.5) === MAX_TOPICS_PER_WEEK);
+check("geçen hafta plan yok → tam sınır", haftalikKonuSiniri(null) === MAX_TOPICS_PER_WEEK);
+check("kısalan planın notu bunu söylüyor", kocNotu(sirali.slice(0, 1), true).includes("tek konu"));
+check("kısalmayan planın notu 'tek konu' demiyor", !kocNotu(sirali.slice(0, 1), false).includes("tek konu"));
+
 // Hafta sınırı: pazar 23:30 (TR) hâlâ o haftaya ait olmalı.
 const pazar = haftaBasi(new Date("2026-03-15T20:30:00.000Z")); // TR 23:30 pazar
 const pazartesi = haftaBasi(new Date("2026-03-16T05:00:00.000Z")); // TR 08:00 pazartesi
@@ -408,6 +436,23 @@ check("pazar gecesi hafta değişmiyor", pazar.toISOString().startsWith("2026-03
   pazar.toISOString());
 check("pazartesi yeni hafta", pazartesi.toISOString().startsWith("2026-03-16"),
   pazartesi.toISOString());
+// Hafta başı ANI: pazartesi 00:00 TR = pazar 21:00 UTC. Pazartesi 01:00 TR'de
+// verilen sonuç bu haftanın (haftaBasi tarihiyle kıyaslayınca geçen haftaya kayıyordu).
+const pazartesiGece = new Date("2026-03-15T22:00:00.000Z"); // TR 01:00 pazartesi
+check("hafta başı anı pazar 21:00 UTC", haftaBasiAni(pazartesiGece).toISOString() === "2026-03-15T21:00:00.000Z",
+  haftaBasiAni(pazartesiGece).toISOString());
+check("pazartesi 01:00 TR sonucu bu haftanın", pazartesiGece >= haftaBasiAni(pazartesiGece));
+
+// ── ürün önerisi: sınava göre ─────────────────────────────
+console.log("");
+console.log("Ürün önerisi — sınav süzgeci:");
+check("ALES adayına TYT kitabı yok", !urunSinavaUygun(PRODUCTS["tyt-matematik-ilk-15"], "ALES"));
+check("ALES adayına çok sınavlı problem kitabı var", urunSinavaUygun(PRODUCTS["sanki-osym-problemleri"], "ALES"));
+check("KPSS Lisans sitedeki 'KPSS' etiketine uyuyor", urunSinavaUygun(PRODUCTS["sanki-osym-problemleri"], "KPSS_LISANS"));
+check("bilinmeyen sınavda öneri yok", sinavinUrunleri(Object.keys(PRODUCTS), "BOTH").length === 0);
+check("süzgeç sırayı koruyor ve bilinmeyen kimliği atıyor",
+  sinavinUrunleri(["yok-boyle-urun", "analitik-5te5", "trigonometri-5te5"], "AYT").map((u) => u.id).join(",") ===
+    "analitik-5te5,trigonometri-5te5");
 
 // -----------------------------------------------------------
 // Seviyeli check-up: kapi mantigi

@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Soru içe aktarma modülü (lib/question-import.ts): çözümleme + denetim.
  * Veritabanı istemez; havuz bağlamı burada elle kuruluyor.
@@ -10,7 +11,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import {
+  GERI_ALMADA_SILINEBILIR,
   anilanGorseller,
   dosyayiCozumle,
   dosyayiDenetle,
@@ -22,6 +25,8 @@ import {
   type IceAktarmaKazanimi,
   type SoruRaporu,
 } from "../lib/question-import";
+import { IPUCU_SINIRI, KAYNAK_SINIRI, KAZANIM_ADI_SINIRI } from "../lib/content-limits";
+import { GORSEL_EN_FAZLA_GENISLIK, webpYap } from "../lib/media-image";
 import { deriveQuestionFields, extractText, type QuestionContent } from "../lib/question-content";
 import { markupToContent } from "../lib/question-markup";
 
@@ -363,6 +368,88 @@ console.log("\nİpucu, video ve adım ayırıcı:");
 
   const formul = denetle(ekle(soru({}), ["* **İpucu:** $\\frac{1$ dene"]), baglam({ formulHatasi: (l) => (l.includes("\\frac{1") ? "eksik" : null) })).sorular[0];
   check("ipucundaki formül de denetlenir", uyariVar(formul, "1. ipucundaki formül çizilemiyor"), formul.uyarilar.join(" | "));
+}
+
+// ── uzunluk sınırları (soru formuyla ortak: lib/content-limits.ts) ──
+console.log("\nUzunluk sınırları (form ile aynı):");
+{
+  const ekle = (metin: string, satirlar: string[]) =>
+    metin.replace("* **Seçenekler:**", () => [...satirlar, "* **Seçenekler:**"].join("\n"));
+
+  // Form 600'ü aşan ipucunu kaydetmiyor: içe aktarma da satırıyla reddetmeli.
+  const uzunIpucu = "a".repeat(IPUCU_SINIRI + 1);
+  const dosya = ekle(soru({}), ["* **İpucu:** kısa", "* **İpucu:** " + uzunIpucu]);
+  const satir = dosya.split("\n").findIndex((s) => s.includes(uzunIpucu)) + 1;
+  const ipucu = denetle(dosya).sorular[0];
+  check(
+    `${IPUCU_SINIRI + 1} karakterlik ipucu satırıyla reddedilir`,
+    !ipucu.hazir && hataVar(ipucu, `2. ipucu (satır ${satir}) çok uzun: en fazla ${IPUCU_SINIRI} karakter (şu an ${IPUCU_SINIRI + 1})`),
+    ipucu.hatalar.join(" | ")
+  );
+  const sinirda = denetle(ekle(soru({}), ["* **İpucu:** " + "a".repeat(IPUCU_SINIRI)])).sorular[0];
+  check("tam sınırdaki ipucu geçer", sinirda.hatalar.length === 0 && sinirda.hazir?.hints?.length === 1, sinirda.hatalar.join(" | "));
+
+  // Saklanan değer "ID · kaynak": formdaki Kaynak kutusu bunu 200 ile sınırlıyor.
+  const sigan = KAYNAK_SINIRI - "T-01 · ".length;
+  const tam = denetle(soru({ Kaynak: "k".repeat(sigan) })).sorular[0];
+  check(`"ID · kaynak" tam ${KAYNAK_SINIRI} karakter geçer`, tam.hatalar.length === 0 && tam.hazir?.sourceRef.length === KAYNAK_SINIRI, tam.hatalar.join(" | "));
+  const kaynakDosya = soru({ Kaynak: "k".repeat(sigan + 1) });
+  const kaynakSatir = kaynakDosya.split("\n").findIndex((s) => s.startsWith("* **Kaynak:**")) + 1;
+  const uzunKaynak = denetle(kaynakDosya).sorular[0];
+  check(
+    "ID ile birlikte sınırı aşan kaynak satırıyla reddedilir",
+    !uzunKaynak.hazir && hataVar(uzunKaynak, `Kaynak (satır ${kaynakSatir}) çok uzun: "ID · kaynak" en fazla ${KAYNAK_SINIRI} karakter olarak saklanır (şu an ${KAYNAK_SINIRI + 1})`),
+    uzunKaynak.hatalar.join(" | ")
+  );
+
+  const uzunAd = denetle(soru({ Seviye: "1", "Kazanım Kodu": "K-UZUN", "Kazanım Adı": "x".repeat(KAZANIM_ADI_SINIRI.max + 1) })).sorular[0];
+  check("yeni kazanımın adı formdaki sınırı aşamaz", hataVar(uzunAd, "Kazanım Adı (satır") && hataVar(uzunAd, `en fazla ${KAZANIM_ADI_SINIRI.max} karakter`), uzunAd.hatalar.join(" | "));
+  const kayitliAd = denetle(
+    soru({ Seviye: "1", "Kazanım Kodu": "K-UZUN", "Kazanım Adı": "x".repeat(KAZANIM_ADI_SINIRI.max + 1) }),
+    baglam({ kazanimlar: new Map([["K-UZUN", { id: "o1", topicId: "t-temel", name: "Kayıtlı" }]]) })
+  ).sorular[0];
+  check("kayıtlı kazanımda (ad yok sayılıyor) uzun ad reddetmez", kayitliAd.hatalar.length === 0, kayitliAd.hatalar.join(" | "));
+
+  const kisa = denetle(soru({ "Soru Metni": "x=?" })).sorular[0];
+  check("formun reddettiği kısa soru metni reddedilir", hataVar(kisa, "Soru Metni çok kısa"), kisa.hatalar.join(" | "));
+}
+
+// ── geri alma kuralı ─────────────────────────────────────
+console.log("\nGeri alma kuralı (komut satırı ve panel ortak):");
+{
+  const k = GERI_ALMADA_SILINEBILIR as Record<string, unknown>;
+  check(
+    "sorulmuş, denemedeki ve NOTLU soru silinmez",
+    JSON.stringify(k) === JSON.stringify({ items: { none: {} }, packageLinks: { none: {} }, notes: { none: {} } }),
+    JSON.stringify(k)
+  );
+  check("sonradan düzenlenmek (updatedAt) ölçüt değil", !("updatedAt" in k));
+}
+
+// ── görsel biçimi (komut satırı ve panel ortak: lib/media-image.ts) ──
+console.log("\nGörsel biçimi (lib/media-image.ts):");
+{
+  // Telefondan çekilmiş gibi: geniş, EXIF'li (konum ve yön), JPEG.
+  const ham = await sharp({ create: { width: 2400, height: 1600, channels: 3, background: { r: 200, g: 40, b: 40 } } })
+    .jpeg()
+    .withMetadata({ orientation: 6 })
+    .withExifMerge({ IFD0: { Make: "Deneme" }, IFD3: { GPSLatitudeRef: "N" } })
+    .toBuffer();
+  const once = await sharp(ham).metadata();
+  check("deneme girdisinde EXIF ve yön (6) var", Boolean(once.exif && once.exif.length > 0) && once.orientation === 6, String(once.orientation));
+  const w = await webpYap(ham);
+  const sonra = w ? await sharp(Buffer.from(w.data)).metadata() : null;
+  check("WebP'ye çevrildi", sonra?.format === "webp", String(sonra?.format));
+  check("EXIF (konum dahil) atıldı", Boolean(sonra) && !sonra!.exif && !sonra!.xmp && !sonra!.icc, JSON.stringify({ exif: Boolean(sonra?.exif), xmp: Boolean(sonra?.xmp) }));
+  // Orientation 6 = 90° döndür: 2400×1600 yatay → dikey, sonra genişlik 1200'e iner.
+  check(
+    `yön uygulandı ve genişlik ${GORSEL_EN_FAZLA_GENISLIK}'e indi`,
+    w?.width === GORSEL_EN_FAZLA_GENISLIK && w.height === 1800,
+    `${w?.width}×${w?.height}`
+  );
+  check("bayt sayısı veriyle aynı", w?.byteSize === w?.data.byteLength);
+  check("küçük görsel büyütülmez", (await webpYap(await sharp({ create: { width: 300, height: 200, channels: 3, background: "#fff" } }).png().toBuffer()))?.width === 300);
+  check("bozuk dosya null döner (soru reddedilir)", (await webpYap(Buffer.from("bu bir görsel değil"))) === null);
 }
 
 // ── şablondaki tam örnek ─────────────────────────────────

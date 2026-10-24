@@ -5,16 +5,15 @@ import { cookies } from "next/headers";
 /**
  * Check-up ekranları için SUNUCU TARAFI personel doğrulaması.
  *
- * Neden ayrı bir denetim: panelin `(admin)/layout.tsx`'i bir istemci
- * bileşeni ve oturumu yalnızca tarayıcıda kontrol ediyor. Blog ekranları
- * verisini tarayıcıdan backend'e sorduğu için bu yetiyordu. Check-up
- * ekranları ise veriyi SUNUCUDA, doğrudan veritabanından çiziyor — sunucu
- * denetlemezse öğrenci listesi, çerezi olmayan birine giden RSC yanıtının
- * içinde durur; istemci düzeni onu sadece ekrana basmamış olur.
+ * Neden her sayfada ayrı bir denetim: check-up ekranları veriyi SUNUCUDA,
+ * doğrudan veritabanından çiziyor — sunucu denetlemezse öğrenci listesi,
+ * çerezi olmayan birine giden RSC yanıtının içinde durur. Panel düzeni
+ * (`(admin)/layout.tsx`) artık bir sunucu bileşeni ve oturumu o da burada
+ * doğruluyor (eskiden istemci bileşeniydi, yalnızca tarayıcıda bakıyordu).
  *
- * Bu yüzden her sayfa ve her server action `checkStaff()` çağırır.
+ * Yine de her sayfa ve her server action `checkStaff()` çağırır.
  * Düzen (layout) seviyesinde tek denetim YETMEZ: Next sayfaları düzenden
- * bağımsız çizebiliyor.
+ * bağımsız (paralel) çizebiliyor, server action'lar düzenden hiç geçmiyor.
  *
  * Doğrulama backend'e sorulur (tek doğruluk kaynağı): JWT'yi burada kendimiz
  * çözseydik pasife alınan personel, jetonun süresi dolana kadar (6 saat)

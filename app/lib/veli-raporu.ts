@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { aktifPlan } from "@/lib/plan";
-import { aggregateTopics, studentStats, type ResultLike } from "@/lib/insights";
+import { aggregateTopics, egilimeGirer, konuHaritasinaGirer, studentStats, type ResultLike } from "@/lib/insights";
 import { EXAMS, daysUntilExam, isExamScope } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { grafikTarihleri } from "@/components/grafik-tarihleri";
@@ -214,6 +214,7 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
         totalTimeMs: true,
         computedAt: true,
         topicBreakdown: true,
+        examScope: true,
         session: { select: { kind: true, package: { select: { name: true } } } },
       },
     }),
@@ -222,7 +223,8 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
   ]);
 
   const sonuclar = ham.reverse().map((r) => ({
-    kontrol: r.session.kind === "TOPIC_RETEST",
+    kind: r.session.kind,
+    examScope: r.examScope,
     paket: r.session.package.name,
     correctCount: r.correctCount,
     wrongCount: r.wrongCount,
@@ -233,10 +235,11 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
     topicBreakdown: r.topicBreakdown as unknown as TopicBreakdown,
   }));
 
-  // Eğilim, son ölçüm ve test listesi yalnızca ÖLÇÜMLERDEN: 5 soruluk kontrol
-  // testi tek zayıf konuyu ölçer (pano ve gelişimle aynı kural). Konu
-  // haritası hepsini toplar.
-  const olcumler = sonuclar.filter((r) => !r.kontrol);
+  // Eğilim, son ölçüm ve test listesi yalnızca ÖLÇÜMLERDEN: paket testi,
+  // işaretli (lib/insights.ts egilimeGirer; pano ve gelişimle aynı süzgeç).
+  // Kontrol testi tek zayıf konuyu ölçer, seviyeli aşama cezasız, boş
+  // gönderilen test sıfır. Konu haritası kontrol testini ve aşamayı da toplar.
+  const olcumler = sonuclar.filter((r) => egilimeGirer(r, sinav));
   const testOf = (r: (typeof sonuclar)[number]): VeliTesti => ({
     tarih: r.computedAt,
     paket: r.paket,
@@ -253,7 +256,7 @@ export async function veliRaporu(userId: string, now = new Date()): Promise<Veli
   }));
 
   const son = olcumler.at(-1);
-  const konular = aggregateTopics(sonuclar);
+  const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, sinav)));
   const konuOf = (k: (typeof konular)[number]): VeliKonu => ({
     ad: k.name,
     oran: Math.round(k.ratio * 100),

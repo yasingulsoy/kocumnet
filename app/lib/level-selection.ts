@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
-import type { ExamScope, QuestionLevel } from "@/lib/generated/prisma/client";
+import type { ExamScope, Prisma, QuestionLevel } from "@/lib/generated/prisma/client";
 import { kazanimSinavdaKosulu, soruSinavdaKosulu } from "@/lib/exam-scope";
+import type { ExamScopeValue } from "@/lib/exams";
+import { S1_KAZANIM_EN_AZ_SORU, ayarGetir, type Seviye } from "@/lib/levels";
 import { EXPOSURE_WINDOW_DAYS, type SelectedQuestion } from "@/lib/question-selection";
 
 /**
@@ -35,24 +37,130 @@ function karistir<T>(dizi: T[]): T[] {
 
 // Sınav kapsamı: tanım lib/exam-scope.ts içinde (boş liste = KONUNUN sınavları).
 
+/** Seviye 1 sorusu: yayında, temel seviye ve bu sınavda sorulabilir. */
+function s1SoruKosulu(examScope: string): Prisma.QuestionWhereInput {
+  return { status: "PUBLISHED", level: "L1_TEMEL", ...soruSinavdaKosulu(examScope as ExamScope) };
+}
+
 /**
- * Bir sınavın yayındaki kazanımları, sıra numarasına göre.
+ * Bir sınavın Seviye 1'e girebilen kazanımları, sıra numarasına göre.
  *
- * `examScopes` boşsa kazanım konusunun geçtiği her sınavda ölçülür —
- * sorudaki kuralla aynı (PLAN §11.1, lib/exam-scope.ts).
+ * Kazanım yayında olmalı, bu sınavda ölçülmeli (`examScopes` boşsa konusunun
+ * geçtiği her sınav — PLAN §11.1, lib/exam-scope.ts) ve bu sınavda sorulabilen
+ * en az `S1_KAZANIM_EN_AZ_SORU` yayında L1 sorusu olmalı.
+ *
+ * ÖNCE SÜZ, SONRA AL: eskiden ilk N kazanım alınıyor, sorusu olmayanlar
+ * soru seçiminde sessizce düşüyordu; 50 soruluk aşama 32 soruyla açılıyor,
+ * öğrenci sorulmayan kazanımları hiç görmüyordu. Panelin hazırlık sayacı
+ * (admin pool.ts seviyeliHazirlikSorgusu) aynı süzgeç ve aynı sırayla sayar.
+ *
+ * Sıra şimdilik konu sırası → konu slug'ı → kazanım sırası → kod (hocaya
+ * soruldu; değişirse pool.ts'teki ROW_NUMBER da değişmeli).
  */
 export async function sinavinKazanimlari(examScope: string, enFazla?: number) {
-  return prisma.objective.findMany({
-    where: {
-      status: "PUBLISHED",
-      ...kazanimSinavdaKosulu(examScope as ExamScope),
-    },
-    // Eşitlik bozucular şart: kardeş konuların sortOrder'ı aynı olabiliyor ve
-    // `enFazla` ile ilk N alınırken hangi kazanımların sorulacağı belirsiz kalıyordu.
-    orderBy: [{ topic: { sortOrder: "asc" } }, { topic: { slug: "asc" } }, { sortOrder: "asc" }, { code: "asc" }],
-    select: { id: true, code: true, name: true, topicId: true },
-    ...(enFazla ? { take: enFazla } : {}),
+  const [kazanimlar, sayimlar] = await Promise.all([
+    prisma.objective.findMany({
+      where: {
+        status: "PUBLISHED",
+        ...kazanimSinavdaKosulu(examScope as ExamScope),
+      },
+      // Eşitlik bozucular şart: kardeş konuların sortOrder'ı aynı olabiliyor ve
+      // `enFazla` ile ilk N alınırken hangi kazanımların sorulacağı belirsiz kalıyordu.
+      orderBy: [{ topic: { sortOrder: "asc" } }, { topic: { slug: "asc" } }, { sortOrder: "asc" }, { code: "asc" }],
+      select: { id: true, code: true, name: true, topicId: true },
+    }),
+    prisma.question.groupBy({
+      by: ["objectiveId"],
+      where: { ...s1SoruKosulu(examScope), objectiveId: { not: null } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const soruSayisi = new Map(sayimlar.map((s) => [s.objectiveId, s._count._all]));
+  const yeterli = kazanimlar.filter((k) => (soruSayisi.get(k.id) ?? 0) >= S1_KAZANIM_EN_AZ_SORU);
+  return enFazla ? yeterli.slice(0, enFazla) : yeterli;
+}
+
+export interface SeviyeHazirligi {
+  seviye: Seviye;
+  /** Seviye 1'de sorulabilen kazanım, 2-3'te sorulabilen soru. */
+  mevcut: number;
+  gerekli: number;
+}
+
+export interface SeviyeliHazirlik {
+  /** Üç seviyenin ana aşaması da tam sayıyla açılabiliyor mu. */
+  hazir: boolean;
+  seviyeler: [SeviyeHazirligi, SeviyeHazirligi, SeviyeHazirligi];
+}
+
+/**
+ * Seviyeli check-up bu sınav için açılabilir mi — ÜÇ SEVİYENİN havuzu birlikte.
+ *
+ * Koşu başlarken denetlenir (lib/level-run.ts); katalog, /seviyeli sayfası
+ * ve tohum (paketi taslakta bırakmak için) aynı fonksiyonu kullanır. Yalnızca
+ * Seviye 1'e bakmak yetmiyordu: öğrenci 50 soruyu çözüp Seviye 2'nin
+ * kapısında "havuzda soru yok" hatasıyla kalıyordu.
+ *
+ * Ana aşamalar tam sayıyla açılır (lib/level-run.ts). Telafi turu buraya
+ * girmez: kısmi açılabilir, hiç sorusu yoksa karar onsuz verilir.
+ */
+export async function seviyeliHazirlik(examScope: ExamScopeValue): Promise<SeviyeliHazirlik> {
+  const ayar = ayarGetir(examScope);
+  const sinav = examScope as ExamScope;
+  const [kazanimlar, l2, l3] = await Promise.all([
+    sinavinKazanimlari(examScope),
+    prisma.question.count({ where: { status: "PUBLISHED", level: "L2_ORTA", ...soruSinavdaKosulu(sinav) } }),
+    prisma.question.count({ where: { status: "PUBLISHED", level: "L3_ANALIZ", ...soruSinavdaKosulu(sinav) } }),
+  ]);
+  const seviyeler: SeviyeliHazirlik["seviyeler"] = [
+    { seviye: 1, mevcut: kazanimlar.length, gerekli: ayar.seviye1.soruSayisi },
+    { seviye: 2, mevcut: l2, gerekli: ayar.seviye2.soruSayisi },
+    { seviye: 3, mevcut: l3, gerekli: ayar.seviye3.soruSayisi },
+  ];
+  return { hazir: seviyeler.every((s) => s.mevcut >= s.gerekli), seviyeler };
+}
+
+/**
+ * Kazanım başına seçimin adayları (Seviye 1 ve telafi turu): istenen
+ * kazanımların bu denemede gösterilmemiş L1 soruları. Soru da kazanımı da
+ * bu sınavda sorulabilir olmalı: telafi listesi düzeltmeden önce açılmış bir
+ * koşudan geliyorsa bile kapsam dışı kazanıma soru seçilmez (o kazanım
+ * eksik sayılır).
+ */
+function kazanimAdayKosulu(
+  objectiveIds: string[],
+  examScope: string,
+  excludeQuestionIds: string[]
+): Prisma.QuestionWhereInput {
+  return {
+    status: "PUBLISHED",
+    level: "L1_TEMEL",
+    objectiveId: { in: objectiveIds },
+    id: { notIn: excludeQuestionIds.length > 0 ? excludeQuestionIds : ["-"] },
+    AND: [soruSinavdaKosulu(examScope as ExamScope), { objective: kazanimSinavdaKosulu(examScope as ExamScope) }],
+  };
+}
+
+/**
+ * Teyit turunda gerçekte kaç soru sorulabilir: istenen kazanımlardan, bu
+ * denemede gösterilmemiş sorusu olanların sayısı (kazanım başına bir soru).
+ *
+ * Kapı kararının kısa devresi (levels.ts seviye1AnaKarar `bulunabilir`) ve
+ * karnedeki "N soruluk tur" metni buna bakar. Tek sorulu kazanımın yeni
+ * sorusu yoktur: o kazanım turda sorulamaz.
+ */
+export async function telafiIcinBulunabilir(
+  objectiveIds: string[],
+  examScope: string,
+  excludeQuestionIds: string[]
+): Promise<number> {
+  if (objectiveIds.length === 0) return 0;
+  const gruplar = await prisma.question.groupBy({
+    by: ["objectiveId"],
+    where: kazanimAdayKosulu(objectiveIds, examScope, excludeQuestionIds),
   });
+  return gruplar.length;
 }
 
 /**
@@ -72,19 +180,7 @@ export async function kazanimBasinaBirSoru(
   }
 
   const adaylar = await prisma.question.findMany({
-    where: {
-      status: "PUBLISHED",
-      level: "L1_TEMEL",
-      objectiveId: { in: objectiveIds },
-      id: { notIn: excludeQuestionIds.length > 0 ? excludeQuestionIds : ["-"] },
-      // Soru da kazanımı da bu sınavda sorulabilir olmalı. Telafi listesi
-      // düzeltmeden önce açılmış bir koşudan geliyorsa bile kapsam dışı
-      // kazanıma soru seçilmez (o kazanım eksik sayılır).
-      AND: [
-        soruSinavdaKosulu(examScope as ExamScope),
-        { objective: kazanimSinavdaKosulu(examScope as ExamScope) },
-      ],
-    },
+    where: kazanimAdayKosulu(objectiveIds, examScope, excludeQuestionIds),
     select: { id: true, topicId: true, objectiveId: true, version: true },
   });
 

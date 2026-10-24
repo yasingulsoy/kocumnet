@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Yazım biçimi ayrıştırıcısı: ayrıştırma + GİDİŞ-DÖNÜŞ denetimi.
  * Round-trip bozulursa mevcut bir soruyu düzenlemek içerik siler.

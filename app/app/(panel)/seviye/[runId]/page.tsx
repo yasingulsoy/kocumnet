@@ -5,6 +5,7 @@ import {
   CircleCheck,
   ClipboardList,
   Lock,
+  LogOut,
   Play,
   RotateCcw,
   Target,
@@ -26,6 +27,7 @@ import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
 import { GridShape } from "@/components/tailadmin/ui/GridShape";
 import { PageBreadcrumb } from "@/components/tailadmin/ui/PageBreadcrumb";
+import { DenemeyiBirak } from "./DenemeyiBirak";
 
 export const metadata: Metadata = { title: "Seviyeli check-up" };
 
@@ -70,6 +72,9 @@ export default async function SeviyePage({
 
   const durdu = adim.tur === "DURDU";
   const bitti = adim.tur === "BITTI";
+  const birakildi = adim.tur === "BIRAKILDI";
+  // Süren koşu (teyit turu ya da sıradaki seviye bekliyor): bırakılabilir.
+  const suruyor = adim.tur === "TELAFI_BEKLIYOR" || adim.tur === "SEVIYE_HAZIR";
   const sinav = examShort(karne.examScope);
 
   return (
@@ -93,6 +98,7 @@ export default async function SeviyePage({
           ulasilan={karne.ulasilanSeviye}
           durduguSeviye={karne.durduguSeviye}
           bitti={bitti}
+          birakildi={birakildi}
         />
 
         {/* ── Sıradaki adım ────────────────────────────────── */}
@@ -106,15 +112,29 @@ export default async function SeviyePage({
                 <h2 className="font-display text-lg font-semibold text-gray-800">
                   Temel kazanımlarını teyit ediyoruz
                 </h2>
-                <p className="mt-2 text-sm leading-relaxed text-gray-700">
-                  Seviye 1&apos;de %{karne.seviye1Birlesik ? Math.round(karne.seviye1Birlesik.oran * 100) : 0}{" "}
-                  çıktın. Barajın altında kaldığın için sınavı burada bitirmiyoruz:{" "}
-                  <strong className="font-semibold text-gray-800">
-                    {adim.kazanimSayisi} soruluk kısa bir tur
-                  </strong>{" "}
-                  daha var. Sorular yalnızca eksik çıkan kazanımlardan ve hepsi ilk
-                  turda görmediğin sorular.
-                </p>
+                {adim.acilacak ? (
+                  <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                    Seviye 1&apos;de %{karne.seviye1Birlesik ? Math.round(karne.seviye1Birlesik.oran * 100) : 0}{" "}
+                    çıktın. Barajın altında kaldığın için sınavı burada bitirmiyoruz:{" "}
+                    <strong className="font-semibold text-gray-800">
+                      {adim.soruSayisi} soruluk kısa bir tur
+                    </strong>{" "}
+                    daha var. Sorular yalnızca eksik çıkan kazanımlardan ve hepsi ilk
+                    turda görmediğin sorular.
+                    {adim.soruSayisi < adim.kazanimSayisi
+                      ? ` Eksik çıkan ${adim.kazanimSayisi} kazanımın ${adim.kazanimSayisi - adim.soruSayisi} tanesinde havuzda yeni soru olmadığı için onlar bu turda sorulmayacak.`
+                      : null}
+                  </p>
+                ) : (
+                  // Teyit turu açılamıyor (eksik kazanımlarda yeni soru yok ya da
+                  // tur sonucu değiştiremez): "Devam et" kararı ilk turla verir.
+                  <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                    Seviye 1&apos;de %{karne.seviye1Birlesik ? Math.round(karne.seviye1Birlesik.oran * 100) : 0}{" "}
+                    çıktın. Eksik çıkan kazanımları yeni sorularla teyit edecektik, ama
+                    havuzda bu tura yetecek yeni soru yok. Devam ettiğinde karar ilk
+                    turun sonucuna göre verilir.
+                  </p>
+                )}
                 <form action={telafiBaslatAction} className="mt-5">
                   <input type="hidden" name="runId" value={runId} />
                   <SubmitButton size="md" className="max-sm:w-full" startIcon={<Play aria-hidden />}>
@@ -130,10 +150,14 @@ export default async function SeviyePage({
           // Birincil adım: seviyeli check-up'ın lacivert bandı, beyaz düğme kitin outline'ı.
           <Card tone="dark" className="relative z-1 overflow-hidden p-5 sm:p-6">
             <GridShape />
-            <p className="flex items-center gap-1.5 text-theme-xs font-semibold tracking-wider text-white/80 uppercase">
-              <CircleCheck className="size-3.5 text-success-400" aria-hidden /> Seviye {adim.seviye - 1} geçildi
-            </p>
-            <h2 className="mt-2 font-display text-xl font-semibold text-balance">
+            {/* Kapısı yazılmamış koşuda "Seviye 0 geçildi" yazıyordu; artık oluşmamalı
+                (kapı bitişte yazılıyor), oluşursa da satır hiç çıkmaz. */}
+            {adim.seviye - 1 >= 1 ? (
+              <p className="mb-2 flex items-center gap-1.5 text-theme-xs font-semibold tracking-wider text-white/80 uppercase">
+                <CircleCheck className="size-3.5 text-success-400" aria-hidden /> Seviye {adim.seviye - 1} geçildi
+              </p>
+            ) : null}
+            <h2 className="font-display text-xl font-semibold text-balance">
               Seviye {adim.seviye}&apos;ye hazırsın
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-white/80">
@@ -203,6 +227,30 @@ export default async function SeviyePage({
           </div>
         ) : null}
 
+        {birakildi ? (
+          <Card className="p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+                <LogOut className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-lg font-semibold text-gray-800">Bu denemeyi bıraktın</h2>
+                <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                  Bıraktığın denemeye devam edilemez. Bitirdiğin aşamaların sonucu aşağıda
+                  duruyor; yeni bir deneme her seviyeyi baştan, yeni sorularla sorar.
+                </p>
+                <ButtonLink
+                  href="/seviyeli"
+                  className="mt-5 max-sm:w-full"
+                  endIcon={<ArrowRight className="rtl:rotate-180" aria-hidden />}
+                >
+                  Yeni deneme başlat
+                </ButtonLink>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
         {/* ── Karne ────────────────────────────────────────── */}
         <ComponentCard
           title={karne.baslik}
@@ -217,8 +265,9 @@ export default async function SeviyePage({
                 boydan boya dolduruyordu). */}
             {karne.asamalar.length === 0 ? (
               <p className="bg-gray-50 px-5 py-4 text-theme-sm text-gray-500 sm:px-6">
-                Henüz biten aşama yok. İlk aşamayı bitirdiğinde puanların ve eksik kazanımların
-                burada görünür.
+                {birakildi
+                  ? "Bu denemede bitirilmiş aşama yok."
+                  : "Henüz biten aşama yok. İlk aşamayı bitirdiğinde puanların ve eksik kazanımların burada görünür."}
               </p>
             ) : (
               <div
@@ -375,6 +424,17 @@ export default async function SeviyePage({
               Seviyeli check-up&apos;ı eksiklerini kapattıktan sonra yeniden çözebilirsin.
               Aynı sorular gelmez — her denemede havuzdan yeni sorular seçilir.
             </p>
+          </Card>
+        ) : null}
+
+        {/* Süren koşudan çıkış: onaylı, koşu "bırakıldı" olarak kalır. */}
+        {suruyor ? (
+          <Card className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <p className="text-theme-sm leading-relaxed text-gray-500 sm:max-w-md">
+              Bu denemeye devam etmek istemiyor musun? Bırakırsan karnende
+              &quot;bırakıldı&quot; olarak kalır ve istediğin zaman yenisini başlatabilirsin.
+            </p>
+            <DenemeyiBirak runId={runId} sinav={sinav} />
           </Card>
         ) : null}
       </div>

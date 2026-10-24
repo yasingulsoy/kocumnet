@@ -13,7 +13,6 @@ import {
   type CheckupErrorCode,
   type SessionState,
 } from "@/lib/checkup";
-import { asamaDegerlendir } from "@/lib/level-run";
 import { prisma } from "@/lib/db";
 
 export interface StartState {
@@ -163,9 +162,10 @@ export async function submitCheckupAction(
   /*
    * Seviyeli check-up aşaması mı?
    *
-   * Öyleyse kapı değerlendirilir ve öğrenci deneme sayfasına gider —
-   * paket sonucu ekranı (koçluk çıktısı) burada yanlış olurdu: orada
-   * "bu hafta şunu çalış" yazıyor, oysa aday sınavın ortasında.
+   * Öyleyse öğrenci deneme sayfasına gider — paket sonucu ekranı (koçluk
+   * çıktısı) burada yanlış olurdu: orada "bu hafta şunu çalış" yazıyor, oysa
+   * aday sınavın ortasında. Kapı burada DEĞİL, submitCheckup'ta
+   * değerlendirildi: süresi dolup cron'la kapanan aşama da aynı yoldan geçsin.
    */
   const asama = await prisma.checkupSession.findUnique({
     where: { id: sessionId },
@@ -173,13 +173,6 @@ export async function submitCheckupAction(
   });
 
   if (asama?.kind === "LEVEL_STAGE" && asama.levelRunId) {
-    try {
-      await asamaDegerlendir(sessionId, user.id);
-    } catch (e) {
-      // Kapı değerlendirilemezse de oturum kapandı; öğrenciyi boşlukta
-      // bırakmamak için deneme sayfasına gönderiyoruz.
-      if (!(e instanceof CheckupError)) throw e;
-    }
     revalidatePath("/panel");
     redirect(`/seviye/${asama.levelRunId}`);
   }

@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Tanışalım" };
 /**
  * Tanışma — panelin dışında, tam ekran.
  *
- * Koç bir öğrenciyle önce tanışır: hangi sınav, hangi sınıf, kaç net hedef.
- * Bu üç cevap olmadan söylenebilecek hiçbir şey yok; katalog da, koçluk
- * metinleri de buna göre şekilleniyor. Sekme çubuğu ve kenar çubuğu bilerek
+ * Koç bir öğrenciyle önce tanışır: hangi sınav, hangi sınıf, kaç net hedef,
+ * haftada kaç test. Bu cevaplar olmadan söylenebilecek hiçbir şey yok;
+ * katalog da, koçluk metinleri de buna göre şekilleniyor. Sekme çubuğu ve kenar çubuğu bilerek
  * yok: tek işi olan bir ekran (üstte yalnızca logo).
  */
 export default async function TanismaPage() {
@@ -32,7 +32,7 @@ export default async function TanismaPage() {
           Merhaba {user.name.split(" ")[0]}, hangi sınava hazırlanıyorsun?
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-gray-500">
-          Üç soruluk bir tanışma. Buna göre sana doğru testleri öneriyor, sonuçlarını
+          Dört soruluk bir tanışma. Buna göre sana doğru testleri öneriyor, sonuçlarını
           doğru sınavın puanlamasıyla hesaplıyoruz.
         </p>
 

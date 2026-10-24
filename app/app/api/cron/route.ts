@@ -2,9 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { pruneExpiredSessions } from "@/lib/auth";
-import { expireStaleSessions } from "@/lib/checkup";
+import { expireStaleSessions, yenidenPuanla } from "@/lib/checkup";
+import { sahipsizKosulariSil, seviyeliKapilariOnar } from "@/lib/level-run";
 import { haftalikPostalariGonder } from "@/lib/digest";
 import { eskiVeliBaglantilariniSil } from "@/lib/veli-raporu";
+import { asamaCalistir, kilitle } from "./bakim";
 
 /**
  * Zamanlanmış bakım. Dışarıdan bir zamanlayıcı (Dokploy "Schedule", cron,
@@ -20,6 +22,14 @@ import { eskiVeliBaglantilariniSil } from "@/lib/veli-raporu";
  *  · Süresi geçmiş giriş oturumlarını ve parola sıfırlama jetonlarını siler.
  *  · Süresi dolalı ya da kaldırılalı 30 gün geçen veli bağlantılarını siler.
  *  · Pazartesi 07:00 (TR) sonrası haftalık koçluk postasını gönderir (lib/digest.ts).
+ *  · Aşamasız kalmış eski seviyeli koşuları siler ve kapısı değerlendirilmeden
+ *    kalmış koşuları onarır (lib/level-run.ts).
+ *  · Cevap anahtarı düzeltilen soruların bitmiş sonuçlarını yeniden puanlar
+ *    (lib/checkup.ts yenidenPuanla).
+ *
+ * İskelet (kilit, birbirinden bağımsız işler, iş başına günlük) ./bakim.ts'te.
+ * Bir iş düşerse öbürleri yine çalışır; yanıt 500 döner ki zamanlayıcının
+ * `curl -f`'i bunu görsün, gövdede hangi işin neden düştüğü yazar.
  *
  * CRON_SECRET yoksa uç kapalıdır (503) — açık bırakılmış bir bakım ucu,
  * herkesin tetikleyebildiği bir yük demek.
@@ -42,25 +52,42 @@ export async function GET(req: NextRequest) {
   if (!yetkili(req)) return NextResponse.json({ ok: false }, { status: 401 });
 
   const basladi = Date.now();
-  const [puanlanan, silinenOturum, silinenJeton, posta, silinenVeliBaglantisi] = await Promise.all([
-    expireStaleSessions(),
-    pruneExpiredSessions(),
-    prisma.passwordResetToken
-      .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { usedAt: { not: null } }] } })
-      .then((r) => r.count),
-    haftalikPostalariGonder(),
-    eskiVeliBaglantilariniSil(),
-  ]);
+  const kilit = await kilitle(async () => {
+    const birinci = await asamaCalistir([
+      { ad: "suresiDolanTestler", calistir: () => expireStaleSessions() },
+      { ad: "girisOturumlari", calistir: () => pruneExpiredSessions() },
+      {
+        ad: "sifirlamaJetonlari",
+        calistir: () =>
+          prisma.passwordResetToken
+            .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { usedAt: { not: null } }] } })
+            .then((r) => r.count),
+      },
+      { ad: "haftalikPosta", calistir: () => haftalikPostalariGonder() },
+      { ad: "veliBaglantilari", calistir: () => eskiVeliBaglantilariniSil() },
+      { ad: "sahipsizKosular", calistir: () => sahipsizKosulariSil() },
+    ]);
+    /*
+     * İkinci aşama BİRİNCİDEN SONRA: ikisi de puanlanmış testlere bakıyor.
+     * Süresi dolan aşama birinci aşamada puanlanıp kapısı orada
+     * değerlendirilir; onarım ancak ondan sonra "kapısız kalan"ı doğru görür.
+     * Yeniden puanlama da az önce kapanan testi yarıda yakalamasın.
+     */
+    const ikinci = await asamaCalistir([
+      { ad: "seviyeliKapilar", calistir: () => seviyeliKapilariOnar() },
+      { ad: "yenidenPuanlama", calistir: () => yenidenPuanla() },
+    ]);
+    return [...birinci, ...ikinci];
+  });
 
-  const sonuc = {
-    ok: true,
-    puanlananTest: puanlanan,
-    silinenOturum,
-    silinenJeton,
-    haftalikPosta: posta,
-    silinenVeliBaglantisi,
-    sureMs: Date.now() - basladi,
-  };
-  console.log("[cron]", JSON.stringify(sonuc));
-  return NextResponse.json(sonuc);
+  if (!kilit.alindi) {
+    console.log("[cron] zaten çalışıyor; bu çağrı atlandı");
+    return NextResponse.json({ ok: true, durum: "zaten çalışıyor" });
+  }
+
+  const isler = kilit.deger;
+  const ok = isler.every((i) => i.ok);
+  const sonuc = { ok, isler, sureMs: Date.now() - basladi };
+  console.log(`[cron] bitti: ${isler.filter((i) => i.ok).length}/${isler.length} iş tamam (${sonuc.sureMs} ms)`);
+  return NextResponse.json(sonuc, { status: ok ? 200 : 500 });
 }

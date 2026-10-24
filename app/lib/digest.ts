@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
-import { aktifPlan } from "@/lib/plan";
-import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
-import { EXAMS } from "@/lib/exams";
+import { aktifPlan, gecenHaftaninKalanlari } from "@/lib/plan";
+import { haftaBasi, haftaBasiAni, haftaEtiketi } from "@/lib/coaching";
+import { EXAMS, daysUntilExam } from "@/lib/exams";
 import { appUrl, isMailConfigured, renderMail, sendMail, type MailIcerik } from "@/lib/mailer";
 import { gunBasi } from "@/lib/review";
 import { gunAnahtari, gunlukSayimlar } from "@/lib/seri";
@@ -25,7 +25,8 @@ const GONDERIM_SAATI = 7;
 const PARTI = 150;
 /** Bu kadar gündür girmemiş öğrenciye yazmıyoruz: terk edilmiş hesaba haftalık posta spam'dir. */
 const AKTIFLIK_GUNU = 60;
-const TR_OFFSET_MS = 3 * 3600_000; // Türkiye yıl boyu UTC+3 (2016'dan beri yaz saati yok)
+/** Bu haftanın planı yokken geçen haftadan en fazla bu kadar bitmemiş iş gösterilir. */
+const KALAN_IS_SINIRI = 3;
 
 const PLAN_ISI: Record<string, string> = {
   STUDY: "Konu tekrarı",
@@ -65,7 +66,7 @@ export async function haftalikPostalariGonder(now = new Date()): Promise<{ aday:
   if (!isMailConfigured() || !postaZamaniMi(now)) return { aday: 0, gonderilen: 0 };
 
   const hafta = haftaBasi(now); // pazartesi tarihi, 00:00Z
-  const haftaBaslangici = new Date(hafta.getTime() - TR_OFFSET_MS); // pazartesi 00:00 TR
+  const haftaBaslangici = haftaBasiAni(now); // pazartesi 00:00 TR (an)
   const esik = new Date(now.getTime() - AKTIFLIK_GUNU * 86_400_000);
 
   const adaylar = await prisma.user.findMany({
@@ -104,9 +105,9 @@ async function haftalikPosta(
   hafta: Date
 ) {
   // Gelecek pazartesi 00:00 (TR): bu haftanın sonu.
-  const haftaSonu = new Date(hafta.getTime() + 7 * 86_400_000 - TR_OFFSET_MS);
+  const haftaSonu = new Date(haftaBasiAni(now).getTime() + 7 * 86_400_000);
 
-  const [plan, sonTest, defterVadeleri, sayimlar, kocCevabi] = await Promise.all([
+  const [plan, sonTest, defterVadeleri, sayimlar, kocCevabi, gecenHafta] = await Promise.all([
     aktifPlan(u.id, now),
     prisma.checkupSession.findFirst({
       // Alıştırma "son check-up" sayılmaz: ölçüm değil.
@@ -123,6 +124,8 @@ async function haftalikPosta(
     // Son 7 gün + bugün: kaç gün soru çözdü (lib/seri.ts, Türkiye günleri).
     gunlukSayimlar(u.id, now, 8),
     okunmamisCevapSayisi(u.id),
+    // Bu haftanın planı yoksa gösterilecek (plan devretmiyor; yalnızca hatırlatma).
+    gecenHaftaninKalanlari(u.id, now, KALAN_IS_SINIRI),
   ]);
 
   const ilkAd = u.name.trim().split(/\s+/)[0] || u.name;
@@ -130,10 +133,9 @@ async function haftalikPosta(
   const kapatUrl = `${appUrl()}/abonelik/${u.mailToken}`;
   const tekTikUrl = `${appUrl()}/api/abonelik/${u.mailToken}`;
 
-  const geriSayim =
-    sinav?.examDate && new Date(sinav.examDate) > now
-      ? `${sinav.short} sınavına ${Math.ceil((new Date(sinav.examDate).getTime() - now.getTime()) / 86_400_000)} gün.`
-      : null;
+  // Panodaki geri sayımla aynı hesap (sınav günü Türkiye saatiyle).
+  const kalanGun = daysUntilExam(u.targetExam, now);
+  const geriSayim = sinav && kalanGun !== null && kalanGun > 0 ? `${sinav.short} sınavına ${kalanGun} gün.` : null;
 
   const gunFarki = sonTest?.submittedAt ? Math.floor((now.getTime() - sonTest.submittedAt.getTime()) / 86_400_000) : null;
 
@@ -174,7 +176,11 @@ async function haftalikPosta(
       baslik: `${haftaEtiketi(hafta)}: planın hazır, ${ilkAd}`,
       metin: [
         plan.coachNote ?? "Bu hafta en fazla iki konu, sırayla. Önce konu tekrarı, sonra soru, sonra kontrol testi.",
-        kalan.length === 0 ? "Planın tamamlanmış görünüyor — yeni bir check-up ile sıradaki konuları bulalım." : `${kalan.length} iş seni bekliyor (${plan.toplamDakika} dakika):`,
+        // Plan haftada bir kurulur: yeni check-up bu haftanın planını
+        // değiştirmez, sonuç ekranında sıradaki konuları gösterir.
+        kalan.length === 0
+          ? "Planın tamamlanmış görünüyor. İstersen yeni bir check-up çöz: sonuç ekranı sıradaki konuları gösterir. Yeni plan gelecek haftanın ilk check-up'ından çıkar."
+          : `${kalan.length} iş seni bekliyor (${kalan.reduce((t, i) => t + i.estimatedMinutes, 0)} dakika):`,
       ],
       kutu: plan.items
         .map((i) => `${i.done ? "✓" : "☐"} ${PLAN_ISI[i.kind] ?? i.kind}${i.topicName ? ` · ${i.topicName}` : ""} — ${i.estimatedMinutes} dk${i.kind === "RETEST" ? " (sistem doğrular)" : ""}`)
@@ -183,15 +189,31 @@ async function haftalikPosta(
       sonMetin: [kocSatiri, calismaSatiri, geriSayim, "Kontrol testini elle işaretleyemezsin: o konuda 5 soruluk testi çözdüğünde sistem kendisi kapatır."].filter((s): s is string => Boolean(s)),
     };
   } else {
+    /*
+     * Pazartesi 07:00'de bu haftanın planı çoğu zaman yok (plan haftanın ilk
+     * check-up'ından çıkıyor). Postanın "planını göster" sözü boş kalmasın:
+     * geçen haftadan bitmeyen işler en fazla üç satır. Plan DEVRETMİYOR;
+     * metin de devrettiğini söylemiyor.
+     */
+    const kalanSatiri =
+      gecenHafta.toplam > 0
+        ? `Geçen haftanın planından ${gecenHafta.toplam} iş bitmeden kaldı${gecenHafta.toplam > gecenHafta.isler.length ? `; ilk ${gecenHafta.isler.length} tanesi` : ""}:`
+        : null;
     icerik = {
       baslik: `${ilkAd}, bu hafta ne çalışacaksın?`,
       metin: [
         gunFarki === null
-          ? "Henüz bir check-up çözmedin. 20 dakikalık bir testle nerede olduğunu gör; plan kendiliğinden kurulur."
+          ? "Henüz bir check-up çözmedin. Kısa bir testle nerede olduğunu gör; plan kendiliğinden kurulur."
           : gunFarki > 7
             ? `Son check-up'ından ${gunFarki} gün geçti. Hedefin haftada ${u.weeklyTestGoal} test — bu hafta bir tane çöz, planın yenilensin.`
-            : "Bu haftanın planı henüz oluşmadı. Bir check-up çözdüğünde en zayıf iki konun için plan kurulur.",
+            : "Bu haftanın planı henüz oluşmadı. Bir check-up çözdüğünde en zayıf konuların için plan kurulur.",
+        ...(kalanSatiri ? [kalanSatiri] : []),
       ],
+      kutu: gecenHafta.isler.length
+        ? gecenHafta.isler
+            .map((i) => `☐ ${PLAN_ISI[i.kind] ?? i.kind}${i.topicName ? ` · ${i.topicName}` : ""} — ${i.estimatedMinutes} dk`)
+            .join("\n")
+        : undefined,
       eylem: { etiket: "Check-up seç", url: `${appUrl()}/paketler` },
       sonMetin: [kocSatiri, calismaSatiri, geriSayim].filter((s): s is string => Boolean(s)),
     };

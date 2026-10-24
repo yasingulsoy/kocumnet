@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { startTopicRetest, CheckupError } from "@/lib/checkup";
 import { haftaBasi } from "@/lib/coaching";
+import { examShort } from "@/lib/exams";
+import { kontrolTestiSinavi, planKaynagi, planOlustur } from "@/lib/plan";
 
 /**
  * Plandaki bir işi işaretler / işareti kaldırır.
@@ -68,11 +70,14 @@ export async function konuTekrarBaslat(formData: FormData): Promise<void> {
   const user = await requireUser();
   const topicId = String(formData.get("topicId") ?? "");
   if (!topicId) redirect("/panel?hata=konu-secilmedi");
-  if (!user.targetExam) redirect("/tanisma");
+
+  // Plandaki iş planın sınavıyla, değilse güncel hedefle (lib/plan.ts).
+  const sinav = await kontrolTestiSinavi(user.id, topicId, new Date(), user.targetExam);
+  if (!sinav) redirect("/tanisma");
 
   let sessionId: string;
   try {
-    sessionId = await startTopicRetest(user.id, topicId, user.targetExam);
+    sessionId = await startTopicRetest(user.id, topicId, sinav);
   } catch (e) {
     if (e instanceof CheckupError) {
       redirect("/panel?hata=" + encodeURIComponent(e.message));
@@ -87,7 +92,8 @@ export async function konuTekrarBaslat(formData: FormData): Promise<void> {
 /**
  * Planı olmayan öğrenci için bu haftanın planını son sonuçtan üretir.
  * (Normalde plan test bitince otomatik oluşuyor; bu, eski sonuçları olan
- * öğrencilerin de plan görebilmesi için.)
+ * öğrencilerin de plan görebilmesi için.) "Son sonuç" kuralı planKaynagi'nde
+ * (lib/plan.ts): paket testi, işaretli, hedef sınavdan.
  */
 export async function planYenidenUretAction(): Promise<{
   ok: boolean;
@@ -104,27 +110,19 @@ export async function planYenidenUretAction(): Promise<{
   });
   if (mevcut) return { ok: true };
 
-  const son = await prisma.checkupSession.findFirst({
-    where: { userId: user.id, status: "SUBMITTED", result: { isNot: null } },
-    orderBy: { submittedAt: "desc" },
-    select: {
-      id: true,
-      package: { select: { examScope: true } },
-      result: { select: { topicBreakdown: true } },
-    },
-  });
-  if (!son?.result) {
-    return { ok: false, error: "Plan için önce bir check-up çözmen gerekiyor.", kod: "SONUC_YOK" };
+  const hedef = user.targetExam;
+  const kaynak = await planKaynagi(user.id, hedef);
+  if (!kaynak) {
+    return {
+      ok: false,
+      error: hedef
+        ? `Plan için önce bir ${examShort(hedef)} check-up'ı çözmen gerekiyor.`
+        : "Plan için önce bir check-up çözmen gerekiyor.",
+      kod: "SONUC_YOK",
+    };
   }
 
-  const { planOlustur } = await import("@/lib/plan");
-  const sonuc = await planOlustur({
-    userId: user.id,
-    sessionId: son.id,
-    examScope: son.package.examScope,
-    breakdown: son.result.topicBreakdown as never,
-    now,
-  });
+  const sonuc = await planOlustur({ userId: user.id, ...kaynak, now });
 
   revalidatePath("/panel");
   return sonuc.planId

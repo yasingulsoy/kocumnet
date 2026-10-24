@@ -15,12 +15,20 @@ import {
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
-import { aggregateTopics, greeting, studentStats, type ResultLike } from "@/lib/insights";
+import {
+  HARITA_EN_AZ_SORU,
+  aggregateTopics,
+  egilimeGirer,
+  greeting,
+  konuHaritasinaGirer,
+  studentStats,
+  type ResultLike,
+} from "@/lib/insights";
 import { aktifPlan } from "@/lib/plan";
 import { aktifKosu } from "@/lib/level-run";
 import { bugunkuIs } from "@/lib/bugun";
 import { bugunkuOdev } from "@/lib/odev-sorgu";
-import { haftaBasi, haftaEtiketi } from "@/lib/coaching";
+import { haftaBasiAni, haftaEtiketi } from "@/lib/coaching";
 import { daysUntilExam, examShort } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { BugunKarti } from "@/components/BugunKarti";
@@ -122,6 +130,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
         totalTimeMs: true,
         computedAt: true,
         topicBreakdown: true,
+        examScope: true,
         session: { select: { kind: true, package: { select: { name: true } } } },
       },
     }),
@@ -132,17 +141,17 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
      *
      * Öğrenci tanışmada "haftada kaç test" diyor ve bu bilgi hiçbir yerde
      * kullanılmıyordu. Toplanan ama karşılığı olmayan her soru, ürünün
-     * dinlemediğini gösterir. Kontrol testleri (5 soru) sayılmaz: onlar
-     * ölçüm değil, doğrulama.
+     * dinlemediğini gösterir. Yalnızca PAKET testleri, işaretli olanlar
+     * (aşağıda egilimeGirer): kontrol testi ve seviyeli aşama ölçüm değil,
+     * doğrulama; boş gönderilen test de çözülmüş sayılmaz. Haftada birkaç
+     * satır, süzgeç sorgu yerine tek tanımdan geçsin diye kodda.
      */
-    prisma.checkupSession.count({
+    prisma.checkupResult.findMany({
       where: {
-        userId: user.id,
-        status: "SUBMITTED",
-        // Alıştırma da sayılmaz: ölçüm değil.
-        kind: { notIn: ["TOPIC_RETEST", "PRACTICE"] },
-        submittedAt: { gte: haftaBasi(now) },
+        // Zaman damgası: haftanın başladığı AN (pazartesi 00:00 TR), tarih değil.
+        session: { userId: user.id, kind: "PACKAGE", status: "SUBMITTED", submittedAt: { gte: haftaBasiAni(now) } },
       },
+      select: { correctCount: true, wrongCount: true, session: { select: { kind: true } } },
     }),
     /* Seviyeli check-up devam ediyor mu — "Seviye 2 seni bekliyor". */
     aktifKosu(user.id),
@@ -154,11 +163,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   /* Seri ve günlük hedef (lib/seri.ts); koçun henüz okunmamış cevapları. */
   const [seri, kocCevabi] = await Promise.all([seriDurumu(user.id, now), okunmamisCevapSayisi(user.id)]);
 
-  const sonuclar: (ResultLike & { sessionId: string; packageName: string; kontrol: boolean })[] =
+  const sonuclar: (ResultLike & { sessionId: string; packageName: string; kind: string; examScope: string | null })[] =
     sonuclarHam.map((r) => ({
       sessionId: r.sessionId,
       packageName: r.session.package.name,
-      kontrol: r.session.kind === "TOPIC_RETEST",
+      kind: r.session.kind,
+      examScope: r.examScope,
       correctCount: r.correctCount,
       wrongCount: r.wrongCount,
       blankCount: r.blankCount,
@@ -169,14 +179,19 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     }));
 
   /*
-   * Genel başarı, eğilim ve son altı şerit yalnızca ÖLÇÜMLERDEN. 5 soruluk
-   * kontrol testi tek zayıf konuyu ölçüyor: plandaki kontrol testini çözen
-   * öğrenci "-30 puan" gibi sebepsiz bir düşüş görüyordu. Zayıf konu listesi
-   * ise hepsini topluyor (kontrol testi o konunun gerçek ölçümü).
+   * Genel başarı, eğilim ve son ölçümler yalnızca ÖLÇÜMLERDEN: paket testi,
+   * işaretli (lib/insights.ts egilimeGirer). 5 soruluk kontrol testi tek zayıf
+   * konuyu ölçüyor: plandaki kontrol testini çözen öğrenci "-30 puan" gibi
+   * sebepsiz bir düşüş görüyordu. Seviyeli aşama cezasız; boş gönderilen test
+   * sıfır. Zayıf konu listesi kontrol testini ve aşamayı da topluyor
+   * (konuHaritasinaGirer: o konunun gerçek ölçümü). Gelişim, veli raporu ve
+   * panelin öğrenci sayfası aynı iki süzgeçten geçiyor.
    */
-  const olcumler = sonuclar.filter((r) => !r.kontrol);
+  const olcumler = sonuclar.filter((r) => egilimeGirer(r, user.targetExam));
   const ozet = studentStats(olcumler);
-  const konular = aggregateTopics(sonuclar).filter((t) => t.level !== null);
+  const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, user.targetExam))).filter(
+    (t) => t.level !== null
+  );
   const zayiflar = [...konular]
     .filter((t) => t.level === "WEAK")
     .sort((a, b) => a.ratio - b.ratio)
@@ -208,7 +223,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
     .slice(0, 2);
   const kalanGun = daysUntilExam(user.targetExam, now);
   const haftalikHedef = user.weeklyTestGoal ?? null;
-  const temponunDurumu = haftalikHedef !== null && buHaftakiTest >= haftalikHedef;
+  const buHaftakiTestSayisi = buHaftakiTest.filter((r) => egilimeGirer({ ...r, kind: r.session.kind })).length;
+  const temponunDurumu = haftalikHedef !== null && buHaftakiTestSayisi >= haftalikHedef;
 
   /** Bir testin başarı oranı (doğru / soru). */
   const oran = (r: ResultLike) => {
@@ -350,13 +366,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
                 value={ozet.testCount}
                 icon={<ClipboardList />}
                 href="/gelisim"
-                hint="Kontrol testleri hariç"
+                hint="Kontrol testleri ve seviyeli aşamalar hariç"
               />
               {/* Haftalık tempo — öğrencinin tanışmada kendi koyduğu hedef. */}
               <MetricCard
                 compact
                 label="Bu hafta"
-                value={haftalikHedef ? `${buHaftakiTest}/${haftalikHedef}` : buHaftakiTest}
+                value={haftalikHedef ? `${buHaftakiTestSayisi}/${haftalikHedef}` : buHaftakiTestSayisi}
                 icon={<Repeat />}
                 tone={temponunDurumu ? "success" : "gray"}
                 hint={
@@ -423,7 +439,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
               <ComponentCard
                 className={sonTestler.length > 0 ? "2xl:col-span-5" : "2xl:col-span-12"}
                 title="Şimdi ne çalışmalısın"
-                desc="Kanıtlı zayıf konular — her biri en az 3 soruda ölçüldü."
+                desc={`Kanıtlı zayıf konular — her biri en az ${HARITA_EN_AZ_SORU} soruda ölçüldü.`}
                 actions={tumuBaglantisi("/gelisim")}
                 flush
               >
@@ -451,7 +467,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
               <ComponentCard
                 className={zayiflar.length > 0 ? "2xl:col-span-7" : "2xl:col-span-12"}
                 title="Son check-up'ların"
-                desc="En yeniden eskiye; kontrol testlerin Gelişim'de."
+                desc="En yeniden eskiye; kontrol testlerin ve seviyeli aşamaların Gelişim'de."
                 actions={tumuBaglantisi("/gelisim")}
                 flush
               >

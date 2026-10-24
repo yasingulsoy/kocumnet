@@ -51,7 +51,8 @@ function kisaBaslik(title: string, topicName: string | null) {
  *
  * Tasarım kararları:
  *  - Kontrol testi (RETEST) işaretlenemez, ÇÖZÜLÜR. Öğrenci "40 soru çözdüm"
- *    diyebilir; 5 soruluk kontrol testini geçtiğini söyleyemez.
+ *    diyebilir; 5 soruluk kontrol testini geçtiğini söyleyemez. Açılamayan
+ *    kontrol testi (acilabilir=false) yalnızca silinebilir.
  *  - İş silinebilir: koç da öğrencinin "bu hafta buna vaktim yok" itirazını
  *    dinler. Kabul edilmiş bir plan yapılır, dayatılan plan duvar kâğıdı olur.
  *  - İşler KONUYA göre gruplanır: hafta iki konudan ibaret olduğu için
@@ -274,18 +275,27 @@ export function PlanCard({ plan, haftaEtiketi }: { plan: PlanGorunumu; haftaEtik
                         </span>
                         <span className="tabular block text-theme-xs text-gray-500">
                           ~{i.estimatedMinutes} dk
-                          {i.verifiable && !i.done ? <span className="ms-1.5 text-brand-500">sistem doğrular</span> : null}
+                          {i.verifiable && !i.done ? (
+                            i.acilabilir ? (
+                              <span className="ms-1.5 text-brand-500">sistem doğrular</span>
+                            ) : (
+                              <span className="ms-1.5 text-warning-700">bu sınavda açılamıyor</span>
+                            )
+                          ) : null}
                         </span>
                       </label>
 
-                      {i.verifiable && !i.done && i.topicId ? (
+                      {/* Açılamayan kontrol testi (konu planın sınavında değil ya da
+                          tekrar paketi yok) çözülemez; öğrencinin önünde kalmasın,
+                          silinebilsin. */}
+                      {i.verifiable && !i.done && i.topicId && i.acilabilir ? (
                         <form action={konuTekrarBaslat} className="shrink-0">
                           <input type="hidden" name="topicId" value={i.topicId} />
                           <SubmitButton size="xs" pendingText="Açılıyor…" startIcon={<Play />}>
                             Çöz
                           </SubmitButton>
                         </form>
-                      ) : !i.verifiable ? (
+                      ) : !i.verifiable || (!i.done && !i.acilabilir) ? (
                         <button
                           type="button"
                           onClick={() => sil(i.id)}

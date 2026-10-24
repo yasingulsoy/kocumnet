@@ -5,7 +5,8 @@ import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { EXAM_SCOPES, QUESTION_STATUS_LABEL, examLabel, isExamScope } from "@/lib/checkup/format";
 import { konuSinavdaMi, soruSinavdaKosulu } from "@/lib/checkup/exam-scope";
-import { MIN_L1_PER_OBJECTIVE, levelSizes } from "@/lib/checkup/levels";
+import { MIN_L1_PER_OBJECTIVE } from "@/lib/checkup/levels";
+import { seviye1Kumesi } from "@/lib/checkup/pool";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import {
   ObjectiveCreateForm,
@@ -35,7 +36,7 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
   // "Özeti olmayanlar": özet kartı yazılacak kazanımlar (içerik ekibinin listesi).
   const ozetYok = sp.ozet === "yok";
 
-  const [topics, objectives, l1Counts] = await Promise.all([
+  const [topics, objectives, l1Counts, kume] = await Promise.all([
     // Bütün konular: kapsam kuralı kazanımın konusuna bakıyor (yaprak olmasa da).
     // Yeni kazanım formu yalnızca yaprakları listeler.
     db.topic.findMany({
@@ -69,6 +70,9 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
       },
       _count: { _all: true },
     }),
+    // Seviye 1'in öğrenciye gerçekten sorulacak kümesi (sorulabilen kazanımların
+    // sıradaki ilk N'i) — paket sağlığıyla aynı sorgu (lib/checkup/pool.ts).
+    sinav ? seviye1Kumesi(sinav) : null,
   ]);
 
   const l1 = new Map(l1Counts.map((r) => [r.objectiveId, r._count._all]));
@@ -108,11 +112,17 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
   const ozetsizSayisi = sinavdakiler.filter((o) => !o.summaryMarkup).length;
   const satirlar = ozetYok ? sinavdakiler.filter((o) => !o.summaryMarkup) : sinavdakiler;
 
-  // Sınav bazlı hazırlık: yayında + yeterli L1 sorusu olan kazanım sayısı.
-  const hazir = satirlar.filter((o) => o.status === "PUBLISHED" && o.l1Count >= MIN_L1_PER_OBJECTIVE).length;
-  const hedef = sinav ? levelSizes(sinav).seviye1 : 0;
-  const tekSorulu = satirlar.filter((o) => o.status === "PUBLISHED" && o.l1Count === 1).length;
-  const yayindaKazanim = satirlar.filter((o) => o.status === "PUBLISHED").length;
+  /*
+   * Sınav bazlı hazırlık: öğrenciye GERÇEKTEN sorulacak kazanımlar üzerinden
+   * (seviye1Kumesi). Eskiden ekrandaki satırlardan sayılıyordu: bütün
+   * kazanımlar (öğrenciye yalnızca ilk N soruluyor) ve "özet kartı olmayanlar"
+   * süzgeci açıkken o süzgecin kalanı. Sayaç artık süzgeçten bağımsız.
+   */
+  const hedef = kume?.gerekli ?? 0;
+  const uygun = kume?.uygun ?? 0;
+  const hazir = kume?.hazir ?? 0;
+  const tekSorulu = kume?.tekSorulu ?? 0;
+  const yayindaKazanim = sinavdakiler.filter((o) => o.status === "PUBLISHED").length;
 
   // Konuya göre grupla.
   const gruplar = new Map<string, ObjectiveRow[]>();
@@ -172,24 +182,28 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
             <div className="min-w-0 flex-1 basis-72">
               <h2 className="font-display text-base font-semibold text-gray-800">{examLabel(sinav)} seviye 1 hazırlığı</h2>
               <p className="mt-1 text-theme-sm text-gray-500">
-                {hazir >= hedef
-                  ? `Seviye 1 bu sınav için açılabilir: ${hedef} kazanımın her birinde en az ${MIN_L1_PER_OBJECTIVE} yayında temel soru var.`
-                  : `Seviye 1 ${hedef} kazanım ister; şu an ${hazir} tanesi hazır (yayında + en az ${MIN_L1_PER_OBJECTIVE} yayında L1 sorusu). Eksik kazanımları ekle ve her birine en az ${MIN_L1_PER_OBJECTIVE} temel soru bağla.`}
+                {uygun < hedef
+                  ? `Seviye 1 ${hedef} kazanım ister; şu an ${uygun} kazanımda bu sınavda sorulabilen yayında temel soru var. Seviye 1 (ve seviyeli check-up) eksik soruyla açılmaz: eksik kazanımları ekle ya da sorusuz kazanımlara temel soru bağla.`
+                  : hazir >= hedef
+                    ? `Seviye 1 bu sınav için açılabilir: sorulacak ${hedef} kazanımın her birinde en az ${MIN_L1_PER_OBJECTIVE} yayında temel soru var.`
+                    : `Seviye 1 bu sınav için açılabilir: sorulacak ${hedef} kazanımın hepsinde temel soru var, ${hazir} tanesinde teyit turu için yedek soru (en az ${MIN_L1_PER_OBJECTIVE}) var.`}
               </p>
               {tekSorulu > 0 ? (
                 <p className="mt-1 text-theme-xs text-warning-700">
-                  {tekSorulu} kazanımın tek L1 sorusu var: öğrenci o kazanımı kaçırırsa telafi turunda yeni soru gelemez.
+                  Sorulacak {tekSorulu} kazanımın tek L1 sorusu var: öğrenci o kazanımı kaçırırsa teyit turunda yeni
+                  soru gelemez (tur kısmi açılır).
                 </p>
               ) : null}
-              {yayindaKazanim > hedef ? (
+              {uygun > hedef ? (
                 <p className="mt-1 text-theme-xs text-gray-500">
-                  Bu sınavda {yayindaKazanim} yayında kazanım var; seviye 1 konu sırasına göre ilk {hedef} tanesini
-                  sorar, kalanı hiç sorulmaz.
+                  Bu sınavda {yayindaKazanim} yayında kazanım var, {uygun} tanesinde temel soru var; seviye 1 konu
+                  sırasına göre ilk {hedef} tanesini sorar, kalanı hiç sorulmaz (listede &quot;S1 dışı&quot;).
                 </p>
               ) : null}
             </div>
-            <div className="w-full sm:w-64">
-              <ProgressLine label="Hazır kazanım" value={hazir} target={hedef} />
+            <div className="w-full space-y-3 sm:w-64">
+              <ProgressLine label="Sorulabilen kazanım" value={Math.min(uygun, hedef)} target={hedef} />
+              <ProgressLine label="Yedek sorusu olan (sorulacaklardan)" value={hazir} target={hedef} />
             </div>
           </div>
         </Card>
@@ -246,6 +260,15 @@ export default async function KazanimlarPage({ searchParams }: PageProps<"/check
                             >
                               {o.l1Count} L1
                             </Badge>
+                            {kume && o.status === "PUBLISHED" && o.l1Count > 0 && !kume.sorulacak.has(o.id) ? (
+                              <Badge
+                                size="sm"
+                                color="light"
+                                title={`Seviye 1 sıradaki ilk ${hedef} kazanımı sorar; bu kazanım o sıranın dışında.`}
+                              >
+                                S1 dışı
+                              </Badge>
+                            ) : null}
                             {o.questionCount !== o.l1Count ? (
                               <Badge size="sm" color="light" className="tabular">
                                 {o.questionCount} soru

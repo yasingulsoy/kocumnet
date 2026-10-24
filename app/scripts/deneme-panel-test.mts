@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Paneldeki deneme oluşturucunun kuralları (admin/src/lib/checkup/mock-rules.ts):
  * en büyük kalan dağıtımı, "Dağılıma göre doldur", "Benzeriyle değiştir" ve

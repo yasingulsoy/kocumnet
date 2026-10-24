@@ -60,7 +60,10 @@ export async function odevKayitlari(
             startedAt: true,
             submittedAt: true,
             expiresAt: true,
-            result: { select: { netScore: true } },
+            result: { select: { netScore: true, correctCount: true, wrongCount: true } },
+            // Boş gönderilen oturum ödevi tamamlamaz (shared/odev.ts isaretli). Sonuç
+            // varsa doğru + yanlış; sonucu yazılamamış oturumda işaretli cevap sayısı.
+            _count: { select: { items: { where: { answer: { choiceId: { not: null } } } } } },
           },
         })
       : Promise.resolve([]),
@@ -94,6 +97,7 @@ export async function odevKayitlari(
       submittedAt: s.submittedAt,
       expiresAt: s.expiresAt,
       net: s.result ? Number(s.result.netScore) : null,
+      isaretli: s.result ? s.result.correctCount + s.result.wrongCount > 0 : s._count.items > 0,
     });
   }
   for (const c of cevaplar) {

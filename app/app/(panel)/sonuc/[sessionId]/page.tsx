@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,17 +22,21 @@ import { errorPattern, dominantError, compareProgress } from "@/lib/diagnosis";
 import {
   bosStratejisi,
   haftaBasi,
+  haftaBasiAni,
   hataTavsiyesi,
   karar,
   kontrolKarari,
+  oncelikliKonuyaCevir,
   oncelikSirasi,
   tekrarTavsiyesi,
   HAFTALIK_SORU,
   KONU_HAFTALIK_DAKIKA,
+  type OncelikliKonu,
+  type PlanBagi,
 } from "@/lib/coaching";
-import { examShort, hasPenalty } from "@/lib/exams";
-import type { TopicBreakdown } from "@/lib/scoring";
-import { PRODUCTS, productUrl } from "@/lib/products";
+import { examInfo, examShort } from "@/lib/exams";
+import { MIN_FOR_LEVEL, type TopicBreakdown } from "@/lib/scoring";
+import { productUrl, sinavinUrunleri } from "@/lib/products";
 import { KonuHaritasi } from "@/components/KonuHaritasi";
 import { KonuTekrarButonu } from "@/components/KonuTekrarButonu";
 import { KonuCalisButonu } from "@/components/AlistirmaButonlari";
@@ -42,6 +46,7 @@ import { trNumber } from "@/components/ui";
 import { PrintButton } from "@/components/PrintButton";
 import { DenemeKarsilastirmaKarti } from "@/components/DenemeKarsilastirma";
 import { SureAnaliziKarti } from "@/components/SureAnalizi";
+import { YenidenPuanlamaBandi } from "@/components/YenidenPuanlamaBandi";
 import { MathContent } from "@/components/MathContent";
 import { KazanimKarti } from "@/components/KazanimKarti";
 import { splitSolutionSteps, type QuestionContent } from "@/lib/question-content";
@@ -99,6 +104,10 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             focusTopicId: true,
             focusTopic: { select: { name: true } },
             mode: true,
+            levelRunId: true,
+            levelRun: { select: { status: true } },
+            stageLevel: true,
+            stageKind: true,
             package: { select: { name: true, slug: true, examScope: true, kind: true } },
           },
         },
@@ -112,18 +121,35 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   // olduğunu doğrular.
   if (!result || result.session.userId !== user.id) notFound();
 
+  /*
+   * Seviyeli aşama bir paket testi değil: kapı kararı, konu sonuçları ve
+   * sıradaki adım karnede. Koşu sürerken sonuç ekranı plan, ürün ve "10 gün
+   * sonra tekrar çöz" öneriyordu; karneye gönderiyoruz. Koşu bittiyse
+   * yalnızca cevap incelemesi (aşağıda).
+   */
+  const seviyeAsamasi = result.session.kind === "LEVEL_STAGE";
+  const kosuId = result.session.levelRunId;
+  if (seviyeAsamasi && kosuId && result.session.levelRun?.status === "IN_PROGRESS") {
+    redirect(`/seviye/${kosuId}`);
+  }
+
   const breakdown = result.topicBreakdown as unknown as TopicBreakdown;
   const toplam = result.correctCount + result.wrongCount + result.blankCount;
   const oran = toplam === 0 ? 0 : result.correctCount / toplam;
   const sinav = result.examScope ?? result.session.package.examScope;
-  const cezaVar = hasPenalty(sinav);
+  // Net kartı OTURUMUN oranına bakar: seviyeli aşama cezasız açılıyor, sınav
+  // sabitine bakınca orada "net" ve "TYT'de yanlış götürür" görünüyordu.
+  const cezaVar = Number(result.session.penaltyRatio) > 0;
   const retest = result.session.kind === "TOPIC_RETEST";
 
   const odakKonu = retest ? result.session.focusTopicId : null;
 
   // Bu haftanın sonucuysa haftalık planla bağı: plan bu sonuçtan mı çıktı?
-  const buHafta = haftaBasi(new Date());
-  const buHaftaninSonucu = !retest && result.computedAt >= buHafta;
+  // Plan anahtarı TARİH (haftaBasi); computedAt ile karşılaştırma AN
+  // (haftaBasiAni): pazartesi 00:00-03:00 arası önceki haftaya kaymasın.
+  const simdi = new Date();
+  const buHafta = haftaBasi(simdi);
+  const buHaftaninSonucu = !retest && !seviyeAsamasi && result.computedAt >= haftaBasiAni(simdi);
 
   const [onceki, konuBilgileri, eskiSonuclar, kapananIs, haftaninPlani, benzerler, alistirmaKalan, deftereGiren] =
     await Promise.all([
@@ -160,7 +186,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
     buHaftaninSonucu
       ? prisma.studyPlan.findUnique({
           where: { userId_weekStart: { userId: user.id, weekStart: buHafta } },
-          select: { sourceSessionId: true },
+          select: { sourceSessionId: true, items: { orderBy: { sortOrder: "asc" }, select: { topicId: true } } },
         })
       : Promise.resolve(null),
     // "Benzerini çöz": her yanlış/boş sorunun havuzda benzeri var mı. Yoksa
@@ -206,7 +232,29 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
 
   const hata = review ? hataTavsiyesi(dominantError(errorPattern(review))) : null;
 
-  const oncelikler = oncelikSirasi(breakdown.topics, agirliklar);
+  /*
+   * Plan bu testten çıktıysa liste PLANIN konuları: plan geçen haftanın
+   * oranıyla tek konuya kısalmış ya da öğrenci bir konuyu plandan çıkarmış
+   * olabilir; "bu hafta sadece bunlar" deyip plandan farklı liste göstermek
+   * olmaz. Değilse bu testin kendi öncelik sırası.
+   */
+  const planBagi: PlanBagi = !haftaninPlani
+    ? "YOK"
+    : haftaninPlani.sourceSessionId === sessionId
+      ? "BU_TEST"
+      : "BASKA_TEST";
+  const planKonulari: OncelikliKonu[] = [];
+  if (planBagi === "BU_TEST") {
+    for (const { topicId } of haftaninPlani!.items) {
+      if (!topicId || planKonulari.some((k) => k.topicId === topicId)) continue;
+      const satir = breakdown.topics.find((t) => t.topicId === topicId);
+      if (satir) planKonulari.push(oncelikliKonuyaCevir(satir, agirliklar));
+    }
+  }
+  // Öğrenci planı bu testten çıkan işlerin hepsini sildiyse "sadece bunlar"
+  // diyecek liste kalmadı: bu testin sırası, bağsız dille.
+  const gorunenBag: PlanBagi = planBagi === "BU_TEST" && planKonulari.length === 0 ? "YOK" : planBagi;
+  const oncelikler = gorunenBag === "BU_TEST" ? planKonulari : oncelikSirasi(breakdown.topics, agirliklar);
   const guclular = breakdown.topics
     .filter((t) => t.level === "STRONG")
     .sort((a, b) => b.ratio - a.ratio);
@@ -215,22 +263,25 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const odakSatiri = retest ? breakdown.topics.find((t) => t.topicId === odakKonu) : undefined;
   const sonuc = odakSatiri
     ? kontrolKarari(odakSatiri, oncekiOran)
-    : karar(oran, oncelikler, guclular, result.blankCount, toplam);
-  const bosNotu = bosStratejisi(
-    result.blankCount,
-    toplam,
-    Number(result.session.penaltyRatio),
-    examShort(sinav)
-  );
+    : karar(oran, oncelikler, guclular, result.blankCount, toplam, gorunenBag);
+  /*
+   * Boş bırakma tavsiyesi GERÇEK sınavın taktiği: oran sınav sabitinden ve
+   * yalnızca paket testinde. Seviyeli aşamada oturum cezasız açılıyor;
+   * oturumun oranına bakınca "TYT'de yanlış doğruyu götürmüyor" diyordu.
+   */
+  const sinavBilgisi = examInfo(sinav);
+  const bosNotu =
+    result.session.kind === "PACKAGE" && sinavBilgisi
+      ? bosStratejisi(result.blankCount, toplam, sinavBilgisi.penaltyRatio, sinavBilgisi.short)
+      : null;
   const tekrarNotu = tekrarTavsiyesi(
     result.session.relaxedExposureCount,
     result.session.package.name
   );
 
   const olculemeyen = breakdown.topics.filter((t) => t.level === null).length;
-  const urunler = result.recommendedProductIds
-    .map((id) => PRODUCTS[id])
-    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+  // Öneriler testin sınavına göre süzülür (ALES adayına TYT kitabı yok).
+  const urunler = sinavinUrunleri(result.recommendedProductIds, sinav);
 
   const baslik = retest
     ? `${result.session.focusTopic?.name ?? "Konu"} kontrol testi`
@@ -287,6 +338,93 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
   const ilkKonular = breakdown.topics.slice(0, 3);
   const kalanKonular = breakdown.topics.slice(3);
 
+  /* ── Cevap incelemesi (seviyeli aşamada da gösterilen tek bölüm) ── */
+  const incelemeKarti = inceleme ? (
+    <ComponentCard
+      title="Cevaplarını incele"
+      desc="Her sorunun doğrusu, senin işaretin ve varsa adım adım çözümü."
+      actions={
+        <Badge color="success" startIcon={<CircleCheck aria-hidden />}>
+          <span className="tabular">{result.correctCount}</span> doğru
+        </Badge>
+      }
+      flush
+    >
+      {deftereGiren > 0 ? (
+        <div className="mx-5 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-brand-25 px-3.5 py-2.5 sm:mx-6 sm:mt-5 print:hidden">
+          <NotebookPen className="size-4 shrink-0 text-brand-500" aria-hidden />
+          <p className="min-w-0 flex-1 text-theme-sm text-gray-700">
+            Bu testten <span className="tabular font-semibold text-gray-800">{deftereGiren}</span> soru
+            yanlış defterinde: aralıklarla benzerleriyle geri gelir.
+          </p>
+          <Link
+            href="/defter"
+            className="inline-flex min-h-9 items-center gap-1 text-theme-sm font-medium text-brand-500 transition hover:text-brand-600"
+          >
+            Deftere git <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden />
+          </Link>
+        </div>
+      ) : null}
+      <AnswerReview items={inceleme} sessionId={sessionId} alistirmaAcik={alistirmaKalan > 0} />
+    </ComponentCard>
+  ) : null;
+
+  /*
+   * Bitmiş seviyeli koşunun aşaması: yalnızca cevap incelemesi. Plan, ürün
+   * önerisi, "tekrar çöz" ve paket kararı burada yanlış konuşuyordu (aşama
+   * bir paket testi değil); seviye kararı karnede.
+   */
+  if (seviyeAsamasi) {
+    const asamaAdi = `Seviye ${result.session.stageLevel ?? ""}${
+      result.session.stageKind === "REMEDIAL" ? " telafi turu" : ""
+    }`.trim();
+    return (
+      <div className="mx-auto w-full max-w-5xl animate-fade">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <Link
+            href={kosuId ? `/seviye/${kosuId}` : "/seviyeli"}
+            className="inline-flex min-h-9 items-center gap-1.5 text-theme-sm font-medium text-gray-500 transition hover:text-gray-800 print:hidden"
+          >
+            <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> Seviye karnesi
+          </Link>
+          <PrintButton />
+        </div>
+        <PageBreadcrumb
+          pageTitle={`${asamaAdi} · cevapların`}
+          badge={
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Badge size="sm">{examShort(sinav)}</Badge>
+              <Badge size="sm" color="light">
+                Seviyeli check-up
+              </Badge>
+            </span>
+          }
+        />
+        <div className="space-y-4 md:space-y-6">
+          {/* Anahtar düzeltildiyse burada da söylensin: inceleme yeni anahtarı gösteriyor. */}
+          <YenidenPuanlamaBandi sessionId={sessionId} userId={user.id} />
+          <Card className="flex flex-wrap items-center gap-3 p-4 sm:gap-4 sm:p-5 print:hidden">
+            <p className="min-w-0 flex-1 text-theme-sm leading-relaxed text-gray-500">
+              Bu sayfa seviyeli check-up&apos;ın bir aşamasındaki cevaplarını gösterir. Seviye kararı ve konu
+              sonuçların karnede.
+            </p>
+            {kosuId ? (
+              <ButtonLink
+                href={`/seviye/${kosuId}`}
+                variant="outline"
+                endIcon={<ArrowRight className="rtl:rotate-180" />}
+                className="max-sm:w-full"
+              >
+                Karneye dön
+              </ButtonLink>
+            ) : null}
+          </Card>
+          {incelemeKarti}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl animate-fade">
       {/* Geri bağlantısı ve yazdırma tek satırda: telefonda iz + başlık +
@@ -321,6 +459,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
       />
 
       <div className="space-y-4 md:space-y-6">
+        <YenidenPuanlamaBandi sessionId={sessionId} userId={user.id} />
         {/* ── Özet: telefonda yatay, gösterge küçük ───────── */}
         <Card className="flex items-center gap-4 p-4 sm:gap-6 sm:p-6">
           <div className="w-28 shrink-0 sm:hidden">
@@ -418,9 +557,11 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         {/* ── Şimdi ne çalışmalısın (öncelik sırası) ──────── */}
         {/* Kontrol testinde yok: tek konuluk sonuçtan "bu hafta sadece bunlar"
             demek, haftanın mevcut planıyla çelişiyordu. */}
+        {/* "Sadece bunlar" ve "bakma" yalnızca plan BU testten çıktıysa:
+            haftanın ikinci testi başka konular söyleyip planla çelişiyordu. */}
         {oncelikler.length > 0 && !retest ? (
           <ComponentCard
-            title="Bu hafta sadece bunlar"
+            title={gorunenBag === "BU_TEST" ? "Bu hafta sadece bunlar" : "Bu testten çıkan öncelikler"}
             desc={`Sırayla. Her konu yaklaşık ${trNumber(
               Math.round(KONU_HAFTALIK_DAKIKA / 30) / 2,
               1
@@ -430,8 +571,9 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           >
             <ol className="divide-y divide-gray-100">
               {oncelikler.map((k, i) => {
-                const urunId = konuBilgileri.find((t) => t.id === k.topicId)?.recommendedProductIds[0];
-                const urun = urunId ? PRODUCTS[urunId] : null;
+                const urun =
+                  sinavinUrunleri(konuBilgileri.find((t) => t.id === k.topicId)?.recommendedProductIds ?? [], sinav)[0] ??
+                  null;
                 return (
                   <li key={k.topicId} className="flex items-start gap-3 px-5 py-4 sm:px-6">
                     <span className="tabular flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-theme-sm font-semibold text-white">
@@ -478,16 +620,15 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             </ol>
             {/* Eskiden "bunları bitirdiğinde plan kendini güncelleyecek" yazıyordu;
                 plan haftada bir, o haftanın ilk check-up'ından çıkıyor. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-3 sm:px-6">
-              <p className="min-w-0 flex-1 text-theme-sm text-gray-500">
-                Diğer konulara bu hafta bakma.
-                {haftaninPlani
-                  ? haftaninPlani.sourceSessionId === sessionId
-                    ? " Bu konular haftalık planına eklendi."
-                    : " Bu haftanın planı önceki check-up'ından; yeni plan gelecek haftanın ilk check-up'ıyla çıkar."
-                  : ""}
-              </p>
-              {haftaninPlani ? (
+            {haftaninPlani ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-3 sm:px-6">
+                <p className="min-w-0 flex-1 text-theme-sm text-gray-500">
+                  {gorunenBag === "BU_TEST"
+                    ? "Diğer konulara bu hafta bakma. Bu konular haftalık planına eklendi."
+                    : gorunenBag === "BASKA_TEST"
+                      ? "Bu haftanın planı önceki check-up'ından; yeni plan gelecek haftanın ilk check-up'ıyla çıkar."
+                      : "Bu haftanın planı panonda."}
+                </p>
                 <ButtonLink
                   href="/panel"
                   variant="soft"
@@ -497,8 +638,8 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
                 >
                   Planı gör
                 </ButtonLink>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </ComponentCard>
         ) : null}
 
@@ -548,7 +689,11 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         {/* Liste yazdırılan biçim: ilk üç konu açık, gerisi katlı (telefonda kısa kalsın). */}
         <ComponentCard
           title="Konu haritası"
-          desc={olculemeyen > 0 ? `${olculemeyen} konuda seviye verilmedi: 3'ten az soru soruldu.` : undefined}
+          desc={
+            olculemeyen > 0
+              ? `${olculemeyen} konuda seviye verilmedi: seviye için en az ${MIN_FOR_LEVEL} soru gerekir.`
+              : undefined
+          }
           flush
         >
           <div className="p-5 sm:p-6">
@@ -636,35 +781,7 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
         ) : null}
 
         {/* ── Cevap incelemesi ────────────────────────────── */}
-        {inceleme ? (
-          <ComponentCard
-            title="Cevaplarını incele"
-            desc="Her sorunun doğrusu, senin işaretin ve varsa adım adım çözümü."
-            actions={
-              <Badge color="success" startIcon={<CircleCheck aria-hidden />}>
-                <span className="tabular">{result.correctCount}</span> doğru
-              </Badge>
-            }
-            flush
-          >
-            {deftereGiren > 0 ? (
-              <div className="mx-5 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-brand-25 px-3.5 py-2.5 sm:mx-6 sm:mt-5 print:hidden">
-                <NotebookPen className="size-4 shrink-0 text-brand-500" aria-hidden />
-                <p className="min-w-0 flex-1 text-theme-sm text-gray-700">
-                  Bu testten <span className="tabular font-semibold text-gray-800">{deftereGiren}</span> soru
-                  yanlış defterinde: aralıklarla benzerleriyle geri gelir.
-                </p>
-                <Link
-                  href="/defter"
-                  className="inline-flex min-h-9 items-center gap-1 text-theme-sm font-medium text-brand-500 transition hover:text-brand-600"
-                >
-                  Deftere git <ArrowRight className="size-3.5 rtl:rotate-180" aria-hidden />
-                </Link>
-              </div>
-            ) : null}
-            <AnswerReview items={inceleme} sessionId={sessionId} alistirmaAcik={alistirmaKalan > 0} />
-          </ComponentCard>
-        ) : null}
+        {incelemeKarti}
       </div>
     </div>
   );

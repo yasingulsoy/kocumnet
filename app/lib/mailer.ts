@@ -1,4 +1,8 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { appUrl, SUPPORT_EMAIL } from "@/lib/site";
+
+// Eski çağıranlar (digest, veli, parola sıfırlama) appUrl'i buradan alıyor.
+export { appUrl };
 
 /**
  * E-posta gönderimi — check-up uygulaması.
@@ -23,10 +27,6 @@ const URETIM = process.env.NODE_ENV === "production";
 
 if (LOG_TASIYICI && URETIM) {
   throw new Error("SMTP_URL=log:// yalnızca geliştirmede kullanılabilir; üretimde gerçek bir SMTP adresi ver.");
-}
-
-export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3100").replace(/\/$/, "");
 }
 
 export function isMailConfigured(): boolean {
@@ -184,8 +184,10 @@ export function sendWelcomeMail(p: { to: string; name: string }) {
   const { html, text } = renderMail({
     baslik: `Hoş geldin ${ilkAd(p.name)}, ilk check-up'ın seni bekliyor`,
     metin: [
-      "Hesabın açıldı. Check-up, hangi konuda güçlü hangisinde zayıf olduğunu 20 dakikada ölçer; sonunda rapor değil, bu hafta ne çalışacağın çıkar.",
-      "İlk adım: Tanışma Check-up'ı — 12 soru, 15 dakika, ücretsiz.",
+      // Sabit sayı yok: paketlerin soru sayısı ve süresi panelden değişiyor,
+      // postadaki "12 soru, 15 dakika" gerçek paketle uyuşmuyordu.
+      "Hesabın açıldı. Check-up, hangi konuda güçlü hangisinde zayıf olduğunu kısa bir testle ölçer; sonunda rapor değil, bu hafta ne çalışacağın çıkar.",
+      "İlk adım: Tanışma Check-up'ı: kısa bir başlangıç ölçümü, ücretsiz.",
     ],
     eylem: { etiket: "İlk check-up'ı başlat", url: `${appUrl()}/paketler` },
     sonMetin: ["Sonucun ve haftalık planın panelinde durur; istediğin zaman geri dönebilirsin."],
@@ -212,7 +214,7 @@ export function sendPasswordChangedMail(p: { to: string; name: string }) {
     baslik: "Parolan değiştirildi",
     metin: [`Merhaba ${ilkAd(p.name)},`, `Check-up hesabının parolası az önce değiştirildi (${zaman}). Diğer cihazlardaki oturumların kapatıldı.`],
     eylem: { etiket: "Giriş yap", url: `${appUrl()}/giris` },
-    dipnot: `Bu değişikliği sen yapmadıysan hemen "Parolamı unuttum" ile yeni parola belirle ve bize yaz: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "info@kocum.net"}`,
+    dipnot: `Bu değişikliği sen yapmadıysan hemen "Parolamı unuttum" ile yeni parola belirle ve bize yaz: ${SUPPORT_EMAIL}`,
   });
   return sendMail({ to: p.to, subject: "Parolan değiştirildi · Koçum.Net Check-up", text, html });
 }

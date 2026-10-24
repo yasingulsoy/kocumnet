@@ -13,6 +13,8 @@
  *  - Paket ödevi: ödev açıldıktan (startsAt) sonra o paketin puanlanmış
  *    (SUBMITTED ya da EXPIRED) bir oturumunu bitirmek. Kâğıt oturumu da
  *    sayılır: cevaplar optik formdan işlenince oturum aynı biçimde biter.
+ *    Hiç işaret konmadan biten oturum SAYILMAZ ("boş gönderildi"): boş
+ *    gönderip cevaplara bakmak ödevi yapmak değil.
  *  - Konu ödevi: startsAt'tan sonra o konunun alıştırma oturumlarında
  *    (CheckupSession.focusTopicId) toplam en az questionCount soru cevaplamak.
  * Bittiği an dueAt'tan sonraysa "geç tamamlandı".
@@ -71,6 +73,13 @@ export interface OdevOturumu {
   expiresAt: Date;
   /** Sonuç satırının neti; sonuç yazılamamışsa (EXPIRED) null. */
   net: number | null;
+  /**
+   * En az bir soruya şık işaretlendi mi (doğru + yanlış > 0; uygulamada
+   * lib/insights.ts isaretsiz). false ise oturum ödevi TAMAMLAMAZ. Sorgular
+   * sonuç satırından okur; sonucu yazılamamış EXPIRED oturumda işaretli
+   * cevapları sayar. Verilmezse işaretli sayılır (eski çağıranlar).
+   */
+  isaretli?: boolean;
 }
 
 /** Bir alıştırma cevabı: hangi konunun alıştırmasında, ne zaman. */
@@ -92,6 +101,8 @@ export interface OdevIlerlemesi {
   net: number | null;
   /** Ödevi tamamlayan oturum (sonuç ekranına bağlantı); konu ödevinde null. */
   oturumId: string | null;
+  /** Paket ödevi bitmedi ama ödev açıldıktan sonra boş gönderilmiş (işaretsiz) bir oturumu var. */
+  bosGonderildi: boolean;
 }
 
 export function tamamlandiMi(durum: OdevDurumu): boolean {
@@ -135,7 +146,7 @@ export function odevIlerlemesi(
     const cozulen = cevaplar.length;
     if (cozulen >= hedef) {
       const an = cevaplar[hedef - 1].answeredAt;
-      return { durum: sonuc(an), tamamlanmaAni: an, cozulen, hedef, net: null, oturumId: null };
+      return { durum: sonuc(an), tamamlanmaAni: an, cozulen, hedef, net: null, oturumId: null, bosGonderildi: false };
     }
     return {
       durum: cozulen > 0 ? "BASLADI" : "BASLAMADI",
@@ -144,6 +155,7 @@ export function odevIlerlemesi(
       hedef,
       net: null,
       oturumId: null,
+      bosGonderildi: false,
     };
   }
 
@@ -153,14 +165,32 @@ export function odevIlerlemesi(
     .map((o) => ({ o, an: oturumBitisi(o) }))
     .filter((x): x is { o: OdevOturumu; an: Date } => x.an !== null && x.an.getTime() >= bas)
     .sort((a, b) => a.an.getTime() - b.an.getTime());
+  // İşaretsiz (boş gönderilen) oturum ödevi tamamlamaz; "başladı" sayılır.
+  const sayilanlar = bitenler.filter((x) => x.o.isaretli !== false);
 
-  if (bitenler.length > 0) {
-    const ilk = bitenler[0];
-    return { durum: sonuc(ilk.an), tamamlanmaAni: ilk.an, cozulen: 1, hedef: 1, net: ilk.o.net, oturumId: ilk.o.id };
+  if (sayilanlar.length > 0) {
+    const ilk = sayilanlar[0];
+    return {
+      durum: sonuc(ilk.an),
+      tamamlanmaAni: ilk.an,
+      cozulen: 1,
+      hedef: 1,
+      net: ilk.o.net,
+      oturumId: ilk.o.id,
+      bosGonderildi: false,
+    };
   }
   // Ödev açıldıktan sonra başlanmış (bırakılmış olsa da) ya da şu an süren oturum.
   const basladi = ilgili.some((o) => o.status === "IN_PROGRESS" || o.startedAt.getTime() >= bas);
-  return { durum: basladi ? "BASLADI" : "BASLAMADI", tamamlanmaAni: null, cozulen: 0, hedef: 1, net: null, oturumId: null };
+  return {
+    durum: basladi || bitenler.length > 0 ? "BASLADI" : "BASLAMADI",
+    tamamlanmaAni: null,
+    cozulen: 0,
+    hedef: 1,
+    net: null,
+    oturumId: null,
+    bosGonderildi: bitenler.length > 0,
+  };
 }
 
 /**

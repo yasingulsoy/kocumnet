@@ -26,6 +26,10 @@ import {
  *   eski anahtara göredir — karıştırılırsa düzeltilen soru "hâlâ hatalı"
  *   görünür.
  * - Hiç dokunulmamış ya da işareti kaldırılmış soru boş sayılır.
+ * - Süre medyanı ("yavaş" bulgusu) YALNIZCA ekranda çözülmüş (ONLINE)
+ *   oturumlardan: kâğıtta soru başına süre yok, timeSpentMs 0 kalıyor ve
+ *   medyanı aşağı çekiyordu. Doğru oranı, boş oranı, şık dağılımı ve ayırt
+ *   edicilik kâğıdı da sayar: optik formdaki işaret gerçek bir cevap.
  *
  * Süzgeçler (liste ekranı, CSV): sınav = cevabın geldiği testin paketinin
  * sınavı (aynı soru TYT ve KPSS testlerinde farklı davranabilir); dönem =
@@ -104,7 +108,8 @@ export async function loadItemAnalysis(kapsam: AnalizKapsami = {}): Promise<Item
   const rows = await db.$queryRaw<RawItem[]>`
     WITH items AS (
       SELECT si."sessionId" AS sid, si."questionId" AS qid, si."questionVersion" AS qv,
-             a."choiceId" AS cid, a."timeSpentMs" AS ms, COALESCE(a."isCorrect", false) AS ok
+             a."choiceId" AS cid, a."timeSpentMs" AS ms, COALESCE(a."isCorrect", false) AS ok,
+             (s.mode = 'ONLINE') AS ekran
       FROM "SessionItem" si
       JOIN "CheckupSession" s ON s.id = si."sessionId" AND s.status = 'SUBMITTED' AND s.kind <> 'PRACTICE'
       ${sinavSuzgeci}
@@ -117,7 +122,7 @@ export async function loadItemAnalysis(kapsam: AnalizKapsami = {}): Promise<Item
       GROUP BY sid
     ),
     resp AS (
-      SELECT i.qid, i.cid, i.ms, i.ok,
+      SELECT i.qid, i.cid, i.ms, i.ok, i.ekran,
              CASE WHEN t.n > 1 THEN (t.c - i.ok::int)::float8 / (t.n - 1) END AS rest
       FROM items i
       JOIN totals t ON t.sid = i.sid
@@ -128,7 +133,8 @@ export async function loadItemAnalysis(kapsam: AnalizKapsami = {}): Promise<Item
              count(*)::int                                    AS n,
              count(*) FILTER (WHERE ok)::int                  AS correct,
              count(*) FILTER (WHERE cid IS NULL)::int         AS blank,
-             percentile_cont(0.5) WITHIN GROUP (ORDER BY ms) FILTER (WHERE cid IS NOT NULL) AS median_ms,
+             -- Süre yalnızca ekranda: kâğıtta soru başına süre yok (ms = 0).
+             percentile_cont(0.5) WITHIN GROUP (ORDER BY ms) FILTER (WHERE cid IS NOT NULL AND ekran) AS median_ms,
              corr(ok::int::float8, rest)                      AS r
       FROM resp
       GROUP BY qid
@@ -209,6 +215,8 @@ interface RawResponse {
   choiceId: string | null;
   ok: boolean;
   ms: number | null;
+  /** Ekranda (ONLINE) çözüldü: süre yalnızca bunlardan (kâğıtta soru başına süre yok). */
+  ekran: boolean;
   rest: number | null;
 }
 
@@ -238,11 +246,12 @@ export async function loadQuestionAnalysis(q: {
         GROUP BY si."sessionId"
       )
       SELECT si."sessionId" AS sid, a."choiceId" AS "choiceId", COALESCE(a."isCorrect", false) AS ok,
-             a."timeSpentMs" AS ms,
+             a."timeSpentMs" AS ms, (s.mode = 'ONLINE') AS ekran,
              CASE WHEN t.n > 1
                   THEN (t.c - COALESCE(a."isCorrect", false)::int)::float8 / (t.n - 1) END AS rest
       FROM "SessionItem" si
       JOIN totals t ON t.sid = si."sessionId"
+      JOIN "CheckupSession" s ON s.id = si."sessionId"
       LEFT JOIN "Answer" a ON a."sessionItemId" = si.id
       WHERE si."questionId" = ${q.id} AND si."questionVersion" = ${q.version}
     `,
@@ -261,7 +270,8 @@ export async function loadQuestionAnalysis(q: {
     n: rows.length,
     correct: rows.filter((r) => r.ok).length,
     blank: rows.filter((r) => !r.choiceId).length,
-    medianMs: medyan(rows.filter((r) => r.choiceId && r.ms !== null).map((r) => Number(r.ms))),
+    // Süre yalnızca ekranda çözülenlerden (yukarıdaki toplu sorguyla aynı kural).
+    medianMs: medyan(rows.filter((r) => r.choiceId && r.ekran && r.ms !== null).map((r) => Number(r.ms))),
     r: pearson(
       puanli.map((r) => (r.ok ? 1 : 0)),
       puanli.map((r) => r.rest)

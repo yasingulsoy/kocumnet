@@ -17,6 +17,8 @@ import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import {
   containsStepBreak,
   deriveQuestionFields,
+  extractText,
+  fingerprint,
   hintsSchema,
   parseVideoUrl,
   safeParseQuestionContent,
@@ -26,7 +28,15 @@ import {
   type ChoiceDraft,
   type QuestionContent,
 } from "@/lib/checkup/shared/question-content";
-import { IPUCU_SINIRI, VIDEO_ADRES_SINIRI } from "@/lib/checkup/content-limits";
+import {
+  HEDEF_SURE_SINIRI,
+  IPUCU_SINIRI,
+  KAYNAK_SINIRI,
+  SORU_METNI_EN_AZ,
+  VIDEO_ADRES_SINIRI,
+} from "@/lib/checkup/content-limits";
+import { KILITLI_DENEME_SORUSU, kilitliDenemeler } from "@/lib/checkup/mock";
+import { KILITLI_DENEME_KONU_MESAJI, KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
 
 export interface QuestionFormState {
   error?: string;
@@ -34,18 +44,22 @@ export interface QuestionFormState {
   fields?: Record<string, string>;
 }
 
+/*
+ * Uzunluk sınırları toplu içe aktarmayla ORTAK (shared/content-limits.ts):
+ * içe aktarma bu formun kaydetmeyeceği soruyu geçirmesin.
+ */
 const schema = z.object({
   topicId: z.string().min(1, "Konu seçin."),
-  stem: z.string().trim().min(5, "Soru metni çok kısa."),
+  stem: z.string().trim().min(SORU_METNI_EN_AZ, "Soru metni çok kısa."),
   solution: z.string().trim().optional(),
   difficulty: z.coerce.number().int().min(1).max(5),
   targetTimeSeconds: z.coerce
     .number({ message: "Hedef süre bir sayı olmalı." })
     .int("Hedef süre tam sayı olmalı.")
-    .min(10, "Hedef süre en az 10 saniye.")
-    .max(600, "Hedef süre en fazla 600 saniye."),
+    .min(HEDEF_SURE_SINIRI.min, `Hedef süre en az ${HEDEF_SURE_SINIRI.min} saniye.`)
+    .max(HEDEF_SURE_SINIRI.max, `Hedef süre en fazla ${HEDEF_SURE_SINIRI.max} saniye.`),
   status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]),
-  sourceRef: z.string().trim().max(200, "Kaynak en fazla 200 karakter.").optional(),
+  sourceRef: z.string().trim().max(KAYNAK_SINIRI, `Kaynak en fazla ${KAYNAK_SINIRI} karakter.`).optional(),
   /** Seviyeli check-up: boş = seviyesiz (yalnızca klasik paketler). */
   level: z.enum(["", "L1_TEMEL", "L2_ORTA", "L3_ANALIZ"]).default(""),
   objectiveId: z.string().default(""),
@@ -249,6 +263,18 @@ function normalizeErrorType(value: string | undefined) {
   return (ERROR_TYPES as readonly string[]).includes(value) ? (value as never) : null;
 }
 
+/**
+ * Şıkkın DEĞERİ: validateChoices'ın "aynı değerli şık" ölçüsü (görünen metnin
+ * parmak izi; boşluk ve büyük/küçük harf yutulur, sayı ve LaTeX yutulmaz) ve
+ * içindeki görsel kimlikleri. Çözümlenemeyen içerik ham hâliyle karşılaştırılır.
+ */
+function sikDegeri(icerik: unknown): string {
+  const p = safeParseQuestionContent(icerik);
+  if (!p.success) return "ham:" + JSON.stringify(icerik ?? null);
+  const gorseller = [...JSON.stringify(p.data).matchAll(/"mediaId":"([^"]+)"/g)].map((m) => m[1]);
+  return fingerprint(extractText(p.data)) + "|" + gorseller.join(",");
+}
+
 function isDuplicate(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
@@ -420,22 +446,56 @@ export async function updateQuestionAction(
   const seviyeHatasi = await levelFieldsError(parsed.data);
   if (seviyeHatasi) return { fields: seviyeHatasi };
 
-  const mevcut = await db.question.findUnique({
-    where: { id },
-    select: {
-      version: true,
-      choices: {
-        orderBy: { sortOrder: "asc" },
-        select: { id: true, label: true, isCorrect: true, _count: { select: { answers: true } } },
+  const [mevcut, kilit] = await Promise.all([
+    db.question.findUnique({
+      where: { id },
+      select: {
+        version: true,
+        status: true,
+        topicId: true,
+        examScopes: true,
+        choices: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, label: true, isCorrect: true, content: true, _count: { select: { answers: true } } },
+        },
       },
-    },
-  });
+    }),
+    kilitliDenemeler([id]),
+  ]);
   if (!mevcut) return { error: "Soru bulunamadı." };
 
-  // Cevap anahtarı değiştiyse sürüm artar: bu soruyu çözmüş öğrencilerin
-  // sonucu SessionItem.questionVersion üzerinden ayırt edilebilsin (PLAN §4).
+  /*
+   * Başlatılmış ve yayındaki bir denemenin sorusu (mock-rules.ts
+   * KILITLI_DENEME_MESAJI): yayından alınamaz (deneme kalıcı kapanırdı), konusu
+   * ve hedef sınavı değişmez. İçerik ve cevap anahtarı düzeltilebilir: çıkış
+   * yolu o.
+   */
+  if (kilit.has(id)) {
+    const kilitHatalari: Record<string, string> = {};
+    if (mevcut.status === "PUBLISHED" && parsed.data.status !== "PUBLISHED") kilitHatalari.status = KILITLI_DENEME_MESAJI;
+    if (mevcut.topicId !== parsed.data.topicId) kilitHatalari.topicId = KILITLI_DENEME_KONU_MESAJI;
+    if ([...mevcut.examScopes].sort().join(",") !== [...parsed.data.examScopes].sort().join(",")) {
+      kilitHatalari.examScopes = KILITLI_DENEME_KONU_MESAJI;
+    }
+    if (Object.keys(kilitHatalari).length) return { fields: kilitHatalari };
+  }
+
+  /*
+   * Cevap anahtarı değiştiyse sürüm artar (SessionItem.questionVersion, PLAN §4):
+   *  · doğru şıkkın YERİ değişti: öğrenci uygulamasının bakım işi (cron)
+   *    sürümü eski kalan bitmiş cevapları yeni anahtara göre yeniden puanlar;
+   *  · doğru şıkkın İÇERİĞİ (değeri) değişti: yeri aynı olduğu için eski
+   *    cevaplar yeniden puanlanamaz, ama madde analizi yeni sürümden başlar
+   *    (eski cevaplar başka bir soruya verilmişti).
+   * Değer = validateChoices'ın "aynı değer" ölçüsü (metnin parmak izi) ve
+   * görseller: biçim ya da boşluk düzeltmesi sürüm artırmaz.
+   */
   const eskiDogruIndex = mevcut.choices.findIndex((c) => c.isCorrect);
-  const anahtarDegisti = eskiDogruIndex !== parsed.data.correctIndex;
+  const yeniDogru = built.data.drafts[parsed.data.correctIndex];
+  const anahtarDegisti =
+    eskiDogruIndex !== parsed.data.correctIndex ||
+    !yeniDogru ||
+    sikDegeri(mevcut.choices[eskiDogruIndex]?.content) !== sikDegeri(yeniDogru.content);
 
   /*
    * Şıklar YERİNDE güncelleniyor, silinip yeniden kurulmuyor.
@@ -444,8 +504,9 @@ export async function updateQuestionAction(
    * onDelete: Restrict). Eski yöntem (hepsini sil, yeniden oluştur) bir kez
    * bile cevaplanmış soruda veritabanı hatasıyla patlıyordu — yani yayındaki
    * hiçbir soru düzeltilemiyordu. Konumla eşleştirmek (A→A, B→B) cevapları
-   * yerinde bırakıyor; cevabın doğru/yanlış bilgisi cevap anında
-   * Answer.isCorrect'e yazıldığı için geçmiş sonuçlar değişmiyor.
+   * yerinde bırakıyor. Cevabın doğru/yanlış bilgisi cevap anında
+   * Answer.isCorrect'e yazılıyor; anahtar değişince (sürüm artar, yukarıda)
+   * öğrenci uygulamasının bakım işi bitmiş cevapları yeniden puanlıyor.
    */
   const yeniSiklar = choiceRows(built.data.drafts, built.data.errorTypes);
   const korunan = mevcut.choices.slice(0, yeniSiklar.length);
@@ -493,7 +554,8 @@ export async function updateQuestionAction(
           fingerprint: built.data.fingerprint,
           solution: built.data.solution ?? Prisma.DbNull,
           // İpucu, video ve çözüm sürümü ARTIRMAZ: sürüm yalnızca cevap anahtarı
-          // değişince artar (aşağıda), öğrencinin eski sonucu onlara bağlı değil.
+          // (doğru şıkkın yeri ya da değeri) değişince artar (aşağıda), öğrencinin
+          // eski sonucu onlara bağlı değil.
           hints: built.data.hints ?? Prisma.DbNull,
           videoUrl: built.data.videoUrl,
           difficulty: parsed.data.difficulty,
@@ -546,11 +608,16 @@ export async function setQuestionStatusAction(
     return { ok: false, error: "Geçersiz istek." };
   }
 
+  // Kilitli denemenin sorusu yayından alınamaz; koşul güncellemenin İÇİNDE
+  // (denetim ile yazma arasında deneme başlatılsa da düşmesin).
   const sonuc = await db.question.updateMany({
-    where: { id },
+    where: { id, ...(status !== "PUBLISHED" ? { NOT: KILITLI_DENEME_SORUSU } : {}) },
     data: { status, updatedByStaff: staffStamp(auth.staff) },
   });
-  if (sonuc.count === 0) return { ok: false, error: "Soru bulunamadı." };
+  if (sonuc.count === 0) {
+    const kilitli = status !== "PUBLISHED" && (await db.question.count({ where: { id, ...KILITLI_DENEME_SORUSU } })) > 0;
+    return { ok: false, error: kilitli ? KILITLI_DENEME_MESAJI : "Soru bulunamadı." };
+  }
 
   revalidateQuestionScreens();
   return { ok: true };
@@ -568,7 +635,7 @@ const TOPLU_SINIR = 100;
 export async function setQuestionsStatusAction(
   ids: unknown,
   status: string
-): Promise<{ ok: boolean; count?: number; error?: string }> {
+): Promise<{ ok: boolean; count?: number; kilitli?: number; error?: string }> {
   const auth = await staffForAction(CONTENT_ROLES);
   if (!auth.ok) return { ok: false, error: auth.error };
   if (
@@ -581,13 +648,22 @@ export async function setQuestionsStatusAction(
     return { ok: false, error: "Geçersiz istek." };
   }
 
+  const idler = [...new Set(ids as string[])];
+  /*
+   * Yayından alırken kilitli denemenin soruları ATLANIR (ötekiler değişir) ve
+   * kaç tane olduğu döner: istemci önceden uyarıyor, ama denetim ile yazma
+   * arasında deneme başlatılmış olabilir. Koşul güncellemenin içinde.
+   */
+  const kaldiriliyor = status !== "PUBLISHED";
   const sonuc = await db.question.updateMany({
-    where: { id: { in: [...new Set(ids as string[])] }, status: { not: status } },
+    where: { id: { in: idler }, status: { not: status }, ...(kaldiriliyor ? { NOT: KILITLI_DENEME_SORUSU } : {}) },
     data: { status, updatedByStaff: staffStamp(auth.staff) },
   });
+  // Atlananlar yayında kaldığı için güncellemeden sonra sayılabilir.
+  const kilitli = kaldiriliyor ? await db.question.count({ where: { id: { in: idler }, ...KILITLI_DENEME_SORUSU } }) : 0;
 
   revalidateQuestionScreens();
-  return { ok: true, count: sonuc.count };
+  return { ok: true, count: sonuc.count, kilitli };
 }
 
 /** Önerilen zorluğu bir istekte en fazla bu kadar soruya uygula. */

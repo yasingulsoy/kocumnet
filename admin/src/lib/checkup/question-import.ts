@@ -3,7 +3,7 @@ import katex from "katex";
 import { db } from "./db";
 import type { ErrorType } from "./generated/client";
 import { QUESTION_LEVEL_LABEL } from "./format";
-import { GORSEL_DOSYA_SINIRI, webpYap, type WebpGorsel } from "./media-image";
+import { GORSEL_OKUNAMADI, gorselBoyutSorunu, webpYap, type WebpGorsel } from "./media-image";
 import { staffStamp, type Staff } from "./staff";
 import {
   GORSEL_SAYI_SINIRI,
@@ -19,6 +19,7 @@ import {
   type RaporSorusu,
 } from "./import-report";
 import {
+  GERI_ALMADA_SILINEBILIR,
   anilanGorseller,
   dosyayiCozumle,
   dosyayiDenetle,
@@ -115,9 +116,11 @@ function gorselBulucu(gorseller: Map<string, File>) {
   return (ad: string): File | null => gorseller.get(ad) ?? kucuk.get(ad.toLowerCase()) ?? null;
 }
 
+/** Komut satırıyla aynı yol ve aynı cümleler (shared/media-image.ts). */
 async function gorseliIsle(f: File): Promise<WebpGorsel | string> {
-  if (f.size > GORSEL_DOSYA_SINIRI) return `dosya çok büyük (${boyutYazisi(f.size)}); en fazla 8 MB`;
-  return (await webpYap(Buffer.from(await f.arrayBuffer()))) ?? "görsel okunamadı, dosya bozuk olabilir";
+  const buyuk = gorselBoyutSorunu(f.size);
+  if (buyuk) return buyuk;
+  return (await webpYap(Buffer.from(await f.arrayBuffer()))) ?? GORSEL_OKUNAMADI;
 }
 
 /**
@@ -468,12 +471,16 @@ export async function iceAktar(h: Hazirlik, staff: Staff, yayinla: boolean): Pro
 const SURUYOR_MS = 10 * 60_000;
 
 /**
- * Komut satırının `--geri-al`'ıyla aynı güvenlik kuralı: yalnızca HİÇBİR
- * öğrenciye sorulmamış (SessionItem'ı olmayan) sorular silinir. Alıştırma da
- * SessionItem açar; yanlış defteri maddesi (NotebookItem, soru silinince
- * kendiliğinden gider) yalnızca cevaplanmış soruda olur — ikisi de bu kuralla
- * korunur. Sorulmuş soru silinemez: öğrencinin cevabı ona bağlı, geçmiş sonucu
- * yeniden hesaplanamaz olur. Onlar partide kalır, parti "kısmen geri alındı" olur.
+ * Komut satırının `--geri-al`'ıyla AYNI kural (shared/question-import.ts
+ * GERI_ALMADA_SILINEBILIR): hiçbir öğrenciye sorulmamış (SessionItem'ı
+ * olmayan), hiçbir denemenin listesinde olmayan ve notu (personel notu ya da
+ * öğrenci bildirimi) olmayan sorular silinir. Alıştırma da SessionItem açar;
+ * yanlış defteri maddesi (NotebookItem, soru silinince kendiliğinden gider)
+ * yalnızca cevaplanmış soruda olur — ikisi de bu kuralla korunur. Sorulmuş soru
+ * silinemez: öğrencinin cevabı ona bağlı, geçmiş sonucu yeniden hesaplanamaz
+ * olur. Notlu soru silinseydi not da (Cascade) sessizce giderdi. Korunanlar
+ * partide kalır, parti "kısmen geri alındı" olur. Sonradan düzenlenmiş soru
+ * SİLİNİR; onay metni kaç tane olduğunu söyler (partiGecmisi duzenlenen).
  * Parti kaydı silinmez: geri alan ve zamanı ona yazılır (rolledBackAt/ByStaff).
  *
  * Betikten iki farkı (ikisi de daha dar silme):
@@ -496,25 +503,19 @@ export async function partiyiGeriAl(partiId: string, staff: Staff): Promise<Geri
   // Bir denemenin sabit listesindeki soru da silinmez (PackageQuestion →
   // Question, onDelete: Restrict): silme işlemi patlardı, olmasa deneme eksik
   // kalırdı. Korunanlar arasında sayılır; önce denemeden çıkarılmalı.
-  const sorular = await db.question.findMany({
-    where: { importBatchId: partiId },
-    select: { id: true, objectiveId: true, _count: { select: { items: true, packageLinks: true } } },
+  const silinecek = await db.question.findMany({
+    where: { importBatchId: partiId, ...GERI_ALMADA_SILINEBILIR },
+    select: { id: true, objectiveId: true },
   });
-  const silinecek = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks === 0);
   const kazanimAdaylari = [...new Set(silinecek.map((s) => s.objectiveId).filter((x): x is string => Boolean(x)))];
 
   const sonuc = await db.$transaction(
     async (tx) => {
-      // Koşul silme ifadesinin İÇİNDE: denetimden sonra teste giren soru silinmez.
-      // Şıklar Choice → Question (onDelete: Cascade) ile gider.
+      // Koşul silme ifadesinin İÇİNDE: denetimden sonra teste giren ya da not
+      // alan soru silinmez. Şıklar Choice → Question (onDelete: Cascade) ile gider.
       const silinen = silinecek.length
         ? await tx.question.deleteMany({
-            where: {
-              id: { in: silinecek.map((s) => s.id) },
-              importBatchId: partiId,
-              items: { none: {} },
-              packageLinks: { none: {} },
-            },
+            where: { id: { in: silinecek.map((s) => s.id) }, importBatchId: partiId, ...GERI_ALMADA_SILINEBILIR },
           })
         : { count: 0 };
       const kalan = await tx.question.count({ where: { importBatchId: partiId } });
@@ -601,8 +602,17 @@ export interface PartiSatiri {
   /** Partide şu an duran sorular ve durumları. */
   kalan: number;
   durumlar: Record<string, number>;
-  /** Öğrenci testine girmiş ya da denemede olan (geri almada korunacak) sorular. */
+  /** Geri almada korunacak sorular: öğrenciye sorulmuş, denemede ya da notlu (GERI_ALMADA_SILINEBILIR'in tersi). */
   korunacak: number;
+  /** Korunacaklardan, öğrenciye sorulmamış ve denemede olmayıp yalnızca notu yüzünden kalan sorular. */
+  notlu: number;
+  /**
+   * Silinecek sorulardan içe aktarmadan sonra düzenlenmiş olanlar: cevap
+   * anahtarı değişmiş (version > 1) ya da başka bir personel dokunmuş
+   * (updatedByStaff ≠ createdByStaff; durum değişikliği de sayılır). Yalnızca
+   * onay metni için; silme ölçütü değil. updatedAt BİLEREK kullanılmıyor.
+   */
+  duzenlenen: number;
   /** Atlanan soruların listesi (ImportBatch.errors). */
   atlananlar: { satir: number; sebep: string; etiket: string }[];
   /** Başarısız partinin sebebi. */
@@ -643,17 +653,35 @@ export async function partiGecmisi(adet = 50): Promise<PartiSatiri[]> {
     },
   });
   const idler = partiler.map((p) => p.id);
-  const [durumlar, cozulen] = idler.length
+  const [durumlar, korunanlar, notlular, duzenlenenler] = idler.length
     ? await Promise.all([
         db.question.groupBy({ by: ["importBatchId", "status"], where: { importBatchId: { in: idler } }, _count: { _all: true } }),
+        // Geri almanın kendi kuralıyla (tersi): sorulmuş, denemede ya da notlu.
         db.question.groupBy({
           by: ["importBatchId"],
-          // Geri almada korunacaklar: öğrenciye sorulmuş ya da bir denemenin listesinde.
-          where: { importBatchId: { in: idler }, OR: [{ items: { some: {} } }, { packageLinks: { some: {} } }] },
+          where: { importBatchId: { in: idler }, NOT: GERI_ALMADA_SILINEBILIR },
+          _count: { _all: true },
+        }),
+        db.question.groupBy({
+          by: ["importBatchId"],
+          where: { importBatchId: { in: idler }, items: { none: {} }, packageLinks: { none: {} }, notes: { some: {} } },
+          _count: { _all: true },
+        }),
+        // Silinecekler arasında sonradan düzenlenenler (yalnızca onay metni için).
+        // İçe aktarma iki damgayı aynı yazar; sonra başka biri kaydederse ayrışır.
+        db.question.groupBy({
+          by: ["importBatchId"],
+          where: {
+            importBatchId: { in: idler },
+            ...GERI_ALMADA_SILINEBILIR,
+            OR: [{ version: { gt: 1 } }, { updatedByStaff: { not: { equals: db.question.fields.createdByStaff } } }],
+          },
           _count: { _all: true },
         }),
       ])
-    : [[], []];
+    : [[], [], [], []];
+  const sayi = (liste: { importBatchId: string | null; _count: { _all: number } }[], id: string) =>
+    liste.find((c) => c.importBatchId === id)?._count._all ?? 0;
 
   const simdi = Date.now();
   return partiler.map((p) => {
@@ -673,7 +701,9 @@ export async function partiGecmisi(adet = 50): Promise<PartiSatiri[]> {
       durumlar: Object.fromEntries(
         durumlar.filter((d) => d.importBatchId === p.id).map((d) => [d.status, d._count._all])
       ),
-      korunacak: cozulen.find((c) => c.importBatchId === p.id)?._count._all ?? 0,
+      korunacak: sayi(korunanlar, p.id),
+      notlu: sayi(notlular, p.id),
+      duzenlenen: sayi(duzenlenenler, p.id),
       atlananlar: basarisiz ? [] : hatalar.filter((h) => h.satir > 0),
       hataMesaji: basarisiz ? (hatalar[0]?.sebep ?? "Bilinmeyen hata") : null,
       suruyor: p.status === "PENDING" && simdi - p.createdAt.getTime() < SURUYOR_MS,

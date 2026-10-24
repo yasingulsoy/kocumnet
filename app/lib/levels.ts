@@ -5,7 +5,7 @@ import type { ExamScopeValue } from "./exams";
  *
  * Akış (Serhat Hoca'nın şeması, 2026-10-02):
  *
- *   Seviye 1 (50 soru · her soru bir kazanım)
+ *   Seviye 1 (N soru · her soru bir kazanım; N sınava göre: TYT 50, LGS 35)
  *        │
  *        ├─ ≥ %60 ──────────────────────────────► Seviye 2 açılır
  *        │
@@ -96,6 +96,22 @@ export function seviyeAyari(sinav: ExamScopeValue, seviye: Seviye): SeviyeAyari 
   return seviye === 1 ? a.seviye1 : seviye === 2 ? a.seviye2 : a.seviye3;
 }
 
+/**
+ * Bir kazanımın Seviye 1'e girebilmesi için bu sınavda sorulabilen en az
+ * yayında L1 sorusu.
+ *
+ * Seviye 1 kazanımları bu eşiği geçenlerden, sırayla ilk N tane seçilir
+ * (app/lib/level-selection.ts sinavinKazanimlari). Eskiden önce ilk N
+ * kazanım alınıyor, sorusu olmayanlar sonra sessizce düşüyordu: 50 soruluk
+ * aşama 32 soruyla açılıyordu. Panelin hazırlık sayacı da (admin pool.ts)
+ * aynı eşikle aynı kümeyi sayar.
+ *
+ * Bir, iki değil: ana tur kazanım başına bir soru ister. Telafi turu aynı
+ * kazanımdan YENİ soru ister; tek sorulu kazanımda o tur kısmi açılır (ya
+ * da hiç açılmaz, karar ilk turla verilir — seviye1AnaKarar).
+ */
+export const S1_KAZANIM_EN_AZ_SORU = 1;
+
 // ─────────────────────────────────────────────────────────────
 // Kapı kararları
 // ─────────────────────────────────────────────────────────────
@@ -118,12 +134,18 @@ export type KapiKarari =
  * Boş da eksik sayılıyor: şema "yanlış yaptığı veya boş bıraktığı konular"
  * diyor ve haklı — bilmediği için boş bırakmakla yanlış yapmak arasında
  * kazanım açısından fark yok.
+ *
+ * `bulunabilir` = teyit turunda GERÇEKTEN sorulabilecek soru sayısı (eksik
+ * kazanımlardan, bu denemede gösterilmemiş soru bulunanların sayısı). Tek
+ * sorulu kazanımın yeni sorusu yoktur; verilmezse her eksik kazanımın bir
+ * sorusu bulunacağı varsayılır (eski davranış).
  */
 export function seviye1AnaKarar(
   dogru: number,
   toplam: number,
   eksikObjectiveIds: string[],
-  ayar: SeviyeliSinavAyari
+  ayar: SeviyeliSinavAyari,
+  bulunabilir: number = eksikObjectiveIds.length
 ): KapiKarari {
   const oran = toplam === 0 ? 0 : dogru / toplam;
 
@@ -138,19 +160,36 @@ export function seviye1AnaKarar(
    * o tura sokmuyoruz. 10 doğrusu olan birine 40 soruluk telafi turu
    * açmak, sonucu değiştirmeyecek 40 dakikayı çalmak demek.
    *
-   * En iyi ihtimal: (dogru + eksik) / (toplam + eksik)
+   * En iyi ihtimal: (dogru + ek) / (toplam + ek); ek = turda gerçekten
+   * sorulabilecek soru. Eksik kazanım sayısıyla hesaplamak, havuz darken
+   * hiç açılamayacak bir tura umut bağlatıyordu.
    */
-  const enIyi = (dogru + eksikObjectiveIds.length) / (toplam + eksikObjectiveIds.length);
+  const ek = Math.max(0, Math.min(bulunabilir, eksikObjectiveIds.length));
+  const enIyi = toplam + ek === 0 ? 0 : (dogru + ek) / (toplam + ek);
   if (eksikObjectiveIds.length === 0 || enIyi < ayar.telafiSonrasiOran) {
     return { tur: "DUR", seviye: 1, sebep: "BARAJ" };
   }
 
+  /*
+   * Teyit turu açılamıyor: eksik kazanımların hiçbirinde yeni soru yok.
+   * Karar turu beklemeden, turdan 0 soru gelmiş gibi verilir. Tur
+   * beklemede kalsaydı koşu kilitlenirdi: "Devam et" her seferinde
+   * "havuzda soru yok" derdi. Kısa devreden geçtiği için burada oran zaten
+   * telafi barajının üstünde; sonuç Seviye 2.
+   */
+  if (ek === 0) return telafiKarar(dogru, toplam, 0, 0, ayar);
+
   return {
     tur: "TELAFI",
     eksikObjectiveIds,
-    soruSayisi: eksikObjectiveIds.length,
-    dakika: Math.max(5, Math.ceil(eksikObjectiveIds.length * ayar.telafiDakikaPerSoru)),
+    soruSayisi: ek,
+    dakika: telafiDakikasi(ek, ayar),
   };
+}
+
+/** Teyit turunun süresi: soru başına süre, en az 5 dakika. */
+export function telafiDakikasi(soruSayisi: number, ayar: SeviyeliSinavAyari): number {
+  return Math.max(5, Math.ceil(soruSayisi * ayar.telafiDakikaPerSoru));
 }
 
 /**
@@ -259,9 +298,10 @@ export function kapiMesaji(karar: KapiKarari, oran: number): AsamaMesaji {
  */
 export function karneBasligi(
   seviye: Seviye,
-  durum: "IN_PROGRESS" | "COMPLETED" | "STOPPED"
+  durum: "IN_PROGRESS" | "COMPLETED" | "STOPPED" | "ABANDONED"
 ): string {
   if (durum === "COMPLETED") return "Nihai Check-up Raporu";
+  if (durum === "ABANDONED") return "Yarım bırakılan check-up";
   if (durum === "IN_PROGRESS") return "Şu ana kadarki durumun";
   return seviye === 1 ? "Seviye 1 Eksik Analiz Karnesi" : "Seviye 2 Teşhis Karnesi";
 }

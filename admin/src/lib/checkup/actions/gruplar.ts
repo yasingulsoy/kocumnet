@@ -14,9 +14,12 @@ import {
   ODEV_NOTU_SINIRI,
   ODEV_PAKET_TURLERI,
   cokSatir,
+  odevKonuSinavi,
   tekSatir,
 } from "@/lib/checkup/grup-kurallari";
 import { ODEV_SORU_ALT, ODEV_SORU_UST, odevBasligi, sonTarihDenetle, trTarih } from "@/lib/checkup/shared/odev";
+import { denemeYayinEngelleri } from "@/lib/checkup/mock";
+import { soruSinavdaKosulu } from "@/lib/checkup/shared/exam-scope";
 
 /**
  * Koçluk grupları ve ödevler — yazma. Yalnızca yönetici ve müdür (MANAGE):
@@ -267,7 +270,7 @@ export async function odevOlusturAction(girdi: unknown): Promise<Yanit<{ id: str
   if (!tarih.ok) return { ok: false, error: "Formu kontrol et.", fields: { dueDate: tarih.hata } };
   const dueAt = tarih.dueAt;
 
-  const grup = await db.studyGroup.findUnique({ where: { id: v.groupId }, select: { archivedAt: true } });
+  const grup = await db.studyGroup.findUnique({ where: { id: v.groupId }, select: { archivedAt: true, examScope: true } });
   if (!grup) return { ok: false, error: "Grup bulunamadı." };
   if (grup.archivedAt) return { ok: false, error: "Arşivdeki gruba ödev verilmez; önce arşivden al." };
 
@@ -280,15 +283,34 @@ export async function odevOlusturAction(girdi: unknown): Promise<Yanit<{ id: str
     if (!paket || paket.status !== "PUBLISHED" || !(ODEV_PAKET_TURLERI as readonly string[]).includes(paket.kind)) {
       return { ok: false, error: "Formu kontrol et.", fields: { packageId: "Yalnızca yayındaki test ve denemeler ödev olabilir." } };
     }
+    // Deneme ayrıca HAZIR olmalı (liste tam ve hepsi yayında; öğrencinin kuralı,
+    // shared/deneme.ts): yoksa öğrenci ödevi açınca "hazırlanıyor" görür, ödev
+    // tamamlanamaz. Yayında olmak yetmiyor: soru sonradan arşivlenmiş olabilir.
+    if (paket.kind === "MOCK") {
+      const engeller = await denemeYayinEngelleri(v.packageId);
+      if (engeller?.length) {
+        return {
+          ok: false,
+          error: "Formu kontrol et.",
+          fields: { packageId: "Bu deneme hazır değil, öğrenci başlatamaz: " + engeller.join(" ") },
+        };
+      }
+    }
     otomatikBaslik = odevBasligi({ kind: "PACKAGE", paketAdi: paket.name });
   } else {
     const konu = await db.topic.findUnique({
       where: { id: v.topicId },
-      select: { name: true, _count: { select: { questions: { where: { status: "PUBLISHED" } } } } },
+      select: { name: true, examScope: true, examScopes: true },
     });
     if (!konu) return { ok: false, error: "Formu kontrol et.", fields: { topicId: "Konu bulunamadı." } };
-    if (konu._count.questions === 0) {
-      return { ok: false, error: "Formu kontrol et.", fields: { topicId: "Bu konuda yayında soru yok." } };
+    // Havuz, öğrencinin alıştırmasının seçeceği sınavda sayılır (ödev formunun
+    // sayımıyla aynı kural: grup-kurallari.ts odevKonuSinavi).
+    const sinav = odevKonuSinavi(grup.examScope, konu);
+    const havuz = await db.question.count({
+      where: { AND: [{ topicId: v.topicId, status: "PUBLISHED" }, sinav ? soruSinavdaKosulu(sinav) : {}] },
+    });
+    if (havuz === 0) {
+      return { ok: false, error: "Formu kontrol et.", fields: { topicId: "Bu konuda bu sınavda sorulabilen yayında soru yok." } };
     }
     otomatikBaslik = odevBasligi({ kind: "TOPIC_PRACTICE", konuAdi: konu.name, soruSayisi: v.questionCount! });
   }

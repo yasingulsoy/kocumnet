@@ -21,21 +21,28 @@
  *  · Önce dosyanın TAMAMI çözümlenir ve denetlenir, sonra yazılır. Yarım
  *    içe aktarma yok: ya hepsi geçerli olanlar girer, ya hiçbiri.
  *  · Her içe aktarma bir ImportBatch kaydı açar; sorular ona bağlanır.
- *    `--geri-al` o partinin HİÇ ÇÖZÜLMEMİŞ ve hiçbir denemenin listesinde
- *    olmayan sorularını siler (çözülmüş soru silinmez: öğrenci cevapları ona
- *    bağlı; denemedeki soru denemeyi eksik bırakırdı). Parti kaydı kalır; geri alma
- *    zamanı ve `--personel` damgası ona yazılır (panelin geçmişinde görünür).
+ *    `--geri-al` o partinin HİÇ ÇÖZÜLMEMİŞ, hiçbir denemenin listesinde
+ *    olmayan ve NOTU olmayan sorularını siler (çözülmüş soru silinmez: öğrenci
+ *    cevapları ona bağlı; denemedeki soru denemeyi eksik bırakırdı; not soruyla
+ *    birlikte giderdi). Kural lib/question-import.ts GERI_ALMADA_SILINEBILIR,
+ *    panelle ortak. Parti kaydı kalır; geri alma zamanı ve `--personel` damgası
+ *    ona yazılır (panelin geçmişinde görünür).
  *  · Kazanımlar koda göre bulunur; yoksa `Kazanım Adı` ile oluşturulur.
  *    İlk kullanımda ad zorunlu.
- *  · Görseller markdown'ın yanındaki gorseller/ dizininden okunur, MediaAsset
- *    olarak veritabanına yazılır, metindeki dosya adı kimlikle değiştirilir.
+ *  · Görseller markdown'ın yanındaki gorseller/ dizininden okunur, panelle
+ *    AYNI biçime çevrilir (lib/media-image.ts: WebP, en fazla 1200 px, EXIF ve
+ *    GPS atılır, 8 MB'tan büyük dosya reddedilir), MediaAsset olarak
+ *    veritabanına yazılır, metindeki dosya adı kimlikle değiştirilir. Bozuk ya
+ *    da çok büyük görsel, onu kullanan sorunun hatası olarak raporlanır.
  */
 import "dotenv/config";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { prisma } from "../lib/db";
+import { GORSEL_OKUNAMADI, gorselBoyutSorunu, webpYap, type WebpGorsel } from "../lib/media-image";
 import {
-  GORSEL_MIME,
+  GERI_ALMADA_SILINEBILIR,
+  anilanGorseller,
   dosyayiCozumle,
   dosyayiDenetle,
   gorselleriYerlestir,
@@ -79,7 +86,7 @@ async function uygula(
   hatalar: Hata[],
   dosyaAdi: string,
   kazanimlar: Map<string, IceAktarmaKazanimi>,
-  gorselDizini: string
+  islenmis: ReadonlyMap<string, WebpGorsel | string>
 ) {
   const batch = await prisma.importBatch.create({
     data: {
@@ -124,14 +131,18 @@ async function uygula(
             for (const g of q.gorseller) {
               let mediaId = gorselOnbellek.get(g.dosya);
               if (!mediaId) {
-                const yol = join(gorselDizini, g.dosya);
-                const data = readFileSync(yol);
+                const gorsel = islenmis.get(g.dosya);
+                // Denetim bozuk ya da çok büyük görselli soruyu zaten reddeder; buraya gelinmez.
+                if (!gorsel || typeof gorsel === "string") throw new Error("Görsel hazırlanamadı: " + g.dosya);
                 const m = await tx.mediaAsset.create({
                   data: {
+                    // Geri alma partinin görsellerini bu önekle bulur (panelle aynı).
                     storageKey: `import/${batch.id}/${g.dosya}`,
-                    mimeType: GORSEL_MIME[extname(g.dosya).toLowerCase()] ?? "application/octet-stream",
-                    byteSize: statSync(yol).size,
-                    data,
+                    mimeType: "image/webp",
+                    width: gorsel.width,
+                    height: gorsel.height,
+                    byteSize: gorsel.byteSize,
+                    data: gorsel.data,
                     alt: g.alt,
                     uploadedByStaff: PERSONEL,
                   },
@@ -214,23 +225,36 @@ async function geriAl(batchId: string) {
     return;
   }
 
-  // Denemeye (MOCK paketin sabit listesine) konmuş soru da silinmez: liste ona
-  // bağlı (PackageQuestion → Question, onDelete: Restrict); silmek ya patlar ya
-  // da denemeyi eksik bırakırdı. Önce denemeden çıkarılmalı.
-  const sorular = await prisma.question.findMany({
-    where: { importBatchId: batchId },
-    select: { id: true, _count: { select: { items: true, packageLinks: true } } },
-  });
-  const cozulmus = sorular.filter((s) => s._count.items > 0 || s._count.packageLinks > 0);
-  const denemede = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks > 0).length;
-  const silinecek = sorular.filter((s) => s._count.items === 0 && s._count.packageLinks === 0).map((s) => s.id);
+  /*
+   * Silinmeyenler (kural lib/question-import.ts GERI_ALMADA_SILINEBILIR, panelle
+   * ortak): öğrenciye sorulmuş, bir denemenin listesinde (önce denemeden
+   * çıkarılmalı) ya da notu olan soru. Sonradan düzenlenmiş soru silinir; kaç
+   * tane olduğu yalnızca bildirilir (panelin onay metniyle aynı ölçü: cevap
+   * anahtarı değişmiş ya da başka biri dokunmuş).
+   */
+  const [silinecekler, korunan, denemede, notlu] = await Promise.all([
+    prisma.question.findMany({
+      where: { importBatchId: batchId, ...GERI_ALMADA_SILINEBILIR },
+      select: { id: true, version: true, createdByStaff: true, updatedByStaff: true },
+    }),
+    prisma.question.count({ where: { importBatchId: batchId, NOT: GERI_ALMADA_SILINEBILIR } }),
+    // Yalnızca açıklama için: neden korundu (sorulmamış ama denemede / notlu).
+    prisma.question.count({ where: { importBatchId: batchId, items: { none: {} }, packageLinks: { some: {} } } }),
+    prisma.question.count({ where: { importBatchId: batchId, items: { none: {} }, packageLinks: { none: {} }, notes: { some: {} } } }),
+  ]);
+  const silinecek = silinecekler.map((s) => s.id);
+  const duzenlenen = silinecekler.filter((s) => s.version > 1 || s.updatedByStaff !== s.createdByStaff).length;
 
+  let silinen = 0;
   if (silinecek.length) {
-    await prisma.$transaction([
-      prisma.choice.deleteMany({ where: { questionId: { in: silinecek } } }),
-      prisma.question.deleteMany({ where: { id: { in: silinecek } } }),
-    ]);
+    // Koşul silme ifadesinin İÇİNDE (panelle aynı): denetimden sonra teste
+    // giren ya da not alan soru silinmez. Şıklar Choice → Question (Cascade) ile gider.
+    const r = await prisma.question.deleteMany({
+      where: { id: { in: silinecek }, importBatchId: batchId, ...GERI_ALMADA_SILINEBILIR },
+    });
+    silinen = r.count;
   }
+  const kalan = await prisma.question.count({ where: { importBatchId: batchId } });
 
   /*
    * Görseller: yalnızca artık HİÇBİR soruda geçmeyenler silinir. Korunan
@@ -272,22 +296,29 @@ async function geriAl(batchId: string) {
    * parti (başarısız ya da boş) silinir. Hiçbir soru silinmediyse damga da
    * yazılmaz: geri alma olmadı.
    */
-  if (silinecek.length === 0 && cozulmus.length === 0) {
+  if (silinen === 0 && kalan === 0) {
     await prisma.importBatch.delete({ where: { id: batchId } });
     console.log(`Partinin sorusu yoktu, kaydı silindi: ${batch.filename}`);
     return;
   }
   if (denemede) console.log(`${denemede} soru bir denemenin listesinde olduğu için silinmedi (önce denemeden çıkar).`);
-  if (silinecek.length === 0) {
-    console.log(`Silinecek soru yok: ${batch.filename} — ${cozulmus.length} soru öğrencilere sorulduğu ya da denemede olduğu için korunuyor (arşivle).`);
+  if (notlu) console.log(`${notlu} soru, üzerinde inceleme notu ya da öğrenci bildirimi olduğu için silinmedi.`);
+  if (silinen === 0) {
+    console.log(
+      `Silinecek soru yok: ${batch.filename} — ${korunan} soru öğrencilere sorulduğu, denemede olduğu ya da notu olduğu için korunuyor (arşivle).`
+    );
     return;
   }
   await prisma.importBatch.update({
     where: { id: batchId },
-    data: { status: cozulmus.length ? "REVERTED_PARTIAL" : "REVERTED", rolledBackAt: new Date(), rolledBackByStaff: PERSONEL },
+    data: { status: kalan ? "REVERTED_PARTIAL" : "REVERTED", rolledBackAt: new Date(), rolledBackByStaff: PERSONEL },
   });
 
-  console.log(`Geri alındı: ${batch.filename} — ${silinecek.length} soru silindi` + (cozulmus.length ? `, ${cozulmus.length} soru öğrenciler çözdüğü için korundu (arşivle).` : "."));
+  console.log(
+    `Geri alındı: ${batch.filename} — ${silinen} soru silindi` +
+      (duzenlenen ? ` (${duzenlenen} tanesi içe aktarmadan sonra düzenlenmişti)` : "") +
+      (kalan ? `, ${kalan} soru korundu (öğrencilere soruldu, denemede ya da notlu; arşivle).` : ".")
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -319,6 +350,18 @@ async function main() {
   ]);
 
   const gorselDizini = join(dirname(yol), "gorseller");
+  const gorselYolu = (dosya: string) => join(gorselDizini, dosya);
+  const gorselVar = (dosya: string) => existsSync(gorselYolu(dosya)) && statSync(gorselYolu(dosya)).isFile();
+
+  // Görseller denetimden ÖNCE çevrilir (panelle aynı sıra): bozuk ya da çok
+  // büyük dosya, onu kullanan sorunun hatası olarak raporlansın.
+  const islenmis = new Map<string, WebpGorsel | string>();
+  for (const dosya of anilanGorseller(ham)) {
+    if (!gorselVar(dosya)) continue;
+    const buyuk = gorselBoyutSorunu(statSync(gorselYolu(dosya)).size);
+    islenmis.set(dosya, buyuk ?? (await webpYap(readFileSync(gorselYolu(dosya)))) ?? GORSEL_OKUNAMADI);
+  }
+
   const kazanimlar = new Map<string, IceAktarmaKazanimi>(
     kazanimSatirlari.map((k) => [k.code, { id: k.id, topicId: k.topicId, name: k.name }])
   );
@@ -328,7 +371,11 @@ async function main() {
     mevcutIdler: new Set(sorular.map((q) => (q.sourceRef ?? "").split(" · ")[0]).filter(Boolean)),
     mevcutParmakIzleri: new Map(sorular.map((q) => [q.fingerprint, q.id])),
     kazanimlar,
-    gorselVar: (dosya) => existsSync(join(gorselDizini, dosya)),
+    gorselVar,
+    gorselSorunu: (dosya) => {
+      const g = islenmis.get(dosya);
+      return typeof g === "string" ? g : null;
+    },
   };
 
   const { sorular: rapor, hazir } = dosyayiDenetle(ham, b);
@@ -374,7 +421,7 @@ async function main() {
     return;
   }
 
-  const sonuc = await uygula(hazir, hatalar, basename(yol), kazanimlar, gorselDizini);
+  const sonuc = await uygula(hazir, hatalar, basename(yol), kazanimlar, islenmis);
   console.log(`\n${sonuc.yazilan} soru alındı (${YAYINLA ? "YAYINDA" : "taslak"}), ${hatalar.length} soru reddedildi.`);
   if (sonuc.yeniKazanim.length) console.log(`Yeni kazanımlar: ${sonuc.yeniKazanim.join(", ")}`);
   console.log(`Parti kimliği: ${sonuc.batchId}  (geri almak için: --geri-al ${sonuc.batchId})`);

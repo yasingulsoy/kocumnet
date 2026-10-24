@@ -11,6 +11,7 @@ import {
   type PackageHealth,
 } from "@/lib/checkup/pool";
 import { EXAM_SCOPES, QUESTION_STATUS_LABEL, examLabel, isExamScope, trNumber } from "@/lib/checkup/format";
+import { denemeHazirlikEngelleri, denemeUyarilari, sagliktanBaslatilabilir } from "@/lib/checkup/mock-rules";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { PackageFreeToggle, PackageStatusSelect } from "@/components/checkup/PackageControls";
 import { PACKAGE_STATE_COLOR, ProgressLine, QUESTION_STATUS_COLOR, qs } from "@/components/checkup/ui";
@@ -40,15 +41,27 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
   const sp = await searchParams;
   const sinav = isExamScope(sp.sinav) ? sp.sinav : "";
 
-  const [tumPaketler, testSayilari] = await Promise.all([
+  const now = new Date();
+  const [tumPaketler, testSayilari, odevSayilari] = await Promise.all([
     loadPackageHealth(),
     db.checkupSession.groupBy({
       by: ["packageId"],
       where: { status: "SUBMITTED" },
       _count: { _all: true },
     }),
+    /*
+     * Açık ödev: paketi veren, iptal edilmemiş, son tarihi geçmemiş, grubu
+     * arşivde olmayan ödev (öğrenci ödev ekranının "açık" listesi). Yayın
+     * durumu ya da ücret değişince bu ödevler bozulur; onay penceresi söyler.
+     */
+    db.assignment.groupBy({
+      by: ["packageId"],
+      where: { kind: "PACKAGE", packageId: { not: null }, cancelledAt: null, dueAt: { gt: now }, group: { archivedAt: null } },
+      _count: { _all: true },
+    }),
   ]);
   const testMap = new Map(testSayilari.map((t) => [t.packageId, t._count._all]));
+  const odevMap = new Map(odevSayilari.map((o) => [o.packageId, o._count._all]));
 
   // Gizli alıştırma paketleri (PRACTICE, sınav başına bir tane) bu sayfanın hiçbir
   // bölümünde yok ve panelden yönetilmiyor; toplam sayıya da girmesinler.
@@ -62,11 +75,18 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
   const denemeler = health.filter((p) => p.kind === "MOCK");
 
   const ucretliSayisi = health.filter((p) => !p.isFree).length;
-  const yayindaSorunlu = katalogTumu.filter((p) => p.status === "PUBLISHED" && p.state === "blocked").length;
+  // Deneme: öğrencinin kendi kuralı (mock-rules.ts; liste tam ve tamamı yayında).
+  // Sınav dışı soru engel değil, uyarı: öğrenci uygulaması o denemeyi başlatıyor.
+  const denemeHazir = (p: PackageHealth) => sagliktanBaslatilabilir(p);
+  // Alarm: öğrencinin katalogda görüp başlatamadığı paketler (deneme "hazırlanıyor" der).
+  const yayindaSorunlu = [
+    ...katalogTumu.filter((p) => p.status === "PUBLISHED" && p.state === "blocked"),
+    ...denemeler.filter((p) => p.status === "PUBLISHED" && !denemeHazir(p)),
+  ].length;
 
   const yayinHucresi = (p: PackageHealth) =>
     yonetebilir ? (
-      <PackageStatusSelect id={p.id} status={p.status} name={p.name} kind={p.kind} />
+      <PackageStatusSelect id={p.id} status={p.status} name={p.name} kind={p.kind} acikOdev={odevMap.get(p.id) ?? 0} />
     ) : (
       <Badge size="sm" color={QUESTION_STATUS_COLOR[p.status]}>
         {QUESTION_STATUS_LABEL[p.status]}
@@ -74,7 +94,7 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
     );
   const erisimHucresi = (p: PackageHealth) =>
     yonetebilir ? (
-      <PackageFreeToggle id={p.id} isFree={p.isFree} name={p.name} />
+      <PackageFreeToggle id={p.id} isFree={p.isFree} name={p.name} acikOdev={odevMap.get(p.id) ?? 0} />
     ) : (
       <Badge size="sm" color={p.isFree ? "light" : "primary"}>
         {p.isFree ? "Ücretsiz" : "Ücretli"}
@@ -113,8 +133,9 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
       ) : null}
       {yayindaSorunlu > 0 ? (
         <Alert variant="error" className="mb-4" title={`Yayındaki ${yayindaSorunlu} paket başlatılamıyor`}>
-          Öğrenci bu paketleri katalogda görüyor ama &quot;Başla&quot;ya bastığında hata alır. Eksik
-          konulara soru ekleyin ya da paketi taslağa çekin.
+          Öğrenci bu paketleri katalogda görüyor ama başlatamıyor (&quot;Başla&quot;da hata alır; denemede
+          &quot;hazırlanıyor&quot; yazar). Eksik konulara soru ekleyin, deneme listesini tamamlayın ya da paketi
+          taslağa çekin.
         </Alert>
       ) : null}
 
@@ -245,43 +266,55 @@ export default async function PackagesPage({ searchParams }: PageProps<"/checkup
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {denemeler.map((p) => (
-                  <TableRow key={p.id} className="align-top">
-                    <TableCell className="min-w-48">
-                      {yonetebilir ? (
-                        <Link href={"/checkup/paketler/" + p.id} className="font-medium text-gray-800 hover:text-brand-500">
-                          {p.name}
-                        </Link>
-                      ) : (
-                        <p className="font-medium text-gray-800">{p.name}</p>
-                      )}
-                      <p className="mt-0.5 text-theme-xs text-gray-500">{p.slug}</p>
-                    </TableCell>
-                    <TableCell className="min-w-36">
-                      {examLabel(p.examScope)} · {p.questionCount} soru · {p.durationMinutes} dk
-                    </TableCell>
-                    <TableCell className="min-w-60">
-                      <Badge size="sm" color={PACKAGE_STATE_COLOR[p.state]}>
-                        {p.state === "ready" ? "Hazır" : "Yayınlanamaz"}
-                      </Badge>
-                      <p className="tabular mt-1 text-theme-xs text-gray-600">
-                        {p.mock?.listede ?? 0} / {p.questionCount} soru
-                      </p>
-                      {p.mock?.engeller.length ? (
-                        <ul className="mt-1 max-w-80 space-y-0.5 text-theme-xs text-error-600">
-                          {p.mock.engeller.map((e) => (
-                            <li key={e}>{e}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </TableCell>
-                    <TableCell align="end">
-                      <span className="tabular text-gray-800">{trNumber(testMap.get(p.id) ?? 0)}</span>
-                    </TableCell>
-                    <TableCell>{yayinHucresi(p)}</TableCell>
-                    <TableCell>{erisimHucresi(p)}</TableCell>
-                  </TableRow>
-                ))}
+                {denemeler.map((p) => {
+                  const durum = { soruSayisi: p.questionCount, listede: 0, yayindaOlmayan: {}, sinavDisi: 0, ...(p.mock ?? {}) };
+                  const engeller = denemeHazirlikEngelleri(durum);
+                  const uyarilar = denemeUyarilari(durum);
+                  return (
+                    <TableRow key={p.id} className="align-top">
+                      <TableCell className="min-w-48">
+                        {yonetebilir ? (
+                          <Link href={"/checkup/paketler/" + p.id} className="font-medium text-gray-800 hover:text-brand-500">
+                            {p.name}
+                          </Link>
+                        ) : (
+                          <p className="font-medium text-gray-800">{p.name}</p>
+                        )}
+                        <p className="mt-0.5 text-theme-xs text-gray-500">{p.slug}</p>
+                      </TableCell>
+                      <TableCell className="min-w-36">
+                        {examLabel(p.examScope)} · {p.questionCount} soru · {p.durationMinutes} dk
+                      </TableCell>
+                      <TableCell className="min-w-60">
+                        <Badge size="sm" color={PACKAGE_STATE_COLOR[denemeHazir(p) ? "ready" : "blocked"]}>
+                          {denemeHazir(p) ? "Hazır" : "Yayınlanamaz"}
+                        </Badge>
+                        <p className="tabular mt-1 text-theme-xs text-gray-600">
+                          {p.mock?.listede ?? 0} / {p.questionCount} soru
+                        </p>
+                        {engeller.length || uyarilar.length ? (
+                          <ul className="mt-1 max-w-80 space-y-0.5 text-theme-xs">
+                            {engeller.map((e) => (
+                              <li key={e} className="text-error-600">
+                                {e}
+                              </li>
+                            ))}
+                            {uyarilar.map((e) => (
+                              <li key={e} className="text-warning-700">
+                                {e}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </TableCell>
+                      <TableCell align="end">
+                        <span className="tabular text-gray-800">{trNumber(testMap.get(p.id) ?? 0)}</span>
+                      </TableCell>
+                      <TableCell>{yayinHucresi(p)}</TableCell>
+                      <TableCell>{erisimHucresi(p)}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

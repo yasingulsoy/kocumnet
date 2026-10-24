@@ -29,6 +29,7 @@ interface Raw {
   createdAt: Date;
   lastLoginAt: Date | null;
   sonTest: Date | null;
+  sonBaslama: Date | null;
   testSayisi: number;
   p1c: number | null;
   p1w: number | null;
@@ -60,12 +61,43 @@ export async function loadRiskliOgrenciler(now: Date = new Date()): Promise<{ li
       WHERE status = 'SUBMITTED' AND kind <> 'PRACTICE'
       GROUP BY "userId"
     ),
+    -- "Pasif" için etkinlik: HER TÜRDEN oturumun (alıştırma, defter tekrarı,
+    -- kontrol testi, yarım bırakılan dahil) en son başlama anı. lastLoginAt
+    -- yalnızca parolayla girişte güncelleniyor; çerezle dönen ve yalnızca
+    -- alıştırma yapan öğrenci "pasif" görünüyordu. ("userId", "startedAt")
+    -- indeksi var; cevap tablosu (Answer) taranmaz.
+    baslama AS (
+      SELECT "userId", max("startedAt") AS son
+      FROM "CheckupSession"
+      GROUP BY "userId"
+    ),
+    /*
+     * "Düşüşte": son iki ÖLÇÜM. SQL İKİZİ: öğrenci uygulamasının eğilim kuralı
+     * app/lib/insights.ts egilimeGirer (panelde shared/insights.ts) — paket
+     * testi (kind PACKAGE), işaretli (doğru + yanlış > 0), öğrencinin hedef
+     * sınavında (hedef yoksa her sınav). Kâğıtta çözülen dahil: o da ölçüm.
+     * Kural değişirse ikisi birlikte değişmeli.
+     *
+     * Ek olarak iki test aynı paket TÜRÜNDEN (STANDARD, INTRO, MOCK): 40
+     * soruluk denemenin oranı 15 soruluk testin oranıyla kıyaslanmaz. En son
+     * testin türü alınır, önceki = aynı türden bir önceki test (sira 2).
+     */
     paket AS (
-      SELECT cs."userId", r."correctCount" AS c, r."wrongCount" AS w, r."blankCount" AS b,
-             row_number() OVER (PARTITION BY cs."userId" ORDER BY cs."submittedAt" DESC, cs.id) AS sira
+      SELECT cs."userId", pk.kind::text AS tur,
+             r."correctCount" AS c, r."wrongCount" AS w, r."blankCount" AS b,
+             row_number() OVER (PARTITION BY cs."userId", pk.kind ORDER BY cs."submittedAt" DESC, cs.id) AS sira,
+             row_number() OVER (PARTITION BY cs."userId" ORDER BY cs."submittedAt" DESC, cs.id) AS genel
       FROM "CheckupSession" cs
       JOIN "CheckupResult" r ON r."sessionId" = cs.id
+      JOIN "Package" pk ON pk.id = cs."packageId"
+      JOIN "User" su ON su.id = cs."userId"
       WHERE cs.status = 'SUBMITTED' AND cs.kind = 'PACKAGE'
+        AND pk.kind IN ('STANDARD', 'INTRO', 'MOCK')
+        AND r."correctCount" + r."wrongCount" > 0
+        AND (su."targetExam" IS NULL OR pk."examScope" = su."targetExam")
+    ),
+    sonTur AS (
+      SELECT "userId", tur FROM paket WHERE genel = 1
     ),
     plan AS (
       SELECT sp."userId",
@@ -81,14 +113,16 @@ export async function loadRiskliOgrenciler(now: Date = new Date()): Promise<{ li
     )
     SELECT u.id, u.name, u.email, u.grade::text AS grade, u."targetExam"::text AS "targetExam",
            u."createdAt", u."lastLoginAt",
-           t.son AS "sonTest", COALESCE(t.n, 0)::int AS "testSayisi",
+           t.son AS "sonTest", bs.son AS "sonBaslama", COALESCE(t.n, 0)::int AS "testSayisi",
            p1.c AS p1c, p1.w AS p1w, p1.b AS p1b,
            p2.c AS p2c, p2.w AS p2w, p2.b AS p2b,
            pl.toplam AS "planToplam", pl.biten AS "planBiten"
     FROM "User" u
     LEFT JOIN testler t ON t."userId" = u.id
-    LEFT JOIN paket p1 ON p1."userId" = u.id AND p1.sira = 1
-    LEFT JOIN paket p2 ON p2."userId" = u.id AND p2.sira = 2
+    LEFT JOIN baslama bs ON bs."userId" = u.id
+    LEFT JOIN sonTur st ON st."userId" = u.id
+    LEFT JOIN paket p1 ON p1."userId" = u.id AND p1.tur = st.tur AND p1.sira = 1
+    LEFT JOIN paket p2 ON p2."userId" = u.id AND p2.tur = st.tur AND p2.sira = 2
     LEFT JOIN plan pl ON pl."userId" = u.id
     WHERE u.role = 'STUDENT'
   `;
@@ -99,6 +133,7 @@ export async function loadRiskliOgrenciler(now: Date = new Date()): Promise<{ li
       createdAt: r.createdAt,
       lastLoginAt: r.lastLoginAt,
       sonTest: r.sonTest,
+      sonBaslama: r.sonBaslama,
       testSayisi: Number(r.testSayisi),
       sonIkiPaket: [oran(r.p1c, r.p1w, r.p1b), oran(r.p2c, r.p2w, r.p2b)],
       gecenHaftaPlan:

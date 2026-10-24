@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Deneme sınavı, kâğıtta çözme ve süre analizi — saf kurallar + uçtan uca akış.
  *

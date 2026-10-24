@@ -11,6 +11,7 @@ import { bulgularNotu } from "@/lib/checkup/question-note";
 import { soruNotlari } from "@/lib/checkup/question-notes";
 import { soruBildirimleri } from "@/lib/checkup/student-reports";
 import { listeAdresi, listeSorgusu, soruAdresi } from "@/lib/checkup/question-list";
+import { KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
 import { komsular, listeSuzgeciSorgudan } from "@/lib/checkup/question-query";
 import { MAX_HINTS, parseHints, parseQuestionContent } from "@/lib/checkup/shared/question-content";
 import { contentToMarkup, hasUneditableBlocks } from "@/lib/checkup/shared/question-markup";
@@ -91,16 +92,23 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
     }),
     soruNotlari(id),
     soruBildirimleri(id, kisisel),
-    // Sorunun yer aldığı denemeler (MOCK paketin sabit listesi).
+    // Sorunun yer aldığı denemeler (MOCK paketin sabit listesi); oturum sayısı kilit için.
     db.packageQuestion.findMany({
       where: { questionId: id, package: { kind: "MOCK" } },
       orderBy: { package: { name: "asc" } },
-      select: { package: { select: { id: true, name: true, status: true } } },
+      select: { package: { select: { id: true, name: true, status: true, _count: { select: { sessions: true } } } } },
     }),
   ]);
 
   if (!question) notFound();
-  const denemeler = denemeBaglari.map((d) => d.package);
+  // Kilitli: yayında ve en az bir kez başlatılmış (lib/checkup/mock.ts kilitliDenemeler ile aynı koşul).
+  const denemeler = denemeBaglari.map(({ package: d }) => ({
+    id: d.id,
+    name: d.name,
+    status: d.status,
+    kilitli: d.status === "PUBLISHED" && d._count.sessions > 0,
+  }));
+  const kilitliDenemeVar = denemeler.some((d) => d.kilitli);
 
   const stemContent = parseQuestionContent(question.stem);
 
@@ -265,12 +273,18 @@ export default async function EditQuestionPage({ params, searchParams }: PagePro
                 <Badge size="sm" color={QUESTION_STATUS_COLOR[d.status]}>
                   {QUESTION_STATUS_LABEL[d.status]}
                 </Badge>
+                {d.kilitli ? (
+                  <Badge size="sm" color="warning">
+                    başlatıldı
+                  </Badge>
+                ) : null}
               </span>
             ))}
           </span>
           <span className="mt-1 block">
-            Denemede herkes aynı soruları çözer: bu soruyu arşivler ya da taslağa çekersen deneme eksik kalır ve öğrenci
-            başlatamaz.
+            {kilitliDenemeVar
+              ? KILITLI_DENEME_MESAJI
+              : "Denemede herkes aynı soruları çözer: bu soruyu arşivler ya da taslağa çekersen deneme eksik kalır ve öğrenci başlatamaz."}
           </span>
         </Alert>
       ) : null}

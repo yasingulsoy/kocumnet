@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Poppins } from "next/font/google";
+import { appUrl } from "@/lib/site";
 import "./globals.css";
 
 /*
@@ -26,7 +27,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3100"),
+  // Postalarla aynı yedek: üretimde değişken boşsa localhost değil checkup.kocum.net.
+  metadataBase: new URL(appUrl()),
   applicationName: "Koçum.Net Check-up",
   title: {
     default: "Matematik Check-up · Koçum.Net",

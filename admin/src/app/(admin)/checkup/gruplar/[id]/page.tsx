@@ -13,7 +13,10 @@ import {
   ODEV_DURUM_SIRASI,
   ODEV_PAKET_TURLERI,
   ODEV_TURU_ETIKETI,
+  odevKonuSinavi,
 } from "@/lib/checkup/grup-kurallari";
+import { denemeHazirliklari } from "@/lib/checkup/mock";
+import { soruSinavdaKosulu } from "@/lib/checkup/shared/exam-scope";
 import { damgaAdi } from "@/lib/checkup/question-note";
 import { ODEV_DURUMLARI, enGecSonTarih, kalanGunMetni, tamamlandiMi, trTarih, varsayilanSonTarih } from "@/lib/checkup/shared/odev";
 import { GateNotice } from "@/components/checkup/GateNotice";
@@ -123,6 +126,40 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
         }),
   ]);
 
+  /*
+   * Ödev formunun seçenekleri öğrencinin gerçekten çözebileceği kadar:
+   *  · Deneme yalnızca HAZIRSA (liste tam ve hepsi yayında; shared/deneme.ts):
+   *    hazır olmayan denemeyi ödev alan öğrenci "hazırlanıyor" görürdü. Eylem de
+   *    reddediyor (actions/gruplar.ts).
+   *  · Konu havuzu, alıştırmanın seçeceği sınavda sayılır (grup-kurallari.ts
+   *    odevKonuSinavi; soruSinavdaKosulu): grubun sınavına kısıtlanmamış
+   *    sorular sayılmaz. Sınavsız grupta konunun bütün yayındaki soruları.
+   */
+  const denemeHazir = await denemeHazirliklari(paketler.filter((p) => p.kind === "MOCK"));
+  const konuSinavlari = new Map(konular.map((k) => [k.id, odevKonuSinavi(grup.examScope, k)]));
+  const sinavlar = [...new Set([...konuSinavlari.values()].filter((s) => s !== null))];
+  const sinavHavuzlari = new Map(
+    await Promise.all(
+      sinavlar.map(async (sinav) => {
+        const satirlar = await db.question.groupBy({
+          by: ["topicId"],
+          where: {
+            AND: [
+              { status: "PUBLISHED", topicId: { in: konular.filter((k) => konuSinavlari.get(k.id) === sinav).map((k) => k.id) } },
+              soruSinavdaKosulu(sinav),
+            ],
+          },
+          _count: { _all: true },
+        });
+        return [sinav, new Map(satirlar.map((r) => [r.topicId, r._count._all]))] as const;
+      })
+    )
+  );
+  const konuHavuzu = (k: (typeof konular)[number]) => {
+    const sinav = konuSinavlari.get(k.id) ?? null;
+    return sinav ? (sinavHavuzlari.get(sinav)?.get(k.id) ?? 0) : k._count.questions;
+  };
+
   // ── Ödevler ve oranlar ──────────────────────────────────
   const odevler = grup.assignments.map((a) => ({ ...a, ...odevOrani(a, grup.members, kayitlar) }));
   const gecerli = odevler.filter((a) => a.cancelledAt === null);
@@ -155,15 +192,17 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
   );
 
   // ── Ödev formu ──────────────────────────────────────────
-  const formPaketleri: OdevPaketi[] = paketler;
-  const formKonulari: OdevKonusu[] = konular.map((k) => ({
-    id: k.id,
-    name: k.name,
-    ustAd: k.parent?.name ?? null,
-    examScope: k.examScope,
-    examScopes: k.examScopes,
-    soruSayisi: k._count.questions,
-  }));
+  const formPaketleri: OdevPaketi[] = paketler.filter((p) => p.kind !== "MOCK" || denemeHazir.get(p.id));
+  const formKonulari: OdevKonusu[] = konular
+    .map((k) => ({
+      id: k.id,
+      name: k.name,
+      ustAd: k.parent?.name ?? null,
+      examScope: k.examScope,
+      examScopes: k.examScopes,
+      soruSayisi: konuHavuzu(k),
+    }))
+    .filter((k) => k.soruSayisi > 0);
   const formOrtak = {
     groupId: grup.id,
     paketler: formPaketleri,
@@ -490,6 +529,11 @@ export default async function GrupPage({ params, searchParams }: PageProps<"/che
                           {!sayilir ? (
                             <span className="mt-1 block text-theme-xs" title="Orana sayılmıyor">
                               son tarihten sonra katıldı
+                            </span>
+                          ) : null}
+                          {i.bosGonderildi ? (
+                            <span className="mt-1 block text-theme-xs" title="Hiç işaret konmadan gönderilen test ödevi tamamlamaz">
+                              boş gönderildi
                             </span>
                           ) : null}
                         </TableCell>

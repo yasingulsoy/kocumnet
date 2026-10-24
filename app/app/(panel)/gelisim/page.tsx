@@ -4,7 +4,7 @@ import { ArrowRight, ChartLine, ClipboardList, Minus, Play, TrendingDown, Trendi
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
-import { aggregateTopics, type ResultLike } from "@/lib/insights";
+import { HARITA_EN_AZ_SORU, aggregateTopics, egilimeGirer, konuHaritasinaGirer, type ResultLike } from "@/lib/insights";
 import { EXAMS, daysUntilExam, examShort, isExamScope, type ExamScopeValue } from "@/lib/exams";
 import type { TopicBreakdown } from "@/lib/scoring";
 import { BasariEgilimi } from "@/components/BasariGrafikleri";
@@ -30,9 +30,12 @@ function bant(oran: number) {
 type Sonuc = ResultLike & {
   sessionId: string;
   packageName: string;
-  scope: string;
-  /** 5 soruluk konu kontrol testi — tek zayıf konuyu ölçer, genel seviyeyi değil. */
-  kontrol: boolean;
+  /** Sonucun sınavı (eski kayıtlarda paketin sınavı). Süzgeç (lib/insights.ts) bunu okur. */
+  examScope: string;
+  /** Oturum türü: eğilime yalnızca paket testi girer (egilimeGirer). */
+  kind: string;
+  /** Satırın bağlantısı: seviyeli aşamanın sonuç ekranı yok, karnesi var. */
+  href: string;
 };
 
 /**
@@ -74,6 +77,9 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
       session: {
         select: {
           kind: true,
+          levelRunId: true,
+          stageLevel: true,
+          stageKind: true,
           focusTopic: { select: { name: true } },
           package: { select: { name: true, examScope: true } },
         },
@@ -135,12 +141,18 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
 
   const tumu: Sonuc[] = ham.map((r) => ({
     sessionId: r.sessionId,
-    kontrol: r.session.kind === "TOPIC_RETEST",
+    kind: r.session.kind,
     packageName:
       r.session.kind === "TOPIC_RETEST" && r.session.focusTopic
         ? `${r.session.focusTopic.name} kontrol testi`
-        : r.session.package.name,
-    scope: r.examScope ?? r.session.package.examScope,
+        : r.session.kind === "LEVEL_STAGE" && r.session.stageLevel
+          ? `Seviyeli check-up · Seviye ${r.session.stageLevel}${r.session.stageKind === "REMEDIAL" ? " teyit turu" : ""}`
+          : r.session.package.name,
+    href:
+      r.session.kind === "LEVEL_STAGE" && r.session.levelRunId
+        ? "/seviye/" + r.session.levelRunId
+        : "/sonuc/" + r.sessionId,
+    examScope: r.examScope ?? r.session.package.examScope,
     correctCount: r.correctCount,
     wrongCount: r.wrongCount,
     blankCount: r.blankCount,
@@ -157,7 +169,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
    * paketinden %80 alıp AYT'den %40 alan öğrencinin "ortalaması" hiçbir şey
    * anlatmaz. Varsayılan öğrencinin hedef sınavı.
    */
-  const mevcutKapsamlar = [...new Set(tumu.map((r) => r.scope))].filter(isExamScope);
+  const mevcutKapsamlar = [...new Set(tumu.map((r) => r.examScope))].filter(isExamScope);
   const secili: ExamScopeValue | null =
     (isExamScope(tur) && mevcutKapsamlar.includes(tur) ? tur : null) ??
     (isExamScope(user.targetExam) && mevcutKapsamlar.includes(user.targetExam)
@@ -166,16 +178,19 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
     mevcutKapsamlar.at(-1) ??
     null;
 
-  const sonuclar = secili ? tumu.filter((r) => r.scope === secili) : tumu;
+  const sonuclar = secili ? tumu.filter((r) => r.examScope === secili) : tumu;
 
   /*
-   * Eğilim ve tahmini net yalnızca ÖLÇÜMLERDEN: 5 soruluk kontrol testi tek
-   * bir zayıf konuyu yeniden ölçüyor. Çizgiye girince plandaki kontrol
-   * testini çözen öğrencinin grafiği ve tahmini neti sebepsiz düşüyordu
-   * (koçluk modeli: kontrol testi ölçüm değil, doğrulama). Konu haritası ve
-   * test listesi ise hepsini kullanıyor.
+   * Eğilim ve tahmini net yalnızca ÖLÇÜMLERDEN: paket testi, işaretli
+   * (lib/insights.ts egilimeGirer). 5 soruluk kontrol testi tek bir zayıf
+   * konuyu yeniden ölçüyor; çizgiye girince plandaki kontrol testini çözen
+   * öğrencinin grafiği ve tahmini neti sebepsiz düşüyordu (koçluk modeli:
+   * kontrol testi ölçüm değil, doğrulama). Seviyeli aşamanın neti cezasız,
+   * tahmini neti şişiriyordu; boş gönderilen test sıfır. Konu haritası
+   * kontrol testini ve aşamayı da toplar (konuHaritasinaGirer); test listesi
+   * hepsini gösterir.
    */
-  const olcumler = sonuclar.filter((r) => !r.kontrol);
+  const olcumler = sonuclar.filter((r) => egilimeGirer(r, secili));
 
   const oran = (r: ResultLike) => {
     const t = r.correctCount + r.wrongCount + r.blankCount;
@@ -193,7 +208,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
     ayrinti: r.packageName + " · " + trNumber(r.netScore) + " net",
   }));
 
-  const konular = aggregateTopics(sonuclar).sort((a, b) => {
+  const konular = aggregateTopics(sonuclar.filter((r) => konuHaritasinaGirer(r, secili))).sort((a, b) => {
     // Ölçülebilenler önce, sonra en zayıftan güçlüye.
     if ((a.level === null) !== (b.level === null)) return a.level === null ? 1 : -1;
     return a.ratio - b.ratio;
@@ -300,7 +315,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           description={
             olcumler.length < 2
               ? "Grafik ikinci check-up'ından sonra anlam kazanır."
-              : "Her nokta bir check-up; 5 soruluk kontrol testleri çizgiye girmez."
+              : "Her nokta bir check-up; kontrol testleri ve seviyeli aşamalar çizgiye girmez."
           }
           actions={
             olcumler.length >= 2 ? (
@@ -341,7 +356,8 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
           >
             <KonuHaritasi konular={konular} />
             <p className="border-t border-gray-100 pt-4 text-theme-xs text-gray-500">
-              Seviye için bir konuda toplam en az 3 soru gerekir.
+              {/* Genel haritanın eşiği (insights.ts), tek testinkinden (scoring.ts MIN_FOR_LEVEL) yüksek. */}
+              Seviye için bir konuda toplam en az {HARITA_EN_AZ_SORU} soru gerekir.
             </p>
           </ComponentCard>
 
@@ -373,7 +389,7 @@ export default async function ProgressPage({ searchParams }: PageProps<"/gelisim
                     <TableRow key={r.sessionId} hover className="relative">
                       <TableCell className="w-full max-w-0 min-w-36">
                         <Link
-                          href={"/sonuc/" + r.sessionId}
+                          href={r.href}
                           className="block truncate font-medium text-gray-800 after:absolute after:inset-0"
                         >
                           {r.packageName}

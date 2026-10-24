@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { ayarGetir, karneBasligi, type Seviye } from "@/lib/levels";
+import { telafiIcinBulunabilir } from "@/lib/level-selection";
+import { ayarGetir, karneBasligi, seviye1AnaKarar, type Seviye } from "@/lib/levels";
 import type { ExamScopeValue } from "@/lib/exams";
 
 /**
@@ -44,7 +45,7 @@ export interface SeviyeKarnesi {
   runId: string;
   examScope: ExamScopeValue;
   baslik: string;
-  durum: "IN_PROGRESS" | "COMPLETED" | "STOPPED";
+  durum: "IN_PROGRESS" | "COMPLETED" | "STOPPED" | "ABANDONED";
   ulasilanSeviye: number;
   durduguSeviye: number | null;
   asamalar: AsamaOzeti[];
@@ -219,9 +220,17 @@ export async function seviyeKarnesi(
 /** Bir sonraki adımın ne olduğu — deneme sayfası buna göre çiziliyor. */
 export type SonrakiAdim =
   | { tur: "DEVAM_EDEN_ASAMA"; sessionId: string }
-  | { tur: "TELAFI_BEKLIYOR"; kazanimSayisi: number }
+  | {
+      tur: "TELAFI_BEKLIYOR";
+      kazanimSayisi: number;
+      /** Turda gerçekten sorulabilecek soru (tek sorulu kazanımın yeni sorusu yok). */
+      soruSayisi: number;
+      /** false: tur açılmayacak, "Devam" kararı ilk turla verir (lib/level-run.ts telafiyiAc). */
+      acilacak: boolean;
+    }
   | { tur: "SEVIYE_HAZIR"; seviye: Seviye }
   | { tur: "DURDU"; seviye: Seviye }
+  | { tur: "BIRAKILDI" }
   | { tur: "BITTI" };
 
 export async function sonrakiAdim(runId: string, userId: string): Promise<SonrakiAdim | null> {
@@ -235,12 +244,22 @@ export async function sonrakiAdim(runId: string, userId: string): Promise<Sonrak
       pendingRemedialIds: true,
       examScope: true,
       stages: {
-        select: { id: true, status: true, stageLevel: true, stageKind: true },
+        select: {
+          id: true,
+          status: true,
+          stageLevel: true,
+          stageKind: true,
+          result: { select: { correctCount: true, wrongCount: true, blankCount: true } },
+        },
         orderBy: { startedAt: "asc" },
       },
     },
   });
   if (!run || run.userId !== userId) return null;
+
+  // Bırakılan koşunun açık aşaması da bırakıldı (lib/level-run.ts kosuyuBirak);
+  // yine de önce duruma bakılır: bırakılmış koşu teste yönlendirmesin.
+  if (run.status === "ABANDONED") return { tur: "BIRAKILDI" };
 
   const acik = run.stages.find((s) => s.status === "IN_PROGRESS");
   if (acik) return { tur: "DEVAM_EDEN_ASAMA", sessionId: acik.id };
@@ -251,7 +270,31 @@ export async function sonrakiAdim(runId: string, userId: string): Promise<Sonrak
   if (run.status === "COMPLETED") return { tur: "BITTI" };
 
   if (run.pendingRemedialIds.length > 0) {
-    return { tur: "TELAFI_BEKLIYOR", kazanimSayisi: run.pendingRemedialIds.length };
+    /*
+     * Ekrandaki "N soruluk tur" bulunabilecek soruya göre: eksik kazanım
+     * sayısı, havuz darken açılmayacak bir turu vaat ediyordu. Kısa devre de
+     * aynı sayıyla (telafiyiAc'ın vereceği karar).
+     */
+    const scope = run.examScope as ExamScopeValue;
+    const gosterilmis = await prisma.sessionItem.findMany({
+      where: { session: { levelRunId: runId } },
+      select: { questionId: true },
+    });
+    const soruSayisi = await telafiIcinBulunabilir(
+      run.pendingRemedialIds,
+      scope,
+      gosterilmis.map((g) => g.questionId)
+    );
+    const ana = run.stages.find((s) => s.stageLevel === 1 && s.stageKind === "MAIN" && s.result)?.result;
+    const anaDogru = ana?.correctCount ?? 0;
+    const anaToplam = ana ? ana.correctCount + ana.wrongCount + ana.blankCount : 0;
+    const karar = seviye1AnaKarar(anaDogru, anaToplam, run.pendingRemedialIds, ayarGetir(scope), soruSayisi);
+    return {
+      tur: "TELAFI_BEKLIYOR",
+      kazanimSayisi: run.pendingRemedialIds.length,
+      soruSayisi,
+      acilacak: karar.tur === "TELAFI",
+    };
   }
 
   return { tur: "SEVIYE_HAZIR", seviye: run.unlockedLevel as Seviye };

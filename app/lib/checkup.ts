@@ -12,7 +12,8 @@ import { checkPackageAccess } from "@/lib/entitlements";
 import { planOlustur, retestIsiniKapat } from "@/lib/plan";
 import { konuSinavdaMi } from "@/lib/exam-scope";
 import { examShort } from "@/lib/exams";
-import { defteriGuncelle } from "@/lib/notebook";
+import { defteriGuncelle, dogruCikanlariKapat } from "@/lib/notebook";
+import { isaretsiz } from "@/lib/insights";
 // İnceleme (getCheckupReview) için: video, kazanım özeti, bildirim ve koça soru durumu.
 import { parseVideoUrl, safeParseQuestionContent, type VideoRef } from "@/lib/question-content";
 import { raporDurumlari } from "@/lib/hata-bildirimi";
@@ -27,6 +28,7 @@ import {
   type Karsilastirma,
 } from "@/lib/deneme";
 import { sureAnalizi, type SureAnaliziSonucu } from "@/lib/sure-analizi";
+import { maruziyetiYaz } from "@/lib/maruziyet";
 
 /**
  * Check-up akışı: başlat → cevapla → bitir.
@@ -251,31 +253,8 @@ export async function startCheckup(
       select: { id: true },
     });
 
-    /*
-     * Tekrar kaydı: aynı soru 30 gün içinde tekrar gelmesin.
-     *
-     * Tek tek upsert 24 ayrı gidiş-dönüş demekti ve hepsi de etkileşimli
-     * işlemin içindeydi; yavaş bağlantıda Prisma'nın 5 sn'lik işlem sınırına
-     * dayanıp testin başlamasını engelliyordu. Önce toplu güncelleme, sonra
-     * yalnızca eksikler için toplu ekleme: en fazla iki sorgu.
-     */
-    const questionIds = selection.questions.map((q) => q.id);
-    await tx.questionExposure.updateMany({
-      where: { userId, questionId: { in: questionIds } },
-      data: { lastShownAt: now, showCount: { increment: 1 } },
-    });
-    const mevcutlar = await tx.questionExposure.findMany({
-      where: { userId, questionId: { in: questionIds } },
-      select: { questionId: true },
-    });
-    const varOlan = new Set(mevcutlar.map((e) => e.questionId));
-    const yeniler = questionIds.filter((id) => !varOlan.has(id));
-    if (yeniler.length > 0) {
-      await tx.questionExposure.createMany({
-        data: yeniler.map((questionId) => ({ userId, questionId, lastShownAt: now })),
-        skipDuplicates: true,
-      });
-    }
+    // Tekrar kaydı: aynı soru 30 gün içinde tekrar gelmesin (lib/maruziyet.ts).
+    await maruziyetiYaz(tx, userId, selection.questions.map((q) => q.id), now);
 
     return session.id;
   });
@@ -322,6 +301,23 @@ export async function startTopicRetest(
   const now = new Date();
 
   /*
+   * Aynı konuda açık bir tekrar testi varsa ona devam et. Günlük sınırdan
+   * ÖNCE: sınırı dolduran öğrenci, açık bıraktığı teste geri dönemiyordu
+   * ("hakkın doldu" diyordu, oysa yeni test açmıyordu).
+   */
+  const acik = await prisma.checkupSession.findFirst({
+    where: {
+      userId,
+      kind: "TOPIC_RETEST",
+      focusTopicId: topicId,
+      status: "IN_PROGRESS",
+      expiresAt: { gt: now },
+    },
+    select: { id: true },
+  });
+  if (acik) return acik.id;
+
+  /*
    * Kontrol testi yalnızca ÖLÇÜLMÜŞ konuda açılır.
    *
    * İki sebep var. Ürün sebebi: "kontrol" demek, daha önce ölçülen bir şeyi
@@ -362,19 +358,6 @@ export async function startTopicRetest(
     );
   }
 
-  // Aynı konuda açık bir tekrar testi varsa ona devam et.
-  const acik = await prisma.checkupSession.findFirst({
-    where: {
-      userId,
-      kind: "TOPIC_RETEST",
-      focusTopicId: topicId,
-      status: "IN_PROGRESS",
-      expiresAt: { gt: now },
-    },
-    select: { id: true },
-  });
-  if (acik) return acik.id;
-
   const secim = await selectQuestionsForTopic(topicId, paket.questionCount, userId, examScope);
   if (secim.questions.length < paket.questionCount) {
     throw new CheckupError(
@@ -408,23 +391,7 @@ export async function startTopicRetest(
       select: { id: true },
     });
 
-    const ids = secim.questions.map((q) => q.id);
-    await tx.questionExposure.updateMany({
-      where: { userId, questionId: { in: ids } },
-      data: { lastShownAt: now, showCount: { increment: 1 } },
-    });
-    const mevcut = await tx.questionExposure.findMany({
-      where: { userId, questionId: { in: ids } },
-      select: { questionId: true },
-    });
-    const varOlan = new Set(mevcut.map((e) => e.questionId));
-    const yeniler = ids.filter((id) => !varOlan.has(id));
-    if (yeniler.length > 0) {
-      await tx.questionExposure.createMany({
-        data: yeniler.map((questionId) => ({ userId, questionId, lastShownAt: now })),
-        skipDuplicates: true,
-      });
-    }
+    await maruziyetiYaz(tx, userId, secim.questions.map((q) => q.id), now);
 
     return session.id;
   });
@@ -658,6 +625,18 @@ export async function getSessionState(sessionId: string, userId: string): Promis
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Bir cevabın doğruluğu: seçilen şıkkın GÜNCEL anahtarı; boşta null.
+ *
+ * Tek tanım; cevap kaydı (saveAnswer), bitiş ve yeniden puanlama
+ * (sonucuHesapla) bunu kullanır. Kayıt anındaki değer Answer.isCorrect'e
+ * yazılır ama son söz bitişindir: test açıkken panelde anahtar düzeltilirse
+ * bitiş güncel anahtarla puanlar, bitmiş testi de bakım yeniden puanlar.
+ */
+function cevapDogruMu(secilen: { isCorrect: boolean } | null | undefined): boolean | null {
+  return secilen ? secilen.isCorrect : null;
+}
+
+/**
  * Cevabı kaydeder. Doğruluk SUNUCUDA hesaplanır.
  * `choiceId: null` işareti kaldırmak (boş bırakmak) demektir.
  */
@@ -700,7 +679,7 @@ export async function saveAnswer(args: {
       select: { isCorrect: true },
     });
     if (!choice) throw new CheckupError("Geçersiz şık.");
-    isCorrect = choice.isCorrect;
+    isCorrect = cevapDogruMu(choice);
   }
 
   /*
@@ -791,6 +770,132 @@ async function sureleriBirlestir(
   ]);
 }
 
+/** Puanlamanın bir sorudan gördüğü. */
+export interface PuanlananMadde {
+  questionId: string;
+  /** Cevap satırı; hiç dokunulmamış soruda null. */
+  answerId: string | null;
+  choiceId: string | null;
+  /** Kayıttaki doğruluk (Answer.isCorrect). */
+  kayitli: boolean | null;
+  /** Seçilen şıkkın GÜNCEL anahtarına göre doğruluk; boşta null (cevapDogruMu). */
+  dogru: boolean | null;
+}
+
+export interface HesaplananSonuc {
+  score: CheckupScore;
+  maddeler: PuanlananMadde[];
+}
+
+/**
+ * Bir oturumun sonucunu GÜNCEL cevap anahtarıyla hesaplar; hiçbir şey yazmaz.
+ *
+ * Bitiş (submitCheckup) ve yeniden puanlama (yenidenPuanla) bu tek hesabı
+ * kullanır: iki ayrı yazım er geç ayrışır ve yeniden puanlanan sonuç, aynı
+ * cevaplarla bugün bitirilen testten farklı çıkardı. `db` işlem içinden
+ * çağrılabilsin diye parametre.
+ */
+export async function sonucuHesapla(
+  sessionId: string,
+  db: Prisma.TransactionClient = prisma
+): Promise<HesaplananSonuc> {
+  const s = await db.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      penaltyRatio: true,
+      items: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          questionId: true,
+          question: {
+            select: {
+              targetTimeSeconds: true,
+              topic: {
+                select: {
+                  id: true,
+                  slug: true,
+                  name: true,
+                  recommendedProductIds: true,
+                  parent: { select: { id: true, slug: true, name: true } },
+                },
+              },
+            },
+          },
+          answer: {
+            select: {
+              id: true,
+              isCorrect: true,
+              timeSpentMs: true,
+              choiceId: true,
+              choice: { select: { isCorrect: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!s) throw new CheckupError("Oturum bulunamadı.");
+
+  const maddeler: PuanlananMadde[] = s.items.map((item) => ({
+    questionId: item.questionId,
+    answerId: item.answer?.id ?? null,
+    choiceId: item.answer?.choiceId ?? null,
+    kayitli: item.answer?.isCorrect ?? null,
+    // Cevap satırı yoksa ya da şık seçilmemişse boş bırakılmış demektir.
+    dogru: cevapDogruMu(item.answer?.choice),
+  }));
+
+  const scored: ScoredAnswer[] = s.items.map((item, i) => ({
+    topicId: item.question.topic.id,
+    topicSlug: item.question.topic.slug,
+    topicName: item.question.topic.name,
+    parentId: item.question.topic.parent?.id ?? null,
+    parentSlug: item.question.topic.parent?.slug ?? null,
+    parentName: item.question.topic.parent?.name ?? null,
+    isCorrect: maddeler[i].dogru,
+    timeSpentMs: item.answer?.timeSpentMs ?? 0,
+    targetTimeSeconds: item.question.targetTimeSeconds,
+    recommendedProductIds: item.question.topic.recommendedProductIds,
+  }));
+
+  return { score: scoreCheckup(scored, Number(s.penaltyRatio)), maddeler };
+}
+
+/**
+ * Kayıttaki doğruluğu (Answer.isCorrect) güncel anahtara eşitler; değişen
+ * maddeleri döndürür. En fazla üç toplu sorgu (doğru / yanlış / boş).
+ */
+async function dogruluguEsitle(
+  db: Prisma.TransactionClient,
+  maddeler: readonly PuanlananMadde[]
+): Promise<PuanlananMadde[]> {
+  const farkli = maddeler.filter((m) => m.answerId !== null && m.kayitli !== m.dogru);
+  for (const deger of [true, false, null] as const) {
+    const ids = farkli.filter((m) => m.dogru === deger).map((m) => m.answerId!);
+    if (ids.length > 0) {
+      await db.answer.updateMany({ where: { id: { in: ids } }, data: { isCorrect: deger } });
+    }
+  }
+  return farkli;
+}
+
+/** Sonuç satırının puanlamadan gelen alanları (bitişte yazılır, yeniden puanlamada güncellenir). */
+function sonucAlanlari(score: CheckupScore) {
+  return {
+    correctCount: score.correctCount,
+    wrongCount: score.wrongCount,
+    blankCount: score.blankCount,
+    netScore: score.netScore.toFixed(2),
+    totalTimeMs: score.totalTimeMs,
+    // Prisma'nın Json girişi indeks imzalı bir tip bekliyor; arayüzümüze
+    // indeks imzası eklemek her alanı `unknown` yapardı. Dönüşüm sadece
+    // bu sınırda.
+    topicBreakdown: score.topicBreakdown as unknown as Prisma.InputJsonValue,
+    recommendedProductIds: score.recommendedProductIds,
+    scoringVersion: score.scoringVersion,
+  };
+}
+
 /**
  * Testi kapatır ve sonucu hesaplar. Süre dolmuşsa da çalışır (otomatik bitiş):
  * öğrencinin cevapları kaybolmaz.
@@ -822,31 +927,9 @@ export async function submitCheckup(
       id: true,
       userId: true,
       status: true,
-      expiresAt: true,
-      penaltyRatio: true,
       kind: true,
       focusTopicId: true,
       package: { select: { examScope: true } },
-      items: {
-        select: {
-          questionId: true,
-          question: {
-            select: {
-              targetTimeSeconds: true,
-              topic: {
-                select: {
-                  id: true,
-                  slug: true,
-                  name: true,
-                  recommendedProductIds: true,
-                  parent: { select: { id: true, slug: true, name: true } },
-                },
-              },
-            },
-          },
-          answer: { select: { isCorrect: true, timeSpentMs: true, choiceId: true } },
-        },
-      },
     },
   });
 
@@ -866,21 +949,12 @@ export async function submitCheckup(
     throw new CheckupError("Bu test kapandı.", "KAPANDI");
   }
 
-  const scored: ScoredAnswer[] = session.items.map((item) => ({
-    topicId: item.question.topic.id,
-    topicSlug: item.question.topic.slug,
-    topicName: item.question.topic.name,
-    parentId: item.question.topic.parent?.id ?? null,
-    parentSlug: item.question.topic.parent?.slug ?? null,
-    parentName: item.question.topic.parent?.name ?? null,
-    // Cevap satırı yoksa boş bırakılmış demektir.
-    isCorrect: item.answer?.isCorrect ?? null,
-    timeSpentMs: item.answer?.timeSpentMs ?? 0,
-    targetTimeSeconds: item.question.targetTimeSeconds,
-    recommendedProductIds: item.question.topic.recommendedProductIds,
-  }));
-
-  const score = scoreCheckup(scored, Number(session.penaltyRatio));
+  /*
+   * Doğruluk BİTİŞTE güncel anahtardan hesaplanır (sonucuHesapla). Cevap
+   * kaydedildikten sonra panelde anahtar düzeltildiyse kayıttaki eski değer
+   * değil, düzeltilmiş anahtar sayılır; kayıt da aşağıda eşitlenir.
+   */
+  const { score, maddeler } = await sonucuHesapla(sessionId);
 
   const simdi = new Date();
 
@@ -891,23 +965,16 @@ export async function submitCheckup(
       data: { status: "SUBMITTED", submittedAt: simdi },
     });
 
+    // İnceleme ekranı ve defter Answer.isCorrect'i okuyor: sonuçla aynı şeyi söylesinler.
+    await dogruluguEsitle(tx, maddeler);
+
     await tx.checkupResult.create({
       data: {
         sessionId,
         // Pano ve gelişim ekranı toplamları sınava göre ayırabilsin:
         // LGS, TYT ve KPSS sonuçlarını tek bir çizgide toplamak anlamsız.
         examScope: session.package.examScope,
-        correctCount: score.correctCount,
-        wrongCount: score.wrongCount,
-        blankCount: score.blankCount,
-        netScore: score.netScore.toFixed(2),
-        totalTimeMs: score.totalTimeMs,
-        // Prisma'nın Json girişi indeks imzalı bir tip bekliyor; arayüzümüze
-        // indeks imzası eklemek her alanı `unknown` yapardı. Dönüşüm sadece
-        // bu sınırda.
-        topicBreakdown: score.topicBreakdown as unknown as Prisma.InputJsonValue,
-        recommendedProductIds: score.recommendedProductIds,
-        scoringVersion: score.scoringVersion,
+        ...sonucAlanlari(score),
       },
     });
 
@@ -918,8 +985,8 @@ export async function submitCheckup(
      * ve yavaş bağlantıda işlem zaman aşımına uğrayıp bütün bitirme geri
      * alınıyordu — öğrenci testi bitiremiyordu.
      */
-    const dogruIds = session.items.filter((i) => i.answer?.isCorrect === true).map((i) => i.questionId);
-    const digerIds = session.items.filter((i) => i.answer?.isCorrect !== true).map((i) => i.questionId);
+    const dogruIds = maddeler.filter((m) => m.dogru === true).map((m) => m.questionId);
+    const digerIds = maddeler.filter((m) => m.dogru !== true).map((m) => m.questionId);
 
     if (dogruIds.length > 0) {
       await tx.question.updateMany({
@@ -934,8 +1001,8 @@ export async function submitCheckup(
       });
     }
 
-    const secilenler = session.items
-      .map((i) => i.answer?.choiceId)
+    const secilenler = maddeler
+      .map((m) => m.choiceId)
       .filter((id): id is string => Boolean(id));
     if (secilenler.length > 0) {
       await tx.choice.updateMany({
@@ -962,37 +1029,71 @@ export async function submitCheckup(
   }
 
   /*
-   * Bitişten SONRA, işlemin dışında: koçluk katmanı.
-   * İşlemin içine almıyoruz — plan üretimi başarısız olsa bile öğrencinin
+   * Bitişten SONRA, işlemin dışında: oturumun türüne göre üç yol.
+   *
+   * Bu blok yalnızca sonucu YAZAN çağrıda çalışır: yarışı kaybeden (çift
+   * bitirme, cron ile "Bitir" aynı anda) yukarıda erken döndü. Kapı, plan ve
+   * kontrol testi işi bu yüzden bir kez işlenir.
+   *
+   * İşlemin içine almıyoruz — kapı ya da plan başarısız olsa bile öğrencinin
    * sonucu yazılmış olmalı.
    */
-  try {
-    if (session.kind === "TOPIC_RETEST" && session.focusTopicId) {
-      // Plandaki kontrol testi işini kapat (öğrenci elle işaretleyemez).
-      await retestIsiniKapat({
-        userId,
-        topicId: session.focusTopicId,
-        sessionId,
-        now: simdi,
-      });
-    } else {
-      await planOlustur({
-        userId,
-        sessionId,
-        examScope: session.package.examScope,
-        breakdown: score.topicBreakdown,
-        now: simdi,
-      });
+  if (session.kind === "LEVEL_STAGE") {
+    /*
+     * Seviyeli aşama → kapı değerlendirmesi. Eskiden yalnızca öğrencinin
+     * "Bitir"inde (eylemde) çalışıyordu: süresi dolan aşamayı cron puanlıyor
+     * ama kapıya kimse bakmıyordu; koşu takılıyor, aynı seviye yeniden
+     * açılıyordu. Boş aşamada da çalışır: boş bırakmak kapıdan kalmaktır
+     * (işaretsiz kuralı kapıya uygulanmaz). Aşamadan plan KURULMAZ: aday
+     * sınavın ortasında, "bu hafta şunu çalış" yanlış olur.
+     *
+     * Dinamik import: level-run.ts bu dosyadan CheckupError alıyor; statik
+     * import döngü kurardı.
+     */
+    try {
+      const { asamaDegerlendir } = await import("@/lib/level-run");
+      await asamaDegerlendir(sessionId, userId);
+    } catch (e) {
+      // Bakım işi (level-run.ts seviyeliKapilariOnar) kapısız kalan aşamayı yeniden dener.
+      console.error("Seviye kapısı değerlendirilemedi:", sessionId, e);
     }
-  } catch (e) {
-    console.error("Koçluk planı üretilemedi:", e);
+  } else if (!isaretsiz(score)) {
+    /*
+     * Hiç işaret konmadan kapanan test (boş gönderim, cron'un kapattığı
+     * terk edilmiş test) ölçüm değil: plandaki kontrol testi işini kapatmaz,
+     * bütün konuları "zayıf" sayan bir plan kurmaz (lib/insights.ts isaretsiz).
+     */
+    try {
+      if (session.kind === "TOPIC_RETEST") {
+        // Plandaki kontrol testi işini kapat (öğrenci elle işaretleyemez).
+        if (session.focusTopicId) {
+          await retestIsiniKapat({
+            userId,
+            topicId: session.focusTopicId,
+            sessionId,
+            now: simdi,
+          });
+        }
+      } else if (session.kind === "PACKAGE") {
+        await planOlustur({
+          userId,
+          sessionId,
+          examScope: session.package.examScope,
+          breakdown: score.topicBreakdown,
+          now: simdi,
+        });
+      }
+    } catch (e) {
+      console.error("Koçluk planı üretilemedi:", e);
+    }
   }
 
   /*
    * Yanlış defteri: yanlış ve boşlar aralıklı tekrara girer (lib/notebook.ts).
    * Plandan ayrı korumada: biri başarısız olursa öteki yine yazılsın. İşlev
    * idempotent; aynı test ikinci kez işlense de madde çoğalmaz, ilerleme
-   * sıfırlanmaz. Cron'un puanladığı süresi dolmuş testler de buradan geçer.
+   * sıfırlanmaz. Cron'un puanladığı süresi dolmuş testler de buradan geçer;
+   * işaretsiz testi defter kendisi atlar.
    */
   try {
     await defteriGuncelle(sessionId);
@@ -1159,35 +1260,262 @@ export async function getCheckupReview(
 }
 
 /**
+ * Bir bakım çağrısında en fazla kaç süresi dolmuş oturum işlenir. Uzun bir
+ * kesintiden sonra yüzlerce oturum birikmiş olabilir; hepsini tek çağrıda
+ * puanlamak çağrıyı zaman aşımına sokar. En eskiler önce, kalanı sonraki
+ * çağrıda (15 dakika).
+ */
+const BAKIM_OTURUM_SINIRI = 200;
+
+/**
  * Süresi dolmuş ama bitirilmemiş oturumları kapatır ve sonuçlarını üretir.
  * Kayıt toleransı içindeki oturumlara dokunmaz: yoldaki son cevap yazılabilsin.
+ *
+ * Bir oturumun hatası öbürlerini durdurmaz ve YUTULMAZ: oturum kimliğiyle
+ * günlüğe yazılır. Eskiden `catch {}` hatayı sessizce EXPIRED'a çeviriyordu;
+ * yedek güncelleme de düşerse döngünün geri kalanı hiç çalışmıyordu.
  */
 export async function expireStaleSessions(): Promise<number> {
   const stale = await prisma.checkupSession.findMany({
     where: { status: "IN_PROGRESS", expiresAt: { lt: new Date(Date.now() - KAYIT_TOLERANSI_MS) } },
+    orderBy: { expiresAt: "asc" },
+    take: BAKIM_OTURUM_SINIRI,
     select: { id: true, userId: true, kind: true },
   });
 
   for (const s of stale) {
-    if (s.kind === "PRACTICE") {
-      // Alıştırma puanlanmaz: yalnızca kapanır. Cevaplanan sorular durur,
-      // cevaplanmayanların cevabı açılmaz (lib/practice.ts).
-      await prisma.checkupSession.updateMany({
-        where: { id: s.id, status: "IN_PROGRESS" },
-        data: { status: "EXPIRED" },
-      });
-      continue;
-    }
     try {
+      if (s.kind === "PRACTICE") {
+        // Alıştırma puanlanmaz: yalnızca kapanır. Cevaplanan sorular durur,
+        // cevaplanmayanların cevabı açılmaz (lib/practice.ts).
+        await prisma.checkupSession.updateMany({
+          where: { id: s.id, status: "IN_PROGRESS" },
+          data: { status: "EXPIRED" },
+        });
+        continue;
+      }
       await submitCheckup(s.id, s.userId);
-    } catch {
-      await prisma.checkupSession.update({
-        where: { id: s.id },
-        data: { status: "EXPIRED" },
-      });
+    } catch (e) {
+      console.error("[expireStaleSessions] puanlanamadı:", s.id, e);
+      // Yedek: oturum en azından kapansın (sınav ekranı "süre doldu" desin).
+      // Koşul IN_PROGRESS: arada öğrenci bitirdiyse SUBMITTED'ı ezmesin.
+      try {
+        await prisma.checkupSession.updateMany({
+          where: { id: s.id, status: "IN_PROGRESS" },
+          data: { status: "EXPIRED" },
+        });
+      } catch (e2) {
+        console.error("[expireStaleSessions] kapatılamadı:", s.id, e2);
+      }
     }
   }
   return stale.length;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Yeniden puanlama (cevap anahtarı sonradan düzeltilince)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Bakım yalnızca son bu kadar saatte güncellenmiş sorulara bakar (verim için).
+ * Cron 15 dakikada bir çalışıyor; pencere geniş ki birkaç kaçan çağrı ya da
+ * bir kesinti düzeltmeyi kaçırmasın.
+ */
+const YENIDEN_PUANLAMA_PENCERESI_SAAT = 24;
+/** Bir çağrıda en fazla kaç oturum; kalanı sonraki çağrıda. */
+const YENIDEN_PUANLAMA_OTURUM_SINIRI = 100;
+
+/** CheckupResult.rescoreNote'un biçimi. */
+export interface YenidenPuanlamaNotu {
+  /** İLK yeniden puanlamadan önceki sonuç; sonraki puanlamalarda korunur. */
+  onceki: { dogru: number; yanlis: number; bos: number; net: number };
+  /** Anahtarı düzeltilen farklı soru sayısı (bütün yeniden puanlamalar boyunca). */
+  soruSayisi: number;
+  /** Bu soruların kimlikleri: ikinci düzeltmede aynı soru iki kez sayılmasın. */
+  soruIdleri?: string[];
+}
+
+function notuOku(deger: unknown): YenidenPuanlamaNotu | null {
+  if (!deger || typeof deger !== "object") return null;
+  const n = deger as Partial<YenidenPuanlamaNotu>;
+  const o = n.onceki;
+  if (!o || typeof o.dogru !== "number" || typeof o.net !== "number") return null;
+  return {
+    onceki: { dogru: o.dogru, yanlis: Number(o.yanlis ?? 0), bos: Number(o.bos ?? 0), net: o.net },
+    soruSayisi: Number(n.soruSayisi ?? 0),
+    soruIdleri: Array.isArray(n.soruIdleri) ? n.soruIdleri.filter((x): x is string => typeof x === "string") : [],
+  };
+}
+
+/**
+ * Cevap anahtarı düzeltilen soruların BİTMİŞ oturumlarını yeniden puanlar
+ * (bakım işi, /api/cron).
+ *
+ * Tespit SÜRÜME göre değil UYUMSUZLUĞA göre: kayıttaki doğruluk
+ * (Answer.isCorrect) seçilen şıkkın güncel anahtarından farklıysa o cevap
+ * yeniden puanlanır. Böylece sürüm kuralı ne olursa olsun (içerik
+ * düzeltmesi sürüm artırmasa da) anahtar değişikliği kaçmaz; anahtar geri
+ * alınırsa sonuç da geri döner. SessionItem.questionVersion'a DOKUNULMAZ:
+ * panelin madde analizi onunla "hangi sürüm gösterildi"yi okuyor.
+ *
+ * Alıştırma hariç (ölçüm değil). Kapsam dışında kalanlar BİLEREK: plan,
+ * kapanmış kontrol testi işi, ödev tamamlanması, seri ve seviye kapısı o
+ * günkü sonuca göre verilmiş kararlar; geriye dönük değişmezler. Deneme
+ * yüzdeliği sonucu canlı okuduğu için kendiliğinden düzelir.
+ */
+export async function yenidenPuanla(
+  now = new Date()
+): Promise<{ oturum: number; cevap: number; hatali: number }> {
+  const sinir = new Date(now.getTime() - YENIDEN_PUANLAMA_PENCERESI_SAAT * 3_600_000);
+  const adaylar = await prisma.$queryRaw<{ sessionId: string }[]>`
+    SELECT DISTINCT si."sessionId"
+    FROM "Answer" a
+    JOIN "SessionItem" si ON si.id = a."sessionItemId"
+    JOIN "CheckupSession" s ON s.id = si."sessionId"
+    JOIN "Question" q ON q.id = si."questionId"
+    JOIN "Choice" c ON c.id = a."choiceId"
+    WHERE q."updatedAt" >= (${sinir.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+      AND s.status IN ('SUBMITTED', 'EXPIRED')
+      AND s.kind <> 'PRACTICE'
+      AND a."isCorrect" IS DISTINCT FROM c."isCorrect"
+    LIMIT ${YENIDEN_PUANLAMA_OTURUM_SINIRI}::int
+  `;
+
+  let oturum = 0;
+  let cevap = 0;
+  let hatali = 0;
+  for (const { sessionId } of adaylar) {
+    try {
+      const n = await oturumuYenidenPuanla(sessionId, now);
+      if (n > 0) {
+        oturum += 1;
+        cevap += n;
+      }
+    } catch (e) {
+      hatali += 1;
+      console.error("[yenidenPuanla] oturum yeniden puanlanamadı:", sessionId, e);
+    }
+  }
+  // Öbür oturumlar işlendi; bakım yanıtı yine de bu işi "düştü" göstersin.
+  if (hatali > 0) {
+    throw new Error(`${hatali} oturum yeniden puanlanamadı (${oturum} oturum, ${cevap} cevap düzeltildi).`);
+  }
+  return { oturum, cevap, hatali };
+}
+
+/**
+ * Tek oturumu yeniden puanlar; düzeltilen cevap sayısını döner (0: uyumsuzluk
+ * kalmamış). Sırası:
+ *  1. Answer.isCorrect güncel anahtara eşitlenir.
+ *  2. Sonuç aynı hesapla (sonucuHesapla) yeniden yazılır; rescoredAt ve
+ *     rescoreNote. `onceki` İLK yeniden puanlamada dolar, sonra korunur.
+ *  3. Sorunun doğru sayacı (Question.correctCount) düzeltilir: bitişte bu
+ *     oturum için +1 yazılmıştı ya da yazılmamıştı.
+ *  4. İşlemden sonra defter: artık doğru olan madde kapanır, artık yanlış
+ *     olan deftere girer (defteriGuncelle, idempotent).
+ * Sonucu hiç yazılamamış (EXPIRED) oturumda yalnızca 1. adım: sayaçlar o
+ * oturum için hiç artmamıştı.
+ */
+async function oturumuYenidenPuanla(sessionId: string, now: Date): Promise<number> {
+  const islem = await prisma.$transaction(async (tx) => {
+    // Aynı oturumu iki çağrı birlikte işlemesin (cron kilidi var; elle çağrı da olabilir).
+    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${sessionId} FOR UPDATE`;
+    const s = await tx.checkupSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        userId: true,
+        status: true,
+        kind: true,
+        result: {
+          select: { correctCount: true, wrongCount: true, blankCount: true, netScore: true, rescoreNote: true },
+        },
+      },
+    });
+    if (!s || s.kind === "PRACTICE" || (s.status !== "SUBMITTED" && s.status !== "EXPIRED")) return null;
+
+    const { score, maddeler } = await sonucuHesapla(sessionId, tx);
+    const farkli = await dogruluguEsitle(tx, maddeler);
+    if (farkli.length === 0 || !s.result) return { userId: s.userId, farkli, sonucVar: false };
+
+    const eski = notuOku(s.result.rescoreNote);
+    const soruIdleri = [...new Set([...(eski?.soruIdleri ?? []), ...farkli.map((m) => m.questionId)])];
+    const not: YenidenPuanlamaNotu = {
+      onceki: eski?.onceki ?? {
+        dogru: s.result.correctCount,
+        yanlis: s.result.wrongCount,
+        bos: s.result.blankCount,
+        net: Number(s.result.netScore),
+      },
+      soruSayisi: soruIdleri.length,
+      soruIdleri,
+    };
+    await tx.checkupResult.update({
+      where: { sessionId },
+      data: {
+        ...sonucAlanlari(score),
+        rescoredAt: now,
+        rescoreNote: not as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const artan = farkli.filter((m) => m.dogru === true).map((m) => m.questionId);
+    const azalan = farkli.filter((m) => m.kayitli === true).map((m) => m.questionId);
+    if (artan.length > 0) {
+      await tx.question.updateMany({ where: { id: { in: artan } }, data: { correctCount: { increment: 1 } } });
+    }
+    if (azalan.length > 0) {
+      await tx.question.updateMany({
+        where: { id: { in: azalan }, correctCount: { gt: 0 } },
+        data: { correctCount: { decrement: 1 } },
+      });
+    }
+    return { userId: s.userId, farkli, sonucVar: true };
+  });
+
+  if (!islem) return 0;
+  if (islem.sonucVar) {
+    const dogruCikan = islem.farkli.filter((m) => m.dogru === true).map((m) => m.questionId);
+    await dogruCikanlariKapat({ userId: islem.userId, sessionId, questionIds: dogruCikan, now });
+    await defteriGuncelle(sessionId);
+  }
+  return islem.farkli.length;
+}
+
+/** Sonuç ekranındaki "sonucun yeniden hesaplandı" bandının verisi. */
+export interface YenidenPuanlamaBilgisi {
+  tarih: Date;
+  soruSayisi: number;
+  onceki: { dogru: number; net: number };
+  simdi: { dogru: number; net: number };
+}
+
+/**
+ * Bu sonuç cevap anahtarı düzeltildiği için yeniden puanlandıysa bandın
+ * verisi; değilse ya da başkasının sonucuysa null. Cevap anahtarı içermez.
+ */
+export async function yenidenPuanlamaBilgisi(
+  sessionId: string,
+  userId: string
+): Promise<YenidenPuanlamaBilgisi | null> {
+  const r = await prisma.checkupResult.findUnique({
+    where: { sessionId },
+    select: {
+      correctCount: true,
+      netScore: true,
+      rescoredAt: true,
+      rescoreNote: true,
+      session: { select: { userId: true } },
+    },
+  });
+  if (!r || r.session.userId !== userId || !r.rescoredAt) return null;
+  const not = notuOku(r.rescoreNote);
+  if (!not || not.soruSayisi === 0) return null;
+  return {
+    tarih: r.rescoredAt,
+    soruSayisi: not.soruSayisi,
+    onceki: { dogru: not.onceki.dogru, net: not.onceki.net },
+    simdi: { dogru: r.correctCount, net: Number(r.netScore) },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────

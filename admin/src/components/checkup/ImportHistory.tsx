@@ -43,10 +43,10 @@ export function ImportHistoryShell({ children }: { children: ReactNode }) {
             {sonuc.korunan ? (
               <>
                 {" "}
-                {sonuc.korunan} soru öğrencilere sorulduğu (testte ya da alıştırmada) ya da bir denemenin listesinde
-                olduğu için korundu: silinseydi öğrencilerin cevapları, geçmiş sonuçları ve yanlış defterleri bozulur,
-                deneme eksik kalırdı. İstersen arşivle (yeni
-                testlere seçilmez, geçmişte durur).{" "}
+                {sonuc.korunan} soru öğrencilere sorulduğu (testte ya da alıştırmada), bir denemenin listesinde
+                olduğu ya da üzerinde not (inceleme notu, öğrenci bildirimi) bulunduğu için korundu: silinseydi
+                öğrencilerin cevapları, geçmiş sonuçları ve yanlış defterleri bozulur, deneme eksik kalır, notlar
+                giderdi. İstersen arşivle (yeni testlere seçilmez, geçmişte durur).{" "}
                 <Link
                   href={"/checkup/sorular?parti=" + encodeURIComponent(sonuc.partiId)}
                   className="font-semibold text-gray-800 underline underline-offset-2"
@@ -71,13 +71,19 @@ export function ImportRollbackButton({
   dosyaAdi,
   silinecek,
   korunacak,
+  notlu = 0,
+  duzenlenen = 0,
 }: {
   partiId: string;
   dosyaAdi: string;
-  /** Hiçbir teste girmemiş, silinecek soru sayısı. 0 ise yalnızca kayıt silinir. */
+  /** Silinecek soru sayısı (shared/question-import.ts GERI_ALMADA_SILINEBILIR). 0 ise yalnızca kayıt silinir. */
   silinecek: number;
-  /** Öğrenci testine girmiş, korunacak soru sayısı. */
+  /** Korunacak soru sayısı: öğrenciye sorulmuş, denemede ya da notlu. */
   korunacak: number;
+  /** Korunacaklardan yalnızca notu yüzünden kalanlar. */
+  notlu?: number;
+  /** Silineceklerden içe aktarmadan sonra düzenlenmiş olanlar (silinir; yalnızca bildirilir). */
+  duzenlenen?: number;
 }) {
   const bildir = useContext(SonucCtx);
   const onayla = useOnay();
@@ -98,9 +104,23 @@ export function ImportRollbackButton({
             description: (
               <>
                 {silinecek} soru silinecek (henüz hiçbir öğrenciye sorulmamış olanlar; yayındakiler dahil).
+                {duzenlenen || notlu ? (
+                  // Geri alma "dosyayı yanlış yükledim"in çaresi; arada emek harcanmışsa
+                  // onay vermeden önce bilinsin. Düzenlenen silinir, notlu korunur.
+                  <span className="mt-2 block font-medium text-gray-800">
+                    {[
+                      duzenlenen ? duzenlenen + " soru içe aktarmadan sonra düzenlenmiş (bunlar da silinir)" : null,
+                      notlu ? notlu + " soruda not var (bunlar silinmez)" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    .
+                  </span>
+                ) : null}
                 {korunacak ? (
                   <span className="mt-2 block">
-                    {korunacak} soru öğrencilere sorulduğu (testte ya da alıştırmada) ya da bir denemede olduğu için korunacak.
+                    {korunacak} soru öğrencilere sorulduğu (testte ya da alıştırmada), bir denemede olduğu ya da notu
+                    olduğu için korunacak.
                   </span>
                 ) : null}
               </>

@@ -5,6 +5,7 @@ import { Prisma } from "@/lib/checkup/generated/client";
 import { db } from "@/lib/checkup/db";
 import { ANY_STAFF, CONTENT_ROLES, MANAGE_ROLES, checkStaff } from "@/lib/checkup/staff";
 import { BLUEPRINT_KINDS, PACKAGE_STATE_LABEL, loadPackageHealth } from "@/lib/checkup/pool";
+import { sagliktanBaslatilabilir } from "@/lib/checkup/mock-rules";
 import { loadItemAnalysis } from "@/lib/checkup/item-analysis";
 import { acikBildirimSayisi } from "@/lib/checkup/student-reports";
 import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@/lib/checkup/format";
@@ -210,6 +211,9 @@ export default async function CheckupOverviewPage() {
   const yayindakiler = health.filter((p) => p.status === "PUBLISHED");
   const katalogYayinda = yayindakiler.filter((p) => BLUEPRINT_KINDS.includes(p.kind));
   const engelli = katalogYayinda.filter((p) => p.state === "blocked");
+  // Alarm denemeleri de sayar: yayındaki deneme öğrenciye "hazırlanıyor" diyorsa
+  // katalogda görünüp başlatılamıyor demek. Karar öğrencinin kuralı (mock-rules.ts).
+  const alarm = [...engelli, ...yayindakiler.filter((p) => p.kind === "MOCK" && !sagliktanBaslatilabilir(p))];
   const dar = katalogYayinda.filter((p) => p.state === "narrow").length;
   const hazir = katalogYayinda.filter((p) => p.state === "ready").length;
   const hazirOrani = katalogYayinda.length ? (hazir / katalogYayinda.length) * 100 : 0;
@@ -290,10 +294,10 @@ export default async function CheckupOverviewPage() {
         }
       />
 
-      {engelli.length > 0 ? (
+      {alarm.length > 0 ? (
         <Alert
           variant="error"
-          title={`Yayındaki ${engelli.length} paket başlatılamıyor`}
+          title={`Yayındaki ${alarm.length} paket başlatılamıyor`}
           className="mb-6"
           action={
             <ButtonLink href="/checkup/paketler" variant="outline" size="xs">
@@ -301,7 +305,8 @@ export default async function CheckupOverviewPage() {
             </ButtonLink>
           }
         >
-          {engelli.map((p) => p.name).join(", ")}. Öğrenci katalogda görüyor ama &quot;Başla&quot;ya basınca hata alır.
+          {alarm.map((p) => p.name).join(", ")}. Öğrenci katalogda görüyor ama başlatamıyor (&quot;Başla&quot;da hata alır;
+          denemede &quot;hazırlanıyor&quot; yazar).
         </Alert>
       ) : null}
 

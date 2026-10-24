@@ -3,12 +3,15 @@ import { Prisma } from "./generated/client";
 import { db } from "./db";
 import { sqlKendisiYaDaKonusuSinavda, sqlKonuSinavda } from "./exam-scope";
 import { MIN_L1_PER_OBJECTIVE, levelSizes } from "./levels";
+import { EXAM_SCOPES, LEGACY_EXAM_SCOPE } from "./shared/exams";
+import { S1_KAZANIM_EN_AZ_SORU } from "./shared/levels";
 import type { HavuzSayisi } from "./package-rules";
-import { denemeEngelleri } from "./mock-rules";
+import { denemeHazirlikEngelleri } from "./mock-rules";
 
 /** Ham sorgulardaki sınav ifadeleri (sütun; kullanıcı girdisi değil). */
 const PAKET_SINAVI = Prisma.raw('p."examScope"');
 const SEVIYELI_SINAV = Prisma.raw("lp.ex");
+const KAYNAK_SINAVI = Prisma.raw("k.ex");
 
 /**
  * Soru havuzunun sağlığı. Tek bir soruya cevap verir: **hangi paket gerçekten
@@ -102,11 +105,18 @@ export interface BlueprintRow {
 }
 
 export interface LevelReadiness {
-  /** Yayında ve bu sınavda ölçülen kazanım — seviye 1 bunlardan ilk l1Need tanesini sorar. */
+  /** Yayında ve bu sınavda ölçülen kazanım (sorusu olsun olmasın). */
   l1Total: number;
-  /** Yayında, bu sınavda ölçülen ve en az 2 yayında L1 sorusu olan kazanım. */
+  /**
+   * Öğrenciye GERÇEKTEN sorulacak kazanımlardan (sorulabilenlerin sıradaki
+   * ilk l1Need tanesi) en az MIN_L1_PER_OBJECTIVE yayında L1 sorusu olanlar:
+   * teyit turunda yeni soru bulabilen kazanım.
+   */
   l1Ready: number;
-  /** En az 1 L1 sorusu olan kazanım — sıfırsa seviye 1 hiç başlamaz. */
+  /**
+   * Sorulabilen kazanım: bu sınavda en az S1_KAZANIM_EN_AZ_SORU yayında L1
+   * sorusu var. l1Need'den azsa seviye 1 (ve koşu) hiç başlamaz.
+   */
   l1Any: number;
   l1Need: number;
   l2: number;
@@ -243,7 +253,7 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
     `,
     db.$queryRaw<RawLevel[]>(seviyeliHazirlikSorgusu()),
     // Deneme: sabit liste — kaç soru, kaçı yayında değil (duruma göre), kaçı
-    // paketin sınavında sorulamıyor. Kural lib/checkup/mock-rules.ts denemeEngelleri.
+    // paketin sınavında sorulamıyor. Kural lib/checkup/mock-rules.ts denemeHazirlikEngelleri (sınav dışı soru yalnızca uyarı, engel değil).
     db.$queryRaw<RawMock[]>`
       SELECT pq."packageId", q.status::text AS status,
              count(*)::int AS n,
@@ -314,7 +324,7 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
     if (kind === "MOCK") {
       // Konu dağılımı yok (PackageTopic satırı gerekmez): ölçü sabit listenin kendisi.
       const d = deneme.get(p.id) ?? { listede: 0, yayindaOlmayan: {}, sinavDisi: 0 };
-      const engeller = denemeEngelleri({ soruSayisi: p.questionCount, ...d });
+      const engeller = denemeHazirlikEngelleri({ soruSayisi: p.questionCount, ...d });
       return {
         ...base,
         gaps: [],
@@ -359,10 +369,18 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
         l3: Number(r?.l3 ?? 0),
         l3Need: hedef.seviye3,
       };
-      // Seviye 1'de hiç sorulu kazanım ya da üst seviyelerde hiç soru yoksa
-      // öğrenci bir kapıda "havuzda soru yok" hatasıyla durur.
-      const engel = s.l1Any === 0 || s.l2 === 0 || s.l3 === 0;
-      const dar = s.l1Ready < s.l1Need || s.l2 < s.l2Need || s.l3 < s.l3Need;
+      /*
+       * Öğrenci uygulamasıyla aynı kural (app/lib/level-selection.ts
+       * seviyeliHazirlik): koşu, üç seviyenin ana aşaması da TAM sayıyla
+       * açılabiliyorsa başlar. Eskiden "hiç soru yoksa engel" deniyordu;
+       * uygulama ise eksik soruyla aşama açıyordu. Şimdi uygulama eksik
+       * havuzda koşuyu hiç açmıyor: yayındaki paket öğrenciye "hazır değil"
+       * der, panel de bu yüzden yayına almaz.
+       * Dar: sorulacak kazanımların bir kısmında yedek soru yok (teyit turu
+       * kısmi açılır).
+       */
+      const engel = s.l1Any < s.l1Need || s.l2 < s.l2Need || s.l3 < s.l3Need;
+      const dar = s.l1Ready < s.l1Need;
       return {
         ...base,
         gaps: [],
@@ -370,7 +388,8 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
         level: s,
         state: engel ? "blocked" : dar ? "narrow" : "ready",
         summary:
-          "Seviye 1: " + s.l1Ready + "/" + s.l1Need + " kazanım hazır · " +
+          "Seviye 1: " + Math.min(s.l1Any, s.l1Need) + "/" + s.l1Need + " kazanım sorulabilir (" +
+          s.l1Ready + " tanesinde teyit turu için yedek soru var) · " +
           "Seviye 2: " + s.l2 + " soru (" + s.l2Need + " gerekli) · " +
           "Seviye 3: " + s.l3 + " soru (" + s.l3Need + " gerekli)",
       };
@@ -394,33 +413,79 @@ export async function loadPackageHealth(): Promise<PackageHealth[]> {
   });
 }
 
+/** Sınav → Seviye 1 soru sayısı (= sorulacak kazanım sayısı), SQL VALUES satırları. */
+function s1Ihtiyaci(): Prisma.Sql {
+  const sinavlar: string[] = [...EXAM_SCOPES, LEGACY_EXAM_SCOPE];
+  return Prisma.join(sinavlar.map((s) => Prisma.sql`(${s}::text, ${levelSizes(s).seviye1}::int)`));
+}
+
+/**
+ * Seviye 1'in kazanım kümesi — ÖĞRENCİ UYGULAMASIYLA AYNI küme ve AYNI sıra
+ * (app/lib/level-selection.ts sinavinKazanimlari):
+ *
+ *   s1obj     = yayında + bu sınavda ölçülen kazanımlar; her birinin bu
+ *               sınavda sorulabilen yayında L1 soru sayısı (l1)
+ *   s1uygun   = l1 >= S1_KAZANIM_EN_AZ_SORU olanlar, sıra numarasıyla
+ *               (konu sırası → konu slug'ı → kazanım sırası → kod)
+ *   s1sorulan = s1uygun'un ilk N'i (N = sınavın Seviye 1 soru sayısı):
+ *               öğrenciye GERÇEKTEN sorulacak kazanımlar
+ *
+ * Eskiden sayaç bütün kazanımları sayıyordu, öğrenciye ise ilk N soruluyordu:
+ * sayaç "hazır" derken sorulan kazanımların yedeği yoktu, ya da sorusuz
+ * kazanım sıradaki yeri doldurup aşamayı eksik açıyordu. Sıra değişirse
+ * (hocaya soruldu) app'teki orderBy ile buradaki ROW_NUMBER birlikte değişir.
+ *
+ * `kaynak`: (pid, ex) satırları veren alt sorgu — paket başına ya da tek sınav.
+ */
+function s1KazanimCteleri(kaynak: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`
+    kaynak AS (${kaynak}),
+    ihtiyac(ex, n) AS (VALUES ${s1Ihtiyaci()}),
+    s1obj AS (
+      SELECT k.pid, o.id AS oid,
+             (SELECT count(*) FROM "Question" q
+                JOIN "Topic" tq ON tq.id = q."topicId"
+               WHERE q."objectiveId" = o.id
+                 AND q.level = 'L1_TEMEL'
+                 AND q.status = 'PUBLISHED'
+                 AND ${sqlKendisiYaDaKonusuSinavda("q", "tq", KAYNAK_SINAVI)})::int AS l1,
+             t."sortOrder" AS tsira, t.slug AS tslug, o."sortOrder" AS osira, o.code AS kod
+      FROM kaynak k
+      JOIN "Objective" o ON o.status = 'PUBLISHED'
+      JOIN "Topic" t ON t.id = o."topicId"
+      WHERE ${sqlKendisiYaDaKonusuSinavda("o", "t", KAYNAK_SINAVI)}
+    ),
+    s1uygun AS (
+      SELECT s.pid, s.oid, s.l1,
+             ROW_NUMBER() OVER (PARTITION BY s.pid ORDER BY s.tsira, s.tslug, s.osira, s.kod) AS sira
+      FROM s1obj s
+      WHERE s.l1 >= ${S1_KAZANIM_EN_AZ_SORU}
+    ),
+    s1sorulan AS (
+      SELECT u.pid, u.oid, u.l1, u.sira
+      FROM s1uygun u
+      JOIN kaynak k ON k.pid = u.pid
+      JOIN ihtiyac i ON i.ex = k.ex::text
+      WHERE u.sira <= i.n
+    )`;
+}
+
 /**
  * Seviyeli paketlerin hazırlık sayımı — öğrenci uygulamasının seçimiyle aynı
  * küme (kural: shared/exam-scope.ts, SQL ikizi: lib/checkup/exam-scope.ts).
  *
- *   S1    = yayında + bu sınavda ölçülen kazanımlar; her biri için bu sınavda
- *           sorulabilen yayında L1 soruları (sinavinKazanimlari + kazanimBasinaBirSoru)
+ *   S1    = s1KazanimCteleri: sorulabilen kazanımlar (l1Any), sorulacak ilk N
+ *           içinde yedek sorusu olanlar (l1Ready) — sinavinKazanimlari +
+ *           kazanimBasinaBirSoru
  *   S2/S3 = bu sınavda sorulabilen yayında L2/L3 soruları (seviyeSorulari)
  *
  * Ayrı fonksiyon: karşılaştırma testi aynı sorguyu çalıştırabilsin diye.
  */
 export function seviyeliHazirlikSorgusu(): Prisma.Sql {
   return Prisma.sql`
-    WITH lp AS (
-      SELECT id, "examScope" AS ex FROM "Package" WHERE kind = 'LEVEL'
-    ),
-    obj AS (
-      SELECT lp.id AS pid,
-             (SELECT count(*) FROM "Question" q
-                JOIN "Topic" tq ON tq.id = q."topicId"
-               WHERE q."objectiveId" = o.id
-                 AND q.level = 'L1_TEMEL'
-                 AND q.status = 'PUBLISHED'
-                 AND ${sqlKendisiYaDaKonusuSinavda("q", "tq", SEVIYELI_SINAV)}) AS l1
-      FROM lp
-      JOIN "Objective" o ON o.status = 'PUBLISHED'
-      JOIN "Topic" t ON t.id = o."topicId"
-      WHERE ${sqlKendisiYaDaKonusuSinavda("o", "t", SEVIYELI_SINAV)}
+    WITH ${s1KazanimCteleri(Prisma.sql`SELECT id AS pid, "examScope" AS ex FROM "Package" WHERE kind = 'LEVEL'`)},
+    lp AS (
+      SELECT pid AS id, ex FROM kaynak
     ),
     lv AS (
       SELECT lp.id AS pid, q.level::text AS level, count(*)::int AS n
@@ -431,13 +496,47 @@ export function seviyeliHazirlikSorgusu(): Prisma.Sql {
       GROUP BY lp.id, q.level
     )
     SELECT lp.id AS "packageId",
-           (SELECT count(*) FROM obj WHERE obj.pid = lp.id)::int AS "l1Total",
-           (SELECT count(*) FROM obj WHERE obj.pid = lp.id AND obj.l1 >= ${MIN_L1_PER_OBJECTIVE})::int AS "l1Ready",
-           (SELECT count(*) FROM obj WHERE obj.pid = lp.id AND obj.l1 >= 1)::int AS "l1Any",
+           (SELECT count(*) FROM s1obj WHERE s1obj.pid = lp.id)::int AS "l1Total",
+           (SELECT count(*) FROM s1sorulan WHERE s1sorulan.pid = lp.id AND s1sorulan.l1 >= ${MIN_L1_PER_OBJECTIVE})::int AS "l1Ready",
+           (SELECT count(*) FROM s1uygun WHERE s1uygun.pid = lp.id)::int AS "l1Any",
            COALESCE((SELECT n FROM lv WHERE lv.pid = lp.id AND lv.level = 'L2_ORTA'), 0)::int AS l2,
            COALESCE((SELECT n FROM lv WHERE lv.pid = lp.id AND lv.level = 'L3_ANALIZ'), 0)::int AS l3
     FROM lp
   `;
+}
+
+export interface Seviye1Kumesi {
+  /** Sınavın Seviye 1 soru sayısı = sorulacak kazanım sayısı. */
+  gerekli: number;
+  /** Sorulabilen kazanım (en az S1_KAZANIM_EN_AZ_SORU yayında L1 sorusu). */
+  uygun: number;
+  /** Öğrenciye gerçekten sorulacak kazanımlar (uygunların sıradaki ilk N'i). */
+  sorulacak: Set<string>;
+  /** Sorulacaklardan teyit turu için yedek sorusu olan (en az MIN_L1_PER_OBJECTIVE). */
+  hazir: number;
+  /** Sorulacaklardan tek sorulu olan: teyit turunda yeni soru gelemez. */
+  tekSorulu: number;
+}
+
+/**
+ * Bir sınavın Seviye 1 kümesi — paket sağlığıyla (seviyeliHazirlikSorgusu)
+ * aynı CTE'ler. Kazanımlar ekranı sayacı buradan alır; ekrandaki süzgeçler
+ * (özet kartı olmayanlar) sayacı değiştirmez.
+ */
+export async function seviye1Kumesi(sinav: string): Promise<Seviye1Kumesi> {
+  const satirlar = await db.$queryRaw<{ oid: string; l1: number; sorulacak: boolean }[]>`
+    WITH ${s1KazanimCteleri(Prisma.sql`SELECT 'tek'::text AS pid, ${sinav}::"ExamScope" AS ex`)}
+    SELECT u.oid, u.l1, EXISTS (SELECT 1 FROM s1sorulan s WHERE s.oid = u.oid) AS sorulacak
+    FROM s1uygun u
+  `;
+  const sorulacaklar = satirlar.filter((r) => r.sorulacak);
+  return {
+    gerekli: levelSizes(sinav).seviye1,
+    uygun: satirlar.length,
+    sorulacak: new Set(sorulacaklar.map((r) => r.oid)),
+    hazir: sorulacaklar.filter((r) => Number(r.l1) >= MIN_L1_PER_OBJECTIVE).length,
+    tekSorulu: sorulacaklar.filter((r) => Number(r.l1) < MIN_L1_PER_OBJECTIVE).length,
+  };
 }
 
 // Zorluk bandı hedefleri saf kurallar modülünde (paket düzenleyici istemcide de kullanıyor).

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { setQuestionsStatusAction } from "@/lib/checkup/actions/questions";
 import { QUESTION_STATUS_LABEL } from "@/lib/checkup/format";
+import { KILITLI_DENEME_MESAJI } from "@/lib/checkup/mock-rules";
 import { cx } from "@/components/tailadmin/cx";
 import { Checkbox } from "@/components/tailadmin/form/Checkbox";
 import { useSidebar } from "@/components/tailadmin/layout/SidebarContext";
@@ -64,16 +65,22 @@ const EYLEMLER: { status: string; etiket: string; variant: ButtonVariant; onay?:
 ];
 
 /**
- * `denemeleri`: yayındaki ve bir denemede olan soruların deneme adları (soru
- * kimliği → adlar). Yayından kaldıran toplu işlemden önce uyarılır.
+ * `denemeleri`: yayındaki ve BAŞLATILMAMIŞ bir denemede olan soruların deneme
+ * adları (soru kimliği → adlar). Yayından kaldıran toplu işlemden önce uyarılır.
+ *
+ * `kilitliler`: yayındaki ve başlatılmış bir denemede olan sorular. Yayından
+ * kaldıran toplu işlem onları ATLAR (sunucu da atlar ve sayısını döner);
+ * onayda kaç tanesinin yayında kalacağı söylenir.
  */
 export function BulkProvider({
   ids,
   denemeleri = {},
+  kilitliler = {},
   children,
 }: {
   ids: string[];
   denemeleri?: Record<string, string[]>;
+  kilitliler?: Record<string, string[]>;
   children: ReactNode;
 }) {
   const [ham, setHam] = useState<Set<string>>(() => new Set());
@@ -104,9 +111,25 @@ export function BulkProvider({
   const uygula = async (status: string, onay?: (n: number) => ConfirmOptions) => {
     const liste = [...secili];
     if (liste.length === 0) return;
+    const kaldiriliyor = status !== "PUBLISHED";
+    // Başlatılmış denemenin sorusu yayında kalır (sunucu da atlar).
+    const kilitli = kaldiriliyor ? liste.filter((id) => kilitliler[id]?.length) : [];
+    if (kilitli.length === liste.length) {
+      toast.error(
+        (liste.length === 1 ? "" : "Seçilen " + liste.length + " sorunun hepsi başlatılmış denemelerde. ") + KILITLI_DENEME_MESAJI,
+        { duration: 8000 }
+      );
+      return;
+    }
+    const kilitNotu = kilitli.length
+      ? kilitli.length +
+        " soru başlatılmış bir denemede (" +
+        [...new Set(kilitli.flatMap((id) => kilitliler[id]))].join(", ") +
+        "): yayında kalır, yanlışsa düzeltilir. "
+      : "";
     // Denemedeki yayında soru yayından kalkarsa deneme eksik kalır: bu uyarı
     // eylemin kendi onayının yerine geçer (ikisini art arda sormayalım).
-    const denemedeki = status === "PUBLISHED" ? [] : liste.filter((id) => denemeleri[id]?.length);
+    const denemedeki = kaldiriliyor ? liste.filter((id) => denemeleri[id]?.length && !kilitliler[id]?.length) : [];
     if (denemedeki.length) {
       const adlar = [...new Set(denemedeki.flatMap((id) => denemeleri[id]))];
       const evet = await onayla({
@@ -115,8 +138,17 @@ export function BulkProvider({
           adlar.join(", ") +
           ". " +
           QUESTION_STATUS_LABEL[status] +
-          " durumuna alırsan bu denemeler eksik kalır ve öğrenci başlatamaz.",
+          " durumuna alırsan bu denemeler eksik kalır ve öğrenci başlatamaz." +
+          (kilitNotu ? " " + kilitNotu : ""),
         confirmLabel: "Yine de değiştir",
+        tone: "warning",
+      });
+      if (!evet) return;
+    } else if (kilitNotu) {
+      const evet = await onayla({
+        title: liste.length - kilitli.length + " soru " + QUESTION_STATUS_LABEL[status].toLocaleLowerCase("tr-TR") + " durumuna alınsın mı?",
+        description: kilitNotu + "Ötekiler değişir.",
+        confirmLabel: "Ötekileri değiştir",
         tone: "warning",
       });
       if (!evet) return;
@@ -134,6 +166,7 @@ export function BulkProvider({
           ? "Seçilen soruların hepsi zaten " + QUESTION_STATUS_LABEL[status].toLocaleLowerCase("tr-TR") + "."
           : degisen + " soru: " + QUESTION_STATUS_LABEL[status]
       );
+      if (res.kilitli) toast.error(res.kilitli + " soru başlatılmış bir denemede olduğu için yayında kaldı.", { duration: 6000 });
       setHam(new Set());
       router.refresh();
     });

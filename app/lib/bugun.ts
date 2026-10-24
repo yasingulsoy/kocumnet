@@ -33,7 +33,7 @@ export type BugunIsi<T, S, P, O, D = never> =
   | { tur: "ONERI"; paket: O }
   | { tur: "YOK" };
 
-export function bugunkuIs<T, S, P extends { done: boolean }, O, D = never>(g: {
+export function bugunkuIs<T, S, P extends { done: boolean; acilabilir?: boolean }, O, D = never>(g: {
   /** Süresi dolmamış, alıştırma olmayan açık oturum. */
   acikTest: T | null;
   /** Son tarihi yakın, bitmemiş ödev (lib/odev.ts bugunOdevi seçer). */
@@ -50,7 +50,9 @@ export function bugunkuIs<T, S, P extends { done: boolean }, O, D = never>(g: {
   if (g.seviyeli) return { tur: "SEVIYELI", kosu: g.seviyeli };
   if (g.tekrar.acik) return { tur: "TEKRAR_DEVAM", oturum: g.tekrar.acik };
   if (g.tekrar.hazir > 0) return { tur: "TEKRAR", soru: g.tekrar.hazir };
-  const kalanIsler = (g.planIsleri ?? []).filter((i) => !i.done);
+  // Açılamayan kontrol testi (konu planın sınavında değil) Bugün kartına
+  // gelmez: öğrenciyi her gün aynı hataya götürürdü; plan kartında silinebilir.
+  const kalanIsler = (g.planIsleri ?? []).filter((i) => !i.done && i.acilabilir !== false);
   if (kalanIsler.length > 0) return { tur: "PLAN", is: kalanIsler[0], kalan: kalanIsler.length };
   if (g.oneri) return { tur: "ONERI", paket: g.oneri };
   return { tur: "YOK" };

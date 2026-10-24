@@ -113,7 +113,7 @@ export default async function ImportPage() {
 
 function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
   const silinecek = p.kalan - p.korunacak;
-  // Teste girmiş sorular hiç silinmez; hepsi öyleyse geri alacak bir şey yok.
+  // Korunan sorular (sorulmuş, denemede, notlu) hiç silinmez; hepsi öyleyse geri alacak bir şey yok.
   // Geri alınmış parti kayıt olarak kalır (kim, ne zaman): onun kaydı silinmez.
   const geriAlinabilir = yazabilir && !p.suruyor && p.durum !== "REVERTED" && (silinecek > 0 || p.kalan === 0);
   const durumlar = Object.entries(p.durumlar)
@@ -174,7 +174,9 @@ function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
             <span className="tabular text-gray-800">{p.kalan}</span> soru
             <span className="block text-theme-xs">{durumlar.join(" · ")}</span>
             {p.korunacak ? (
-              <span className="block text-theme-xs text-warning-700">{p.korunacak} tanesi öğrencilere soruldu (geri almada kalır)</span>
+              <span className="block text-theme-xs text-warning-700">
+                {p.korunacak} tanesi geri almada kalır (öğrencilere soruldu, denemede ya da notlu)
+              </span>
             ) : null}
           </>
         ) : (
@@ -189,7 +191,14 @@ function PartiSatir({ p, yazabilir }: { p: PartiSatiri; yazabilir: boolean }) {
             </ButtonLink>
           ) : null}
           {geriAlinabilir ? (
-            <ImportRollbackButton partiId={p.id} dosyaAdi={p.dosyaAdi} silinecek={silinecek} korunacak={p.korunacak} />
+            <ImportRollbackButton
+              partiId={p.id}
+              dosyaAdi={p.dosyaAdi}
+              silinecek={silinecek}
+              korunacak={p.korunacak}
+              notlu={p.notlu}
+              duzenlenen={p.duzenlenen}
+            />
           ) : null}
         </div>
       </TableCell>

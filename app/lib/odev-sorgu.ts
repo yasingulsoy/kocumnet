@@ -124,7 +124,10 @@ export async function ogrenciOdevleri(userId: string, now = new Date()): Promise
             startedAt: true,
             submittedAt: true,
             expiresAt: true,
-            result: { select: { netScore: true } },
+            result: { select: { netScore: true, correctCount: true, wrongCount: true } },
+            // Boş gönderilen oturum ödevi tamamlamaz (lib/odev.ts isaretli). Sonuç
+            // varsa doğru + yanlış; sonucu yazılamamış oturumda işaretli cevap sayısı.
+            _count: { select: { items: { where: { answer: { choiceId: { not: null } } } } } },
           },
         })
       : Promise.resolve([]),
@@ -149,6 +152,7 @@ export async function ogrenciOdevleri(userId: string, now = new Date()): Promise
       submittedAt: s.submittedAt,
       expiresAt: s.expiresAt,
       net: s.result ? Number(s.result.netScore) : null,
+      isaretli: s.result ? s.result.correctCount + s.result.wrongCount > 0 : s._count.items > 0,
     })),
     cevaplar: cevaplar.flatMap((c) =>
       c.sessionItem.session.focusTopicId

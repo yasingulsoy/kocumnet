@@ -58,7 +58,10 @@ export interface OdevKonusu {
   ustAd: string | null;
   examScope: string;
   examScopes: string[];
-  /** Yayındaki soru sayısı (havuz). */
+  /**
+   * Alıştırmanın seçebileceği yayındaki soru sayısı: grubun sınavında sorulabilenler
+   * (grup-kurallari.ts odevKonuSinavi; sınavsız grupta konunun bütün yayındaki soruları).
+   */
   soruSayisi: number;
 }
 
@@ -238,7 +241,16 @@ function OdevFormIcerigi({
         </Field>
       ) : (
         <div className="grid gap-5 sm:grid-cols-[1fr_9rem]">
-          <Field label="Konu" required error={hata.fields?.topicId} hint="Parantezde konunun yayındaki soru sayısı.">
+          <Field
+            label="Konu"
+            required
+            error={hata.fields?.topicId}
+            hint={
+              grupSinavi
+                ? "Parantezde alıştırmanın seçebileceği yayındaki soru: grubun sınavında (konu o sınavda yoksa kendi sınavında) sorulabilenler."
+                : "Parantezde konunun yayındaki soru sayısı."
+            }
+          >
             <Select value={d.topicId} onChange={(e) => setD({ ...d, topicId: e.target.value })} required>
               <option value="">Seç…</option>
               {gruplu(
@@ -269,13 +281,13 @@ function OdevFormIcerigi({
       {d.kind === "TOPIC_PRACTICE" ? (
         havuzDar ? (
           <Alert variant="warning" compact>
-            Bu konuda yayında {konu!.soruSayisi} soru var; öğrenci {soru} soruya ulaşamayabilir. Sayıyı düşür ya da havuzu büyüt.
+            Bu konuda alıştırmanın seçebileceği {konu!.soruSayisi} yayında soru var; öğrenci {soru} soruya ulaşamayabilir.
+            Sayıyı düşür ya da havuzu büyüt.
           </Alert>
         ) : (
           <p className="-mt-2 text-theme-xs leading-relaxed text-gray-500">
-            Öğrenci konuyu kısa alıştırma turlarıyla çözer ve günlük alıştırma sınırı var: uzun ödevler için birkaç gün ver.
-            Alıştırma, konunun ölçüldüğü bitmiş bir testten açılıyor; konu öğrencinin hiçbir testinde çıkmadıysa ödev ekranı önce
-            test çözmesini söyler.
+            Öğrenci konuyu ödev ekranından kısa alıştırma turlarıyla çözer; önce test çözmesi gerekmez (konu hiçbir testinde
+            çıkmamış olsa da açılır). Günlük alıştırma sınırı var: uzun ödevler için birkaç gün ver.
           </p>
         )
       ) : null}

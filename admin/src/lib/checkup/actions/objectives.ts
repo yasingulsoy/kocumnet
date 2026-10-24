@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/checkup/db";
 import { Prisma } from "@/lib/checkup/generated/client";
 import { CONTENT_ROLES, staffForAction, staffStamp } from "@/lib/checkup/staff";
-import { OZET_KARTI_SINIRI } from "@/lib/checkup/content-limits";
+import { KAZANIM_ADI_SINIRI, OZET_KARTI_SINIRI } from "@/lib/checkup/content-limits";
 import { markupToContent } from "@/lib/checkup/shared/question-markup";
 import { containsStepBreak, safeParseQuestionContent, type QuestionContent } from "@/lib/checkup/shared/question-content";
 // Sınav listesi öğrenci uygulamasından (shared/exams.ts): yeni sınav burada ayrıca eklenmesin.
@@ -17,6 +17,10 @@ import { EXAM_SCOPES } from "@/lib/checkup/format";
  * Seviye 1 "kazanım başına bir soru" ilkesiyle kurulur (app/lib/level-selection.ts):
  * kazanım yoksa seviye yok. Kod kalıcıdır — soru dosyalarında (SORU-SABLONU.md
  * "Kazanım Kodu") bu geçer; içe aktarma kazanımı kodla bulur.
+ *
+ * İz: Objective'te personel damgası yalnızca özet kartı için var
+ * (summaryUpdatedByStaff). Oluşturma, düzenleme, arşiv ve silme sunucu
+ * günlüğüne "kim, ne, hangi kod" olarak yazılır (paket eylemleriyle aynı desen).
  */
 
 export interface ObjectiveFormState {
@@ -34,7 +38,12 @@ const schema = z.object({
     .max(40, "Kod en fazla 40 karakter.")
     .regex(/^[A-Z0-9][A-Z0-9._-]*$/i, "Kod yalnızca harf, rakam, nokta, tire ve alt çizgi içerebilir.")
     .transform((v) => v.toUpperCase()),
-  name: z.string().trim().min(3, "Kazanım adı çok kısa.").max(200, "Kazanım adı en fazla 200 karakter."),
+  // Sınır toplu içe aktarmayla ortak (shared/content-limits.ts): içe aktarılan ad burada da kaydedilebilsin.
+  name: z
+    .string()
+    .trim()
+    .min(KAZANIM_ADI_SINIRI.min, "Kazanım adı çok kısa.")
+    .max(KAZANIM_ADI_SINIRI.max, `Kazanım adı en fazla ${KAZANIM_ADI_SINIRI.max} karakter.`),
   examScopes: z.array(z.enum(EXAM_SCOPES)).default([]),
   status: z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
@@ -78,12 +87,14 @@ export async function createObjectiveAction(_prev: ObjectiveFormState, fd: FormD
   });
   if (!konu || konu._count.children > 0) return { fields: { topicId: "Kazanım yalnızca yaprak konuya bağlanır." } };
 
+  let yeniId: string;
   try {
-    await db.objective.create({ data: parsed.data });
+    yeniId = (await db.objective.create({ data: parsed.data, select: { id: true } })).id;
   } catch (e) {
     if (kopya(e)) return { fields: { code: "Bu kod zaten kullanılıyor." } };
     throw e;
   }
+  console.info("[checkup] kazanım oluşturuldu — " + parsed.data.code + " (" + yeniId + ") · " + staffStamp(auth.staff));
   yenile();
   return { ok: `${parsed.data.code} eklendi.` };
 }
@@ -98,12 +109,24 @@ export async function updateObjectiveAction(_prev: ObjectiveFormState, fd: FormD
   const parsed = schema.omit({ topicId: true }).safeParse({ ...readForm(fd), topicId: undefined });
   if (!parsed.success) return { fields: fieldErrors(parsed.error) };
 
+  const once = await db.objective.findUnique({ where: { id }, select: { code: true, status: true } });
+  if (!once) return { error: "Kayıt bulunamadı." };
   try {
     await db.objective.update({ where: { id }, data: parsed.data });
   } catch (e) {
     if (kopya(e)) return { fields: { code: "Bu kod zaten kullanılıyor." } };
     throw e;
   }
+  // Arşiv ayrı bir eylem değil (durum alanı); günlükte ayrı söylensin.
+  const ne =
+    parsed.data.status === "ARCHIVED" && once.status !== "ARCHIVED"
+      ? "arşivlendi"
+      : once.status === "ARCHIVED" && parsed.data.status !== "ARCHIVED"
+        ? "arşivden alındı"
+        : "düzenlendi";
+  console.info(
+    "[checkup] kazanım " + ne + " — " + parsed.data.code + (once.code !== parsed.data.code ? " (eski kod " + once.code + ")" : "") + " (" + id + ") · " + staffStamp(auth.staff)
+  );
   yenile();
   return { ok: "Kaydedildi." };
 }
@@ -123,6 +146,7 @@ export async function deleteObjectiveAction(id: string): Promise<{ ok: boolean; 
     return { ok: false, error: `${kayit.code} kazanımına ${kayit._count.questions} soru bağlı; silmek yerine arşivle.` };
   }
   await db.objective.delete({ where: { id } });
+  console.info("[checkup] kazanım silindi — " + kayit.code + " (" + id + ") · " + staffStamp(auth.staff));
   yenile();
   return { ok: true };
 }

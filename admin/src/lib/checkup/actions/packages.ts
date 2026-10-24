@@ -35,22 +35,43 @@ export async function setPackageStatusAction(id: string, status: string): Promis
     return { ok: false, error: "Geçersiz istek." };
   }
 
+  const once = await db.package.findUnique({ where: { id }, select: { slug: true, kind: true, status: true } });
+  if (!once) return { ok: false, error: "Paket bulunamadı." };
+
   if (status === "PUBLISHED") {
-    // Deneme: liste = soru sayısı ve hepsi yayında; her neden ayrı söylenir.
-    const engeller = await denemeYayinEngelleri(id);
-    if (engeller?.length) return { ok: false, error: "Deneme yayına alınamaz: " + engeller.join(" ") };
-    const paket = (await loadPackageHealth()).find((p) => p.id === id);
-    if (!paket) return { ok: false, error: "Paket bulunamadı." };
-    if (paket.state === "blocked") {
-      return { ok: false, error: "Yayına alınamaz: " + paket.summary };
+    if (once.kind === "MOCK") {
+      // Deneme: öğrencinin hazırlık kuralı (liste = soru sayısı ve hepsi yayında;
+      // shared/deneme.ts), her neden ayrı söylenir. Sınav dışı soru engel değil.
+      const engeller = await denemeYayinEngelleri(id);
+      if (engeller?.length) return { ok: false, error: "Deneme yayına alınamaz: " + engeller.join(" ") };
+    } else {
+      const paket = (await loadPackageHealth()).find((p) => p.id === id);
+      if (!paket) return { ok: false, error: "Paket bulunamadı." };
+      if (paket.state === "blocked") {
+        return { ok: false, error: "Yayına alınamaz: " + paket.summary };
+      }
     }
   }
 
   const sonuc = await db.package.updateMany({ where: { id }, data: { status } });
   if (sonuc.count === 0) return { ok: false, error: "Paket bulunamadı." };
 
+  // İz: Package'ta personel damgası sütunu yok; kim, ne, kaç açık ödev etkilendi günlüğe.
+  if (once.status !== status) {
+    console.info(
+      "[checkup] paket durumu " + once.slug + ": " + once.status + " → " + status + (await odevEki(id)) + " · " + staffStamp(auth.staff)
+    );
+  }
   revalidatePackageScreens();
   return { ok: true };
+}
+
+/** Günlük satırının eki: paketi veren açık ödev sayısı (paketler sayfasıyla aynı sayım). */
+async function odevEki(packageId: string): Promise<string> {
+  const n = await db.assignment.count({
+    where: { kind: "PACKAGE", packageId, cancelledAt: null, dueAt: { gt: new Date() }, group: { archivedAt: null } },
+  });
+  return n ? " (" + n + " açık ödev)" : "";
 }
 
 /**
@@ -64,9 +85,16 @@ export async function setPackageFreeAction(id: string, isFree: boolean): Promise
     return { ok: false, error: "Geçersiz istek." };
   }
 
+  const once = await db.package.findUnique({ where: { id }, select: { slug: true, isFree: true } });
+  if (!once) return { ok: false, error: "Paket bulunamadı." };
   const sonuc = await db.package.updateMany({ where: { id }, data: { isFree } });
   if (sonuc.count === 0) return { ok: false, error: "Paket bulunamadı." };
 
+  if (once.isFree !== isFree) {
+    console.info(
+      "[checkup] paket ücreti " + once.slug + ": " + (isFree ? "ücretli → ücretsiz" : "ücretsiz → ücretli") + (await odevEki(id)) + " · " + staffStamp(auth.staff)
+    );
+  }
   revalidatePackageScreens();
   revalidatePath("/checkup/ogrenciler");
   return { ok: true };

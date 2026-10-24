@@ -23,7 +23,18 @@
  *
  * Ekim 2026 eklemeleri (şablon §2, §4): `İpucu` (en fazla 3, alan tekrar
  * yazılır), `Video` (YouTube/Vimeo) ve çözümde adım ayırıcı `---`.
+ *
+ * Uzunluk sınırları panelin soru formuyla ORTAK (./content-limits): form ile
+ * içe aktarma ayrı sınır uygularsa içe aktarılan soru formda bir daha
+ * kaydedilemez.
  */
+import {
+  HEDEF_SURE_SINIRI,
+  IPUCU_SINIRI,
+  KAYNAK_SINIRI,
+  KAZANIM_ADI_SINIRI,
+  SORU_METNI_EN_AZ,
+} from "./content-limits";
 import { ERROR_TYPES } from "./error-types";
 import { konuSinavdaMi } from "./exam-scope";
 import { EXAM_SCOPES } from "./exams";
@@ -437,11 +448,12 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
   }
 
   const sure = Number(a["ideal sure"]);
-  if (!Number.isInteger(sure) || sure < 10 || sure > 600) {
+  const { min: sureAlt, max: sureUst } = HEDEF_SURE_SINIRI;
+  if (!Number.isInteger(sure) || sure < sureAlt || sure > sureUst) {
     hata(
       a["ideal sure"]
-        ? `İdeal Süre 10-600 arası tam sayı olmalı (şu an "${a["ideal sure"]}").`
-        : "İdeal Süre yazılmamış (10-600 arası saniye)."
+        ? `İdeal Süre ${sureAlt}-${sureUst} arası tam sayı olmalı (şu an "${a["ideal sure"]}").`
+        : `İdeal Süre yazılmamış (${sureAlt}-${sureUst} arası saniye).`
     );
   }
 
@@ -663,6 +675,38 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
     }
   }
 
+  // ── Uzunluk sınırları (soru formuyla aynı: ./content-limits) ──
+  // Form bu sınırı aşan soruyu kaydetmiyor; içe aktarma geçirseydi soru
+  // panelde başka bir düzeltme için bile açılıp kaydedilemezdi.
+  if (stemMarkup.trim() && stemMarkup.trim().length < SORU_METNI_EN_AZ) {
+    hata(`Soru Metni çok kısa (en az ${SORU_METNI_EN_AZ} karakter, satır ${q.alanBilgisi["soru metni"]?.satir ?? q.satir}).`);
+  }
+  yazilanIpuclari.forEach((h, i) => {
+    if (h.metin.length > IPUCU_SINIRI) {
+      hata(
+        `${i + 1}. ipucu (satır ${h.satir}) çok uzun: en fazla ${IPUCU_SINIRI} karakter (şu an ${h.metin.length}). ` +
+          "Kısa tut, çözümü anlatma."
+      );
+    }
+  });
+  const kaynak = (a["kaynak"] ?? "").trim();
+  // Saklanan değer "ID · kaynak": formdaki Kaynak kutusu bunu aynı sınırla kaydediyor.
+  const sourceRef = kaynak ? `${id} · ${kaynak}` : id;
+  if (sourceRef.length > KAYNAK_SINIRI) {
+    const bilgi = q.alanBilgisi[kaynak ? "kaynak" : "id"];
+    hata(
+      `${kaynak ? "Kaynak" : "ID"} (satır ${bilgi?.satir ?? q.satir}) çok uzun: "ID · kaynak" en fazla ${KAYNAK_SINIRI} ` +
+        `karakter olarak saklanır (şu an ${sourceRef.length}). Kısalt.`
+    );
+  }
+  // Kazanım adı yalnızca YENİ kazanım açılırken kullanılır (kayıtlıysa yok sayılır, yukarıda uyarı).
+  if (kazanimKodu && kazanimYerinde && kazanimAdi && !b.kazanimlar.has(kazanimKodu) && kazanimAdi.length > KAZANIM_ADI_SINIRI.max) {
+    hata(
+      `Kazanım Adı (satır ${q.alanBilgisi["kazanim adi"]?.satir ?? q.satir}) çok uzun: en fazla ${KAZANIM_ADI_SINIRI.max} ` +
+        `karakter (şu an ${kazanimAdi.length}).`
+    );
+  }
+
   // ── Uyarılar ───────────────────────────────────────────
   for (const [anahtar, bilgi] of Object.entries(q.alanBilgisi)) {
     // hasOwn: "constructor" diye yazılmış bir alan Object'in kendi alanına denk gelmesin.
@@ -710,7 +754,6 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
     return { sira, satir: q.satir, baslik: q.baslik, id, hatalar, uyarilar, hazir: null, cift };
   }
 
-  const kaynak = (a["kaynak"] ?? "").trim();
   return {
     sira,
     satir: q.satir,
@@ -739,7 +782,7 @@ function soruyuDenetle(q: HamSoru, sira: number, b: IceAktarmaBaglami, dosya: Do
       kazanimKodu,
       kazanimAdi,
       examScopes: sinavlar,
-      sourceRef: kaynak ? `${id} · ${kaynak}` : id,
+      sourceRef,
       gorseller,
     },
   };
@@ -776,6 +819,32 @@ export function dosyayiDenetle(ham: readonly HamSoru[], b: IceAktarmaBaglami): D
 // ─────────────────────────────────────────────────────────────
 // Yazmaya yardımcılar (veritabanına dokunmadan)
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Geri almada SİLİNEBİLECEK soru — kuralın tek yeri. Komut satırı
+ * (scripts/import-questions.mts --geri-al), panelin "Geri al"ı ve panelin
+ * geçmişindeki "korunacak" sayımı bu nesneyi kullanır; üçü ayrışmasın.
+ *
+ * Silinmeyenler:
+ *  · Öğrenciye sorulmuş (SessionItem; alıştırma da açar): cevaplar ona bağlı,
+ *    geçmiş sonuç yeniden hesaplanamaz olur, yanlış defteri bozulur.
+ *  · Bir denemenin sabit listesinde (PackageQuestion → Question, Restrict):
+ *    silme patlardı, olmasa deneme eksik kalırdı.
+ *  · Notu olan (QuestionNote: personel notu ya da öğrenci bildirimi): not
+ *    soruyla birlikte (Cascade) sessizce giderdi; inceleme emeği kaybolurdu.
+ *
+ * Sonradan düzenlenmiş olmak (updatedAt) ölçüt DEĞİL: yayına alma ve
+ * zorluk düzeltmesi de onu değiştiriyor, içe aktarıp yayına alınan her soru
+ * "düzenlenmiş" görünürdü. Onay metni düzenlenmiş soru sayısını yalnızca bildirir.
+ *
+ * Prisma `where` biçiminde düz nesne (bu modül Prisma'yı içe aktarmaz): silme
+ * sorgusuna yayılır (`...GERI_ALMADA_SILINEBILIR`); korunanlar `NOT` ile sayılır.
+ */
+export const GERI_ALMADA_SILINEBILIR = {
+  items: { none: {} },
+  packageLinks: { none: {} },
+  notes: { none: {} },
+} as const;
 
 /**
  * Yeni açılacak kazanımın adı: dosyada o koda yazılan ilk ad. Denetim ilk

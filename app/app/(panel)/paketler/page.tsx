@@ -5,6 +5,7 @@ import { requirePageUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { availableExamScopes, groupCatalog, loadCatalog } from "@/lib/catalog";
 import { EXAMS, isExamScope } from "@/lib/exams";
+import { seviyeliHazirlik } from "@/lib/level-selection";
 import { PackageCard } from "@/components/PackageCard";
 import { cx } from "@/components/tailadmin/cx";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
@@ -53,9 +54,13 @@ export default async function CatalogPage({ searchParams }: PageProps<"/paketler
    */
   const seviyeliVar =
     tur !== null &&
+    isExamScope(tur) &&
     (await prisma.package.count({
       where: { kind: "LEVEL", examScope: tur as never, status: "PUBLISHED" },
-    })) > 0;
+    })) > 0 &&
+    // Paket yayında olsa da üç seviyeden birinin havuzu yetmiyorsa koşu açılmaz
+    // (lib/level-run.ts); kart öğrenciyi "hazır değil" sayfasına götürmesin.
+    (await seviyeliHazirlik(tur)).hazir;
 
   // Sınav rayı: öğrencinin kendi sınavı başta ve etiketinde işaretli, "Tümü" sonda.
   const sekmeler: SegmentedTabItem[] = [

@@ -137,8 +137,12 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         objective: { select: { code: true } },
         // Satırdaki "açık not" rozeti: yalnızca personel notları (bildirimin kendi rozeti var).
         _count: { select: { notes: { where: { resolvedAt: null, kind: "STAFF" } } } },
-        // Sorunun yer aldığı denemeler: rozet ve yayından kaldırma uyarısı.
-        packageLinks: { where: { package: { kind: "MOCK" } }, select: { package: { select: { name: true } } } },
+        // Sorunun yer aldığı denemeler: rozet, yayından kaldırma uyarısı ve kilit
+        // (yayında + başlatılmış; lib/checkup/mock.ts kilitliDenemeler ile aynı koşul).
+        packageLinks: {
+          where: { package: { kind: "MOCK" } },
+          select: { package: { select: { name: true, status: true, _count: { select: { sessions: true } } } } },
+        },
       },
     }),
     parti ? partiBilgisi(parti) : Promise.resolve(null),
@@ -153,9 +157,23 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
       })
     : [];
   const bildirimSayisi = new Map(bildirimSayilari.map((b) => [b.questionId, b._count._all]));
-  // Yayındaki ve bir denemede olan sorular: yayından kaldırırken uyarılır.
+  /*
+   * Yayındaki ve bir denemede olan sorular. Başlatılmamış denemedekiler
+   * yayından kaldırılırken uyarılır (`denemeleri`); başlatılmış ve yayındaki
+   * denemedekiler (`kilitliler`) yayından hiç alınamaz — sunucu da reddeder.
+   */
+  const kilitliMi = (l: (typeof questions)[number]["packageLinks"][number]) =>
+    l.package.status === "PUBLISHED" && l.package._count.sessions > 0;
+  const yayindaDenemede = questions.filter((q) => q.status === "PUBLISHED" && q.packageLinks.length);
   const denemeleri = Object.fromEntries(
-    questions.filter((q) => q.status === "PUBLISHED" && q.packageLinks.length).map((q) => [q.id, q.packageLinks.map((l) => l.package.name)])
+    yayindaDenemede
+      .filter((q) => q.packageLinks.some((l) => !kilitliMi(l)))
+      .map((q) => [q.id, q.packageLinks.filter((l) => !kilitliMi(l)).map((l) => l.package.name)])
+  );
+  const kilitliler = Object.fromEntries(
+    yayindaDenemede
+      .filter((q) => q.packageLinks.some(kilitliMi))
+      .map((q) => [q.id, q.packageLinks.filter(kilitliMi).map((l) => l.package.name)])
   );
 
   const sonSayfa = Math.max(1, Math.ceil(toplam / SAYFA_BOYU));
@@ -225,7 +243,7 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
         </Alert>
       ) : null}
 
-      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []} denemeleri={denemeleri}>
+      <BulkProvider ids={yazabilir ? questions.map((q) => q.id) : []} denemeleri={denemeleri} kilitliler={kilitliler}>
         <Card>
           {/* Süzgeçler — GET formu: seçim adres çubuğunda kalır, paylaşılabilir. */}
           <form method="get" role="search" className="flex flex-wrap items-end gap-3 border-b border-gray-100 p-4 sm:px-6 sm:py-5">
@@ -427,7 +445,13 @@ export default async function QuestionsPage({ searchParams }: PageProps<"/checku
                           </Badge>
                           {/* key: toplu değişiklikten sonra seçim kutusu yeni durumla yeniden kurulsun. */}
                           {yazabilir ? (
-                            <StatusSelect key={q.id + q.status} id={q.id} status={q.status} denemeler={denemeleri[q.id]} />
+                            <StatusSelect
+                              key={q.id + q.status}
+                              id={q.id}
+                              status={q.status}
+                              denemeler={denemeleri[q.id]}
+                              kilitli={kilitliler[q.id]}
+                            />
                           ) : null}
                         </div>
                       </div>

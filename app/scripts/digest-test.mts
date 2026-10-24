@@ -1,3 +1,4 @@
+import "./_koruma.mjs";
 /**
  * Haftalık koçluk postasını gerçek SMTP olmadan dener.
  *
