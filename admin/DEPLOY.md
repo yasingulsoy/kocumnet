@@ -35,16 +35,18 @@ Build sırasında aşağıdaki değişken **mutlaka** tanımlanmalıdır. Aksi h
 | `BACKEND_URL` | Sunucudan backend'e erişim adresi (personel oturumu her istekte buradan doğrulanır). Boşsa `NEXT_PUBLIC_BACKEND_URL` kullanılır |
 | `NEXT_PUBLIC_SITE_URL` | kocum.net adresi — kenar çubuğundaki "Site yönetimi" bağlantısı ve giriş ekranındaki "Parolamı unuttum" (`/admin/sifremi-unuttum`) buradan kurulur |
 
-## ⚠️ Backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` ZORUNLU
+## ⚠️ Backend VE frontend'de `AUTH_COOKIE_DOMAIN=.kocum.net` ZORUNLU
 
 Check-up ekranları veriyi sunucuda hazırlıyor ve personel oturumunu **sunucu
 tarafında** doğruluyor (panelin istemci tarafı giriş denetimi, sunucuda çizilen
 öğrenci verisini korumaya yetmez). Bunun için `admin.kocum.net` sunucusunun
 `admin_access_token` çerezini görmesi gerekir.
 
-Tarayıcı çerezi `api.kocum.net`'ten alıyor. Backend ortamında `AUTH_COOKIE_DOMAIN`
-boşsa çerez yalnızca `api.kocum.net`'e gider ve panel **"Oturumun bu sunucuya ulaşmadı"**
-gösterir. Backend servisine:
+Çerezi iki yer yazıyor: backend (`api.kocum.net`, bu panelin girişi) ve site
+yönetiminin girişi (`kocum.net/admin`, frontend'in `loginAction`'ı çerezi kendi alanına
+yazar). Hangisinde `AUTH_COOKIE_DOMAIN` boşsa oradan girilen oturumun çerezi yalnızca o
+alan adına gider ve panel **"Oturumun bu sunucuya ulaşmadı"** gösterir. Backend VE
+frontend servislerine aynı değer:
 
 ```
 AUTH_COOKIE_DOMAIN=.kocum.net

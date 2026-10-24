@@ -1,3 +1,5 @@
+> Tarihsel rapor: yazıldığı günün durumunu anlatır, güncel değildir.
+
 # Sabah raporu — 23 Eylül 2026
 
 Gece boyunca yapılanlar, önce **senin yapman gerekenler**, sonra ne değiştiği.

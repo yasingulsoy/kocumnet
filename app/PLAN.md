@@ -186,7 +186,8 @@ CheckupSession (bir öğrencinin bir denemesi)
 - `Question.targetTimeSeconds` — "bu soruda çok oyalandın" geri bildirimi için.
 - `Answer.timeSpentMs` — konu bazlı hız analizi.
 - `Package.penaltyRatio` — **koda gömülmez.** YKS'de 4 yanlış 1 doğru götürür (0.25),
-  LGS'de 3 yanlış (0.3333), KPSS'de yanlış götürmez (0). Bu, ürünün öğrenciye
+  LGS'de 3 yanlış (0.3333). KPSS, DGS ve ALES için kodda 0.25 bir VARSAYIM
+  (Özgür Hoca'ya soruldu, HOCAYA-SORULAR §1, soru 1.1). Bu, ürünün öğrenciye
   "emin değilsen işaretle" deyip demeyeceğini değiştirir.
 
 ---
@@ -220,11 +221,14 @@ Ekranın sırası bilinçli — telefonda ilk ekranda görünenler ilk üçü:
 
 1. **Karar cümlesi.** Banda göre değişir, HER ZAMAN bir sayı içerir, TEK bir
    eylem söyler. ("%38 — bu bir yetenek meselesi değil, sıralama meselesi.")
-2. **Boş bırakma uyarısı** (varsa). Sınava göre: TYT'de "4 yanlış 1 doğru
-   götürüyor, iki şık eleyebiliyorsan işaretle"; KPSS'de "yanlış götürmüyor,
-   boş bırakmanın matematiksel faydası yok".
+2. **Boş bırakma uyarısı** (varsa, yalnızca paket testinde). Gerçek sınavın
+   kuralına göre: TYT'de "4 yanlış 1 doğru götürüyor, iki şık eleyebiliyorsan
+   işaretle"; cezasız bir sınavda "yanlış götürmüyor, boş bırakmanın
+   matematiksel faydası yok". KPSS, DGS ve ALES şu an 0.25 varsayımıyla cezalı.
 3. **Bu hafta sadece bunlar.** En fazla iki konu, sıralı, her birinde
    "sınavda ~3 soru" karşılığı ve tek dokunuşla 5 soruluk kontrol testi.
+   Yalnızca bu haftanın planı BU testten çıktıysa (liste planın konuları);
+   değilse başlık "Bu testten çıkan öncelikler" ve "bakma" cümlesi yok.
 4. Yanlışların ortak yanı (hata deseni → reçete).
 5. Geçen denemeye göre fark.
 6. Konu haritası (telefonda ilk üç konu, gerisi katlanmış).
@@ -233,9 +237,10 @@ Ekranın sırası bilinçli — telefonda ilk ekranda görünenler ilk üçü:
    yetmiyorsa." Ürün, teşhisin sonucu; teşhisin amacı değil.
 9. Cevap incelemesi (varsayılan: yalnızca yanlış ve boşlar).
 
-**Net gösterimi sınava göre:** `penaltyRatio == 0` olan sınavlarda (KPSS, DGS,
-ALES) net = doğru sayısıdır; ayrı bir "net" kutusu göstermek ekranda aynı sayıyı
-iki kez yazmak olur. O sınavlarda "12/20 doğru" yazıyoruz.
+**Net gösterimi oturuma göre:** oturumun `penaltyRatio`'su 0 ise (seviyeli
+aşamalar; KPSS, DGS ve ALES cezasız çıkarsa onlar da) net = doğru sayısıdır;
+ayrı bir "net" kutusu göstermek ekranda aynı sayıyı iki kez yazmak olur. O
+oturumlarda "12/20 doğru" yazıyoruz.
 
 Zayıf konu → ürün eşlemesi `topic.recommendedProductIds` ile veritabanından gelir.
 
@@ -441,7 +446,7 @@ okşuyor, hiçbir eyleme yol açmıyor.
 
 `lib/exams.ts` soru sayılarını ve yanlış götürme oranlarını tutuyor.
 KPSS/DGS/ALES için `penaltyRatio` şu an **0.25** yazılı ve kodda ⚠️ işaretli:
-yayına çıkmadan Serhat Hoca ile doğrulanmalı. Oran oturum başlarken paketten
+Özgür Hoca'ya soruldu (HOCAYA-SORULAR §1). Oran oturum başlarken paketten
 kopyalandığı için sonradan düzeltmek **eski sonuçları düzeltmiyor**.
 
 ---

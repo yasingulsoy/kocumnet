@@ -65,8 +65,13 @@ Görseller markdown'ın yanındaki `gorseller/` dizininden okunur ve veritabanı
 Servis ayağa kalktıktan sonra, konteyner içinde:
 
 ```bash
-npm run db:seed        # konu ağacı + eksik paketler (idempotent, tekrar çalıştırmak güvenli)
+npm run db:seed                            # konu ağacı + eksik paketler (idempotent, tekrar çalıştırmak güvenli)
+npm run db:seed:levels -- --yalniz-paket   # her sınavın seviyeli check-up paketi (idempotent)
 ```
+
+`--yalniz-paket` olmadan seviyeli tohum demo kazanımları ve demo soru etiketlerini de
+yazar; o kısım yalnızca geliştirme içindir. Bu adım atlanırsa seviyeli check-up
+başlatılamaz ("… için seviyeli check-up tanımlı değil"; `lib/level-run.ts`).
 
 **Tohum var olan katalog paketinin İÇERİĞİNİ yazmaz.** Katalog (STANDARD) paketinin adı,
 özeti, süresi, soru sayısı ve konu dağılımı yönetim panelinden düzenleniyor
@@ -105,7 +110,16 @@ sorular üretir; betik `NODE_ENV=production` altında zaten kendini durdurur.
   hem nixpkgs commit'ini sabitliyor: Nixpacks'in kendi nixpkgs'inde Node 20.18 ve
   22.11 var, ikisinde de `npm ci` Prisma'nın kurulum denetiminde düşüyor. Dosya
   olmadan Nixpacks Node 18'e düşüyor. Panel (`admin/`) aynı ayarı kullanıyor.
-- **`vips` paketi** `nixpacks.toml`'da: `sharp` onsuz çalışmaz, şekil yükleme kırılır.
+- **`vips` paketi** `nixpacks.toml`'da duruyor ama gerekli değil: bu uygulamanın kodu
+  `sharp`'ı kullanmıyor (şekil yükleme ve WebP dönüşümü yönetim panelinde, `admin/`),
+  `sharp` 0.35 de kendi libvips'ini (`@img/sharp-libvips-linux-x64`) hazır getiriyor.
+  `sharp` bağımlılığı yalnızca `next/image` eniyileştirmesi için. Komut satırı içe
+  aktarma (`import:questions`) görselleri işlemeden yazıyor.
+- **İstemci IP'si** (giriş, kayıt, sıfırlama, veli raporu sınırları): `lib/istemci-ip.ts`;
+  Traefik'in `x-real-ip`'i, o adres Cloudflare ise `cf-connecting-ip`. Giriş yapmış
+  eylemler (hata bildirimi, koça soru, parola değiştirme, veli bağlantısı) IP'yle değil
+  kullanıcıyla sayılır. Traefik'te `forwardedHeaders.trustedIPs` AYARLAMAYIN: istemci
+  başlıkları sahtelenebilir hale gelir (ayrıntı: `frontend/DEPLOY.md`).
 - **Üretilen Prisma client gitignore'da.** `build` script'i `prisma generate` ile
   başlıyor — kaldırmayın, deploy patlar.
 - **Migration'lar uygulama ÖNCESİ çalışır** (`start` komutunda). Yeni sürüm şemada
@@ -125,7 +139,7 @@ uygulamasının temel yolunu çakıştırır — ayrı alt alan adı daha basit.
 - [ ] `SMTP_URL` dolu ve bir test e-postası ulaşıyor
 - [ ] `NEXT_PUBLIC_APP_URL` gerçek alan adı
 - [ ] Yönetim paneli bu veritabanına bağlı (`admin/` → `CHECKUP_DATABASE_URL`) ve
-      backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` tanımlı (bkz. `admin/DEPLOY.md`)
+      backend ve frontend'de `AUTH_COOKIE_DOMAIN=.kocum.net` tanımlı (bkz. `admin/DEPLOY.md`)
 - [ ] Gerçek soru havuzu girildi (demo sorular temizlendi)
 - [ ] Paketlerin ücretli/ücretsiz ayarı iş kararına göre yapıldı (panel → Check-up → Paketler)
 - [ ] Deploy betiğinde `db:seed -- --guncelle` YOK (paneldeki paket düzenlemelerini her deploy'da silerdi)

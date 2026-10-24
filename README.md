@@ -24,7 +24,8 @@ Aynı PostgreSQL sunucusunda iki ayrı veritabanı:
   şemanın yalnızca kopyasını kullanır (`npm run checkup:sync`).
 
 Personel tek yerde, backend'de durur. Site yönetimi ve check-up paneli aynı
-`admin_access_token` çerezini kullanır; üretimde backend'de `AUTH_COOKIE_DOMAIN=.kocum.net` şart.
+`admin_access_token` çerezini kullanır; üretimde backend VE frontend'de `AUTH_COOKIE_DOMAIN=.kocum.net` şart
+(ikisi de giriş çerezini yazıyor).
 
 ## Yerelde çalıştırma
 
@@ -67,18 +68,30 @@ Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-o
 
 ## Doğrulama
 
+GitHub Actions her push'ta ve PR'da aşağıdakilerin hepsini çalıştırır
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); yerelde de aynı komutlar:
+
 | Proje | Komutlar |
 | --- | --- |
-| Hepsi | `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app | `npm run smoke` · `npm run test:markup` · `npm run test:import` · `npm run test:leak` · `npm run test:levels` · `npm run test:practice` · `npm run test:veli` · `npm run test:deneme` · `npm run test:deneme-panel` · `npm run test:ogrenme` · `npm run test:odev` |
-| admin | `npm run checkup:check` (şema kopyası eşit mi) |
-| backend | `npm run smoke` (çalışan sunucuya istek atar) |
+| frontend | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` · `npm run i18n:check` (üç sözlük aynı anahtarlar) · `npm run test:ip` |
+| admin | `npm run checkup:check` (şema kopyası eşit mi) · `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
+| app | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
+| app, veritabanıyla | `npx prisma migrate deploy` · `npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (şema ile migration'lar eşit mi) · tohumlar (`db:seed`, `db:seed:demo`, `db:seed:levels`) · `npm run smoke` · `test:markup` · `test:ip` · `test:import` · `test:deneme-panel` · `test:leak` · `test:levels` · `test:practice` · `test:veli` · `test:deneme` · `test:ogrenme` · `test:odev` · `test:plan` · `test:tutarlilik` |
+| backend | Sözdizimi (`node --check`, her dosya) · posta şablonu · `npm run test:ip`. TypeScript ve derleme adımı yok. |
+| backend, veritabanı ve çalışan sunucuyla | `npm run db:ensure` · `npm run seed:admin` · sunucu arka planda · `npm run smoke` · `npm run test:contact` |
 | kök | `node design/sync.mjs --check` (tasarım ve marka kopyaları eşit mi) |
 
-GitHub Actions her push'ta bunları çalıştırır: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Veritabanı isteyen testleri **geçici bir veritabanında** koşun. Check-up testleri
+`DATABASE_URL` yerel bir sunucuyu göstermiyorsa ya da `NODE_ENV=production` ise durur
+(`app/scripts/_koruma.mts`; bilerek: `-- --zorla`). Backend'in `test:contact`'ı adında
+`test` geçmeyen veritabanında çalışmaz; `smoke` görsel temizliğini sınadığı için
+`backend/uploads/media` altındaki, o veritabanında geçmeyen görselleri siler.
+
 `test:leak` öğrenciye giden veride cevap anahtarı olmadığını denetler; bozulursa
 yayına çıkmayın. `test:veli` girişsiz veli raporunda soru metni, cevap anahtarı ve
-e-posta olmadığını denetler; o da bozulursa yayına çıkmayın.
+e-posta olmadığını denetler; o da bozulursa yayına çıkmayın. Bu kuralı şimdilik hiçbir
+şey zorlamıyor: Dokploy'da dağıtım elle yapılıyor, dağıtmadan önce main'deki son CI
+koşusunun yeşil olduğuna bakın (main'de koşular birbirini iptal etmez).
 
 ## Tasarım ve marka
 
@@ -97,3 +110,4 @@ node design/sync.mjs
 - [`admin/CHECKUP.md`](admin/CHECKUP.md): panelin kimlik doğrulaması ve yetkiler
 - `*/DEPLOY.md`: her projenin yayına alma notları
 - [`HOCAYA-SORULAR.md`](HOCAYA-SORULAR.md): içerik kararları için açık sorular
+- [`docs/arsiv/`](docs/arsiv): eski günlük raporlar (tarihsel; yazıldıkları günü anlatır, güncel değil)

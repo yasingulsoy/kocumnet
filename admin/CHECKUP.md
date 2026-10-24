@@ -45,7 +45,8 @@ src/lib/checkup/
   question-note.ts İnceleme notu kuralları: 2000 karakter sınırı, temizlik, bulgudan not metni (istemci ve sunucu ortak)
   question-notes.ts Bir sorunun notları (server-only); yazma actions/notes.ts
   import-report.ts İçe aktarma rapor tipleri ve sınırları (10 MB) — istemci ve sunucu ortak
-  media-image.ts   Görsel → WebP (EXIF, 1200 px) — tek şekil yükleme ve toplu içe aktarma ortak
+  media-image.ts   Görsel → WebP (EXIF, 1200 px) — shared/media-image.ts'i sunucuya kilitleyen sarmalayıcı
+  content-limits.ts İçerik uzunluk sınırları — shared/content-limits.ts'in yeniden ihracı (istemci de okur)
   format.ts        Etiketler (sınav, sınıf, durum), tarih/sayı biçimleri (Türkiye saati)
   actions/         Server action'lar: sorular (seviye, kazanım, hedef sınav; toplu durum; önerilen zorluk),
                    kazanımlar, şekil, erişim hakkı, paket, plan (koç notu), toplu içe aktarma, inceleme notu
@@ -102,7 +103,10 @@ günlüğüne yazılmaz, yalnızca kim ve hangi soru.
   question-markup, error-types, scoring, insights, **exams** (sınav listesi, sınıf adları),
   **levels** (seviye soru sayıları), **exam-scope** (sınav kapsamı kuralı), **coaching**
   (hafta başı, hafta etiketi), **question-import** (SORU-SABLONU dosyasını çözümleme ve
-  denetleme; `app/scripts/import-questions.mts` ile aynı kurallar). Panelde elle tutulan ayna kalmadı: hoca bir sayıyı
+  denetleme; `app/scripts/import-questions.mts` ile aynı kurallar), **odev** (ödevin
+  tamamlanma kuralı), **deneme** (deneme hazırlık kuralı `denemeHazirMi`, kâğıt kuralları),
+  **content-limits** (içerik uzunluk sınırları), **media-image** (görsel biçimi; tek
+  paket importu sharp, sunucuya `lib/checkup/media-image.ts` kilitler). Panelde elle tutulan ayna kalmadı: hoca bir sayıyı
   değiştirince `checkup:check` (CI dahil) kopya eskiyse hata verir.
 - Paylaşılan modül `@/...` import edemez (kopyada başka yeri gösterir). Tek istisna
   Prisma'nın üretilmiş TİPLERİNİN `import type`ı: betik yolu panelin client'ına çevirir
@@ -123,8 +127,24 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   cevabı şıkka `onDelete: Restrict` ile bağlı; eski yöntem (sil + yeniden oluştur)
   bir kez bile cevaplanmış soruda veritabanı hatasıyla patlıyordu. Cevaplanmış bir
   şık kaldırılamaz (5 → 4 şık), form bunu açıkça söyler.
-- **Cevap anahtarı değişirse sürüm artar** (`Question.version`); eski sonuçlar
-  `SessionItem.questionVersion` ile ayırt edilir.
+- **Cevap anahtarı değişirse sürüm artar** (`Question.version`): doğru şıkkın yeri de,
+  doğru şıkkın değeri (metninin parmak izi ve görselleri; biçim değil) de sürümü
+  artırır. Doğru şıkkın yeri değişince öğrenci uygulamasının bakım işi (cron) sürümü
+  eski kalan bitmiş testleri en geç 15 dakika içinde yeniden puanlar ve öğrenciye sonuç
+  ekranında bildirir. Doğru şıkkın içeriği değişirse eski cevaplar yeniden puanlanamaz
+  (eşleştirilecek başka şık yok); madde analizi yeni sürümden başlar.
+- **Başlatılmış denemenin sorusu kilitli.** Soru yayındaki ve en az bir kez başlatılmış
+  bir denemenin listesindeyse yayından alınamaz (soru formu, listedeki durum seçici ve
+  toplu durum; toplu işlem onları atlar), konusu ve hedef sınavı değişmez. Arşivlemek
+  denemeyi kalıcı kapatırdı: eksik listeli deneme başlamıyor, başlatılmış denemenin
+  listesi de değişemiyor. Yanlışsa soru düzeltilir. Kural `mock.ts` `KILITLI_DENEME_SORUSU`,
+  metin `mock-rules.ts` `KILITLI_DENEME_MESAJI`.
+- **Deneme hazırlığı öğrencinin kuralıyla:** `shared/deneme.ts` (`app/lib/deneme.ts`
+  kopyası) `denemeHazirMi` — liste tam ve hepsi yayında. Yayın reddi, "yayınlanabilir"
+  rozeti, alarm sayımı ve ödev denetimi buna bakar. Sınav dışı soru (hedef sınavı başka)
+  engel değil, uyarı: öğrenci uygulaması o denemeyi başlatıyor; panel yalnızca listeye
+  YENİ eklenen sınav dışı soruyu kaydetmez. (`pool.ts` paket sağlığı hâlâ sınav dışı
+  soruyu "engel" sayıyor; alarm ve deneme tablosu kendi hesabını yapıyor.)
 - **React 19 form eylemi bitince formu sıfırlar** ve görünen `<select>`'ler
   varsayılana döner. `QuestionForm.tsx`'te değerler gizli alanlarla gönderiliyor ve
   select'ler efektle durumdan geri yazılıyor — kaldırılırsa doğrulama hatası alan
@@ -172,7 +192,12 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   konu tekrar) panelden düzenlenmediği için her çalıştırmada tohumdan yazılır.
   Ayrıntı: `app/DEPLOY.md` §3.
 - **Görseller veritabanında** (`MediaAsset.data`); SVG kabul edilmiyor (script
-  taşıyabilir), yükleme 8 MB / 1200 px / WebP.
+  taşıyabilir), yükleme 8 MB / 1200 px / WebP, EXIF ve GPS atılır. Biçim tek yerde:
+  `shared/media-image.ts` (`app/lib/media-image.ts`); tek şekil yükleme, toplu içe aktarma
+  ve komut satırı (`app/scripts/import-questions.mts`) aynı fonksiyonu kullanır.
+- **İçerik uzunluk sınırları** (ipucu 600, kaynak 200, özet kartı 1200, hedef süre,
+  kazanım adı) `shared/content-limits.ts`'te: soru formu, kazanım formu ve toplu içe
+  aktarma aynı sayıyla reddeder (içe aktarma satır numarasıyla).
 - **Toplu içe aktarma** komut satırıyla aynı kuralları kullanır (`shared/question-import.ts`):
   çift kayıt (dosyada ve havuzdaki TÜM sorularda, parmak izi), `validateChoices`, sınav
   kapsamı, kazanım/seviye kodları; panel her sorunun bütün hatalarını ve uyarılarını
@@ -182,9 +207,13 @@ sürüklenme üretimde değil geliştirmede yakalansın diye.
   işlemde yazılır (`createdByStaff` damgası); görseller tek şekil yüklemeyle aynı biçimde
   (`media-image.ts`) ve `import/<parti>/<dosya>` anahtarıyla saklanır. Doğrudan yayına
   alma, paneldeki durum değiştirmeyle aynı yetkide (yazma rolleri), onay sorarak.
-- **Geri al** komut satırının `--geri-al`'ıyla aynı kural: yalnızca hiçbir öğrenciye
-  sorulmamış (SessionItem'ı olmayan; alıştırma da sayılır) sorular silinir. Yanlış defterindeki
-  soru zaten cevaplanmış olduğundan korunur. Kalanlar partide durur, parti
+- **Geri al** komut satırının `--geri-al`'ıyla aynı kural (`shared/question-import.ts`
+  `GERI_ALMADA_SILINEBILIR`): yalnızca hiçbir öğrenciye sorulmamış (SessionItem'ı olmayan;
+  alıştırma da sayılır), hiçbir denemenin listesinde olmayan ve notu (inceleme notu,
+  öğrenci bildirimi) olmayan sorular silinir. Yanlış defterindeki soru zaten cevaplanmış
+  olduğundan korunur. Sonradan düzenlenmiş soru silinir; onay penceresi kaç sorunun
+  düzenlendiğini ve kaçında not olduğunu söyler (`updatedAt` ölçüt değil: yayına alma da
+  onu değiştiriyor). Kalanlar partide durur, parti
   "kısmen geri alındı" olur ve ekran neyin neden korunduğunu yazar. Görsel yalnızca artık
   hiçbir soruda geçmiyorsa silinir (korunan soru ya da "benzerini oluştur" kopyası
   kullanıyor olabilir); kazanım yalnızca bu partiyle açılmış ve sorusu kalmamışsa. Parti

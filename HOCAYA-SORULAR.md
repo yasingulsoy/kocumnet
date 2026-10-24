@@ -503,6 +503,40 @@ Eşikler ve tavsiye dili uygun mu? Öğrencilere önerdiğiniz bir turlama tekni
 
 > Cevap:
 
+
+**Soru 12.14** — Seviye 1'de öğrenciye her kazanımdan değil, sıradaki ilk N kazanımdan soru
+geliyor (TYT'de 50). Bu sıra şu an konu ağacındaki kardeş sırasıyla kuruluyor ve müfredat
+sırasını tutmuyor. Hangisi olsun?
+- (a) Müfredat sırasıyla ilk N kazanım (ilk ünitelere yığılır, ör. TYT'de geometri hiç sorulmayabilir).
+- (b) Her üniteye sınavdaki ağırlığına göre pay.
+- (c) İçerik ekibinin elle işaretlediği bir "Seviye 1 listesi".
+
+Önerimiz (b) ya da (c). Karar gelene kadar bugünkü sıra kalıyor.
+
+> Cevap:
+
+**Soru 12.15** — Sonuç ekranındaki yayın önerileri artık öğrencinin sınavına göre süzülüyor. İki
+eşleşme sizin onayınızı bekliyor:
+- "Muhteşem Üçlü" sitede yalnızca AYT ürünü, ama TYT'deki kümeler, mantık ve olasılık
+  konularına bağlı. TYT öğrencisine önerilmeli mi?
+- "Faiz Problemleri" (KPSS, DGS, ALES) için hangi yayın önerilsin?
+
+> Cevap:
+
+**Soru 12.16** — Haftalık plan: bitmeyen işler sonraki haftaya devretsin mi? Şu an her hafta plan
+sıfırdan ve yalnızca o haftanın ilk testinden sonra kuruluyor; pazartesi sabahı çoğu öğrencinin
+planı yok. Önerimiz: pazartesi bitmemiş işler kendiliğinden yeni haftaya taşınsın, haftanın ilk
+testi bu planı genişletsin.
+
+> Cevap:
+
+**Soru 12.17** — Plandaki "N soru çöz" işini öğrenci elle işaretliyor (kitaptan çözdüğü sorular
+uygulamada görünmüyor). Koçun ödevi ise sistemden okunuyor. Önerimiz: uygulamada hedefe ulaşınca
+iş kendiliğinden işaretlensin, elle işaret de kalsın; "planı yapmıyor" uyarısı yalnızca kontrol
+testlerine dayansın. Uygun mu?
+
+> Cevap:
+
 ---
 
 Teşekkürler. Cevaplar geldikçe `app/lib/exams.ts` (sınav sabitleri), `app/lib/levels.ts`

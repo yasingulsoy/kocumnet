@@ -21,6 +21,18 @@ ve öğrencinin öğrenme döngüsünü kapatmak için.
 | 7 | Paketler ve fiyat | Hoca ve sen | Neyin ücretsiz, neyin ücretli olacağı |
 | 8 | Ödeme, mesafeli satış ve cayma hakkı metinleri | Sen ve hukukçu | Ücretli satış; öğrencilerin bir kısmı 18 yaş altı |
 
+
+### 1.1 Güvenlik ve hukuk (22 Ekim incelemesinden, sende)
+
+| İş | Neden |
+| --- | --- |
+| **Depo herkese açık ve ilk commit'te `backend/.env` var.** Oradaki veritabanı parolasının ve yönetici parolasının üretimde, personel hesaplarında ya da aynı sunucudaki öteki projelerde kullanılmadığını doğrula; kullanılıyorsa değiştir. | Geçmiş yeniden yazılmaz; çare değeri değiştirmek. JWT anahtarı zayıf olduğu için üretim onu zaten reddediyor. |
+| Cloudflare'de HSTS (önce kısa süre) ve www → kocum.net yönlendirmesi (308) | Yalnızca api.kocum.net HSTS veriyor; www ayrı adres olarak açılıyor. |
+| Kaynak sunucuya Cloudflare'i atlayarak erişim (187.127.84.141:443) ve Dokploy panelinin düz HTTP'si | Authenticated Origin Pulls ya da güvenlik duvarı; panel HTTPS'li bir alan adının arkasına. |
+| Traefik'te `forwardedHeaders.trustedIPs` AYARLAMA | Hız sınırları istemci IP'sini Cloudflare aralığını denetleyerek okuyor; o ayar istemci başlıklarını sahtelenebilir yapar. |
+| Gizlilik metinlerindeki `HUKUK:` işaretleri: veri sorumlusunun unvanı ve adresi, hukuki sebepler, yurt dışı aktarım dayanağı, veli onayının kaydı | Kodda ve metinde bilinen olgular yazıldı; bunlar hukukçuya kalıyor (check-up `/gizlilik`, kocum.net `/gizlilik`). |
+| Saklama süreleri: iletişim mesajları (varsayılan 730 gün, `CONTACT_RETENTION_DAYS`), çözülmüş hata bildirimleri ve koça sorular | Mesajlar anonimleşiyor; bildirim ve koça soru için süre henüz kararlaştırılmadı. |
+
 ---
 
 ## 2. Sorular nasıl sağlanacak

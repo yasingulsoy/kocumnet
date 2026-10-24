@@ -128,14 +128,14 @@ saf fonksiyonlar olarak duruyor; hepsi `npm run smoke` ile test ediliyor.
 
 | Kural | Neden |
 | --- | --- |
-| **Haftada en fazla 2 konu** (`MAX_TOPICS_PER_WEEK`) | Beş zayıf konuyu aynı hafta vermek hiçbirinin bitmemesi demek. Bitmeyen plan duvar kâğıdıdır. |
+| **Haftada en fazla 2 konu** (`MAX_TOPICS_PER_WEEK`); geçen hafta yarısı bitmediyse 1 (`haftalikKonuSiniri`) | Beş zayıf konuyu aynı hafta vermek hiçbirinin bitmemesi demek. Bitmeyen plan duvar kâğıdıdır. Koç notu "bu hafta tek konu" yalnızca plan gerçekten kısaldıysa der. |
 | **Kanıt eşiği: en az 3 soru** | Tek yanlıştan konu çıkarmak öğrenciyi boşa bir hafta çalıştırır. |
 | **Eşitlikte sınav ağırlığı** (`Topic.examWeights`) | İki konu da %30 ise, sınavda 5 soru getiren 1 soru getirenden önce gelir. |
 | **Karar cümlesi her zaman bir SAYI içerir** | "Harikasın" öğrenciye bir şey öğretmez; "Köklü Sayılar'da 6/6" öğretir. |
 | **RETEST işi elle işaretlenemez** | "40 soru çözdüm" demek kolay, 5 soruluk kontrol testini geçmek değil. Planın dürüstlüğü buna dayanır. |
 | **İş silinebilir** | Koç da "bu hafta vaktim yok" itirazını dinler. Kabul edilmiş plan yapılır. |
 | **Konu tekrar testi yalnızca ÖLÇÜLEN konuda** | Hem anlam (kontrol = yeniden ölçüm) hem güvenlik: bu uç nokta paket hakkına bakmaz, denetimsiz bırakılsa havuz beşer beşer boşaltılırdı. Günlük sınır `GUNLUK_TEKRAR_SINIRI`. |
-| **Boş bırakma tavsiyesi sınava göre** | KPSS/DGS/ALES'te yanlış doğruyu götürmez; orada "boş bırak" demek net kaybettirir. |
+| **Boş bırakma tavsiyesi sınava göre** | Oran gerçek sınavın kuralından (`lib/exams.ts`), yalnızca paket testinde. Cezasız sınavda "boş bırak" demek net kaybettirir. KPSS, DGS ve ALES'te 0,25 bir varsayım (HOCAYA 1.1, Özgür Hoca'ya soruldu). |
 | **Havuz daraldıysa söylenir** (`relaxedExposureCount`) | Şişmiş bir sonucu gerçek sanan öğrenci çalışmayı bırakır. |
 | **Kontrol testi ölçüm değil, doğrulama** | Eğilim grafiğine, tahmini nete ve panodaki genel başarıya girmez (konu haritasına girer). Sonuç ekranı paket kararı yerine `kontrolKarari` kullanır ve planla bağı gösterir: tek zayıf konuluk 5 soru genel çizgiyi sebepsiz düşürüyordu. |
 

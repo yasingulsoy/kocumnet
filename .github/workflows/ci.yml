@@ -3,7 +3,8 @@ name: CI
 # Her push ve PR'da dört proje: tip denetimi, lint, üretim derlemesi.
 # Derlemeler veritabanı istemez: `next build` yalnızca `prisma generate` çalıştırır,
 # site derlemesi backend'e ulaşamayınca boş liste ile devam eder.
-# Check-up'ın uçtan uca testleri (checkup-e2e) ise geçici bir Postgres'e karşı koşar.
+# Check-up'ın uçtan uca testleri (checkup-e2e) ve backend duman testi (backend-smoke)
+# ise geçici bir Postgres'e karşı koşar.
 on:
   push:
     branches: [main]
@@ -11,7 +12,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # main'de iptal YOK: her commit'in sonucu kalsın ("bozulursa yayına çıkma"
+  # kuralı hangi commit'in geçtiğine bakıyor). Dallarda eski koşu iptal edilir.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   design-tokens:
@@ -60,6 +63,10 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx eslint .
       - run: npm run build
+      # Sözlük anahtarları üç dilde aynı mı; istemci IP kuralı (Cloudflare + Traefik).
+      - name: Sözlükler ve istemci IP kuralı (yalnızca frontend)
+        if: matrix.project == 'frontend'
+        run: npm run i18n:check && npm run test:ip
 
   checkup-e2e:
     # Öğrenciye giden veride cevap anahtarı var mı (test:leak), telafide soru
@@ -68,7 +75,7 @@ jobs:
     # raporunda soru metni, cevap anahtarı, e-posta var mı; jeton saklanıyor mu
     # (test:veli). Hepsi sessiz kusur: arayüz çalışmaya devam eder, ölçüm
     # anlamsızlaşır ya da veri sızar. Gerçek bir Postgres'e karşı koşar.
-    name: Check-up uçtan uca (sızıntı + seviyeler)
+    name: Check-up uçtan uca
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -98,10 +105,17 @@ jobs:
       - run: npm ci
       - name: Şema
         run: npx prisma migrate deploy
+      # Şema dosyası ile migration'lar ayrışmış mı: schema.prisma değişip migration
+      # yazılmadıysa (ya da tersi) üretimde migrate deploy eksik tablo/sütun bırakır.
+      # Fark varsa çıkış kodu 2.
+      - name: Şema ve migration eşit mi
+        run: npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code
       - name: Tohum (konu ağacı, paketler, demo sorular, seviyeler)
         run: npm run db:seed && npm run db:seed:demo && npm run db:seed:levels
       - run: npm run smoke
       - run: npm run test:markup
+      # İstemci IP kuralı (Cloudflare + Traefik): veritabanı istemez.
+      - run: npm run test:ip
       # Soru içe aktarma (komut satırı ve panel ortak): veritabanı istemez.
       - run: npm run test:import
       # Deneme oluşturucunun saf kuralları (panel modülü): veritabanı istemez.
@@ -116,6 +130,10 @@ jobs:
       - run: npm run test:ogrenme
       # Grup ve ödev: tamamlanma kuralı, öğrencinin ödev listesi
       - run: npm run test:odev
+      # Haftalık plan: kontrol testi sınavı, kısalan plan, posta, ürün süzgeci
+      - run: npm run test:plan
+      # Ölçüm akışı: cron kapısı, işaretsiz test, yeniden puanlama
+      - run: npm run test:tutarlilik
 
   backend:
     name: backend
@@ -144,3 +162,71 @@ jobs:
           BACKEND_URL: https://api.kocum.net
           NODE_ENV: development
         run: node -e "const m=require('./utils/mailer.js'); const r=m.renderMail({baslik:'CI',metin:['ok']}); if(!r.html.includes('CI')) process.exit(1); console.log('şablon ok')"
+      # Sahte cf-connecting-ip Cloudflare dışından gelirse yok sayılıyor mu.
+      - name: İstemci IP kuralı
+        run: npm run test:ip
+
+  backend-smoke:
+    # Çalışan sunucuya istek atan duman testi (scripts/smoke.js): güvenlik
+    # düzeltmeleri, CSRF, hız sınırları, BFF imzası, iletişim mesajları, görsel
+    # yükleme. Ardından iletişim mesajlarının saklama süresi ve otomatik yanıt
+    # sınırı (scripts/contact-messages-test.js). Geçici Postgres; değerler test için.
+    name: Backend duman testi
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # smoke.js yazma denemelerini yalnızca geliştirmede yapıyor; log:// taşıyıcısı da.
+      NODE_ENV: development
+      PORT: "5177"
+      JWT_SECRET: ci-only-secret-value-that-is-long-enough-123456
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      # Adında "test" geçmeli: test:contact başka veritabanında çalışmıyor.
+      DB_NAME: kocumnet_ci_test
+      DB_USER: ci
+      DB_PASSWORD: ci
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://127.0.0.1:5177
+      SMTP_URL: log://console
+      # CSRF açık: çift gönderim yolu gerçekten denensin.
+      CSRF_DISABLED: "0"
+      ADMIN_EMAIL: smoke@kocum.local
+      ADMIN_PASSWORD: ci-smoke-parola-123456
+      BFF_SHARED_SECRET: ci-bff-shared-secret-that-is-at-least-32-chars
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run db:ensure
+      - run: npm run seed:admin
+      - name: Sunucuyu arka planda başlat
+        run: |
+          nohup node server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:5177/api/health > /dev/null && exit 0
+            sleep 1
+          done
+          cat server.log
+          exit 1
+      - run: npm run smoke
+      - run: npm run test:contact
+      - name: Sunucu günlüğü
+        if: always()
+        run: cat server.log || true
