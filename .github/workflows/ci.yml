@@ -120,6 +120,11 @@ jobs:
       - run: npm run test:import
       # Deneme oluşturucunun saf kuralları (panel modülü): veritabanı istemez.
       - run: npm run test:deneme-panel
+      # Hocaya sorular: cevap kuralları (panel modülü) ve içerik denetimi; veritabanı istemez
+      - run: npm run test:hoca-cevap
+      - run: npm run test:hoca-icerik
+      - name: HOCAYA-SORULAR.md içerikle eşit mi
+        run: npm run hoca:belge -- --check
       - run: npm run test:leak
       - run: npm run test:levels
       - run: npm run test:practice

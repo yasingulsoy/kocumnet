@@ -160,8 +160,8 @@ export function seviye1AnaKarar(
    * Matematiksel kısa devre.
    *
    * Telafi turunun TAMAMINI doğru yapsa bile barajı aşamayacak öğrenciyi
-   * o tura sokmuyoruz. 10 doğrusu olan birine 40 soruluk telafi turu
-   * açmak, sonucu değiştirmeyecek 40 dakikayı çalmak demek.
+   * o tura sokmuyoruz. Barajı hiçbir yolla aşamayacak öğrenciye uzun bir telafi
+   * turu açmak, sonucu değiştirmeyecek dakikaları çalmak demek.
    *
    * En iyi ihtimal: (dogru + ek) / (toplam + ek); ek = turda gerçekten
    * sorulabilecek soru. Eksik kazanım sayısıyla hesaplamak, havuz darken

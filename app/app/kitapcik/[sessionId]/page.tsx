@@ -5,7 +5,7 @@ import { ArrowLeft, CircleCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { CheckupError, getKitapcik } from "@/lib/checkup";
 import { cezaKurali, sonGunMetni } from "@/lib/deneme";
-import { examShort } from "@/lib/exams";
+import { examInfo, examShort } from "@/lib/exams";
 import { MathContent } from "@/components/MathContent";
 import { LogoYazi } from "@/components/ui/logo";
 import { trDate } from "@/components/ui";
@@ -125,7 +125,11 @@ export default async function KitapcikPage({ params }: PageProps<"/kitapcik/[ses
             </li>
             <li>
               Her sorunun tek doğru cevabı var. {kural}
-              {k.penaltyRatio > 0 ? "; emin değilsen boş bırakmak daha iyi olabilir." : "; emin olmasan da işaretle."}
+              {/* Boş bırakma tavsiyesi ekrandakiyle aynı (sınavın kuralı): ayrı bir cümle
+                  ekrandaki "iki şıkkı eleyebiliyorsan işaretle" ile çelişiyordu. */}
+              {k.penaltyRatio > 0
+                ? `. ${examInfo(k.examScope)?.blankAdvice ?? "Emin değilsen boş bırakmak daha iyi olabilir."}`
+                : "; emin olmasan da işaretle."}
             </li>
             <li>Cevaplarını son sayfadaki cevap kâğıdına işaretle.</li>
             <li>

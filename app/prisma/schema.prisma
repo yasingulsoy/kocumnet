@@ -1222,3 +1222,36 @@ model CoachQuestion {
   @@index([answeredAt, closedAt, createdAt])
   @@index([questionId])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Hocaya sorular
+// ─────────────────────────────────────────────────────────────
+
+/// Panelin "Hocaya sorular" ekranında bir sorunun cevabı.
+///
+/// Sorular KODDA (admin/src/lib/checkup/hoca/sorular.ts); burada yalnızca
+/// cevap. questionKey kalıcı: soru metni değişse de cevap kaybolmaz. Değerin
+/// yapısı soru türüne göre (admin/src/lib/checkup/hoca/tipler.ts CevapDegeri).
+/// Personel başka veritabanında: cevaplayan ve uygulayan "e-posta (#id)" damgası.
+model TeacherAnswer {
+  id          String @id @default(cuid())
+  questionKey String @unique
+
+  /// Seçilen karar, seçenek, sayı ya da tablo hücreleri. Yalnızca not
+  /// yazıldıysa boş olabilir.
+  value Json?
+  /// Hocanın serbest notu (her soruda isteğe bağlı).
+  note  String?
+
+  answeredByStaff String?
+  answeredAt      DateTime?
+
+  /// Cevap sisteme işlendi: geliştirici ya da yönetici işaretler; hoca
+  /// "uygulandı" görür. Cevap sonradan değişirse bu alanlar boşalır.
+  appliedAt      DateTime?
+  appliedByStaff String?
+  appliedNote    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

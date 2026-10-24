@@ -28,7 +28,10 @@
     "test:odev": "tsx scripts/odev-test.mts",
     "test:deneme-panel": "tsx scripts/deneme-panel-test.mts",
     "test:tutarlilik": "tsx scripts/tutarlilik-test.mts",
-    "test:plan": "tsx scripts/plan-test.mts"
+    "test:plan": "tsx scripts/plan-test.mts",
+    "test:hoca-cevap": "tsx scripts/hoca-cevap-test.mts",
+    "test:hoca-icerik": "tsx scripts/hoca-icerik-test.mts",
+    "hoca:belge": "tsx scripts/hoca-belgesi.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

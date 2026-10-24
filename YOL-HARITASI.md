@@ -58,7 +58,7 @@ Sistem bu kalıptan onlarca farklı soru üretir ve her birini denetler.
 
 **Telif.** ÖSYM ve MEB'in çıkmış soruları izinsiz birebir kullanılamaz. "Sınav tarzında"
 özgün soru yazılmalı. Çıkmış soru kullanılacaksa kaynağı yazılır ve izin konusu netleşir
-(HOCAYA-SORULAR 8.3).
+(Hocaya sorular 4.5).
 
 ### 2.2 Her soruda olması gerekenler
 
@@ -172,4 +172,5 @@ kontrol testi; seviyeli check-up; gelişim grafiği.
 5. Çözüm ve hata tipi yazımında ortak bir standart.
 6. Seviye 1 için parametrik şablon fikri.
 
-Ayrıntılı sorular [HOCAYA-SORULAR.md](HOCAYA-SORULAR.md) dosyasında.
+Ayrıntılı sorular check-up panelindeki **Hocaya sorular** ekranında; hoca cevaplarını orada
+verir. Aynı içerik [HOCAYA-SORULAR.md](HOCAYA-SORULAR.md) ve Word belgesi olarak da var.

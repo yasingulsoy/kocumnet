@@ -76,7 +76,7 @@ GitHub Actions her push'ta ve PR'da aşağıdakilerin hepsini çalıştırır
 | frontend | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` · `npm run i18n:check` (üç sözlük aynı anahtarlar) · `npm run test:ip` |
 | admin | `npm run checkup:check` (şema kopyası eşit mi) · `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
 | app | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app, veritabanıyla | `npx prisma migrate deploy` · `npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (şema ile migration'lar eşit mi) · tohumlar (`db:seed`, `db:seed:demo`, `db:seed:levels`) · `npm run smoke` · `test:markup` · `test:ip` · `test:import` · `test:deneme-panel` · `test:leak` · `test:levels` · `test:practice` · `test:veli` · `test:deneme` · `test:ogrenme` · `test:odev` · `test:plan` · `test:tutarlilik` |
+| app, veritabanıyla | `npx prisma migrate deploy` · `npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (şema ile migration'lar eşit mi) · tohumlar (`db:seed`, `db:seed:demo`, `db:seed:levels`) · `npm run smoke` · `test:markup` · `test:ip` · `test:import` · `test:deneme-panel` · `test:leak` · `test:levels` · `test:practice` · `test:veli` · `test:deneme` · `test:ogrenme` · `test:odev` · `test:plan` · `test:tutarlilik` · `test:hoca-cevap` · `test:hoca-icerik` · `hoca:belge -- --check` |
 | backend | Sözdizimi (`node --check`, her dosya) · posta şablonu · `npm run test:ip`. TypeScript ve derleme adımı yok. |
 | backend, veritabanı ve çalışan sunucuyla | `npm run db:ensure` · `npm run seed:admin` · sunucu arka planda · `npm run smoke` · `npm run test:contact` |
 | kök | `node design/sync.mjs --check` (tasarım ve marka kopyaları eşit mi) |
@@ -109,5 +109,7 @@ node design/sync.mjs
 - [`app/SORU-SABLONU.md`](app/SORU-SABLONU.md): soru dosyası biçimi (`npm run import:questions`)
 - [`admin/CHECKUP.md`](admin/CHECKUP.md): panelin kimlik doğrulaması ve yetkiler
 - `*/DEPLOY.md`: her projenin yayına alma notları
-- [`HOCAYA-SORULAR.md`](HOCAYA-SORULAR.md): içerik kararları için açık sorular
+- **Hocaya sorular:** içerik ve kural kararları Özgür Hoca'ya. Hoca cevapları check-up panelinde
+  (`/checkup/hoca`) verir. Sorular `admin/src/lib/checkup/hoca/sorular.ts`'te; [`HOCAYA-SORULAR.md`](HOCAYA-SORULAR.md)
+  ondan üretilir (`cd app && npm run hoca:belge`), elle düzenlenmez.
 - [`docs/arsiv/`](docs/arsiv): eski günlük raporlar (tarihsel; yazıldıkları günü anlatır, güncel değil)

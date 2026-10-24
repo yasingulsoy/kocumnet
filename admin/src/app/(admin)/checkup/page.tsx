@@ -12,6 +12,7 @@ import { examLabel, gradeLabel, percent, relativeDay, trDate, trNumber } from "@
 import type { TopicBreakdown } from "@/lib/checkup/shared/scoring";
 import { GateNotice } from "@/components/checkup/GateNotice";
 import { TestGrafigi } from "@/components/checkup/Grafikler";
+import { HocaSorulariKutusu } from "@/components/checkup/HocaSorulariKutusu";
 import { KocaSoruKutusu } from "@/components/checkup/KocaSoruKutusu";
 import { PACKAGE_STATE_COLOR } from "@/components/checkup/ui";
 import { ChartCard } from "@/components/tailadmin/charts/ChartCard";
@@ -312,6 +313,9 @@ export default async function CheckupOverviewPage() {
 
       {/* Cevap bekleyen "Koça sor" soruları: yalnızca cevaplayabilen rollere (kendi sorgusu var). */}
       {yazabilir ? <KocaSoruKutusu /> : null}
+
+      {/* Hocaya sorular: kaç soru cevaplandı, kaç acil bekliyor (bütün personel; kendi sorgusu var). */}
+      <HocaSorulariKutusu />
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-7">

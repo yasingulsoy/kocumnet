@@ -8,6 +8,7 @@ import {
   Database,
   FileUp,
   Flag,
+  GraduationCap,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -48,7 +49,14 @@ function menu(role: StaffRole): NavSection[] {
   const yazar = CONTENT_ROLES.includes(role);
   const yonetim = MANAGE_ROLES.includes(role);
   return [
-    { title: "Menü", items: [{ href: "/checkup", label: "Genel bakış", icon: <LayoutDashboard />, exact: true }] },
+    {
+      title: "Menü",
+      items: [
+        { href: "/checkup", label: "Genel bakış", icon: <LayoutDashboard />, exact: true },
+        // Özgür Hoca'nın içerik/kural kararları: bütün personel okur, cevabı içerik rolleri yazar.
+        { href: "/checkup/hoca", label: "Hocaya sorular", icon: <GraduationCap /> },
+      ],
+    },
     {
       title: "Soru havuzu",
       items: [

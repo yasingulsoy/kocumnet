@@ -23,7 +23,7 @@ import { SUPPORT_EMAIL } from "@/lib/site";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/auth";
 import { checkPackageAccess } from "@/lib/entitlements";
-import { examShort } from "@/lib/exams";
+import { examInfo, examShort } from "@/lib/exams";
 import { denemeDurumlari } from "@/lib/catalog";
 import {
   DENEME_HAZIRLANIYOR,
@@ -51,10 +51,13 @@ export async function generateMetadata({
   return { title: p?.name ?? "Paket" };
 }
 
-/** 0.25 → "4 yanlış 1 doğruyu götürür — …". Oran koda gömülü değil, paketten geliyor. */
-function cezaMetni(oran: number) {
+/**
+ * 0.25 → "4 yanlış 1 doğruyu götürür. İki şıkkı eleyebiliyorsan…". Oran paketten;
+ * boş bırakma tavsiyesi sınavın kuralından (sınav ekranı ve kitapçıkla aynı cümle).
+ */
+function cezaMetni(oran: number, sinav: string | null) {
   if (oran <= 0) return "Yanlışlar doğruyu götürmez — emin olmasan da işaretle.";
-  return `${cezaKurali(oran)} — emin değilsen boş bırakmak daha iyi olabilir.`;
+  return `${cezaKurali(oran)}. ${examInfo(sinav)?.blankAdvice ?? "Emin değilsen boş bırakmak daha iyi olabilir."}`;
 }
 
 export default async function PackageDetailPage({ params }: PageProps<"/paketler/[slug]">) {
@@ -149,7 +152,7 @@ export default async function PackageDetailPage({ params }: PageProps<"/paketler
       t: "Cevapların anında kaydedilir",
       d: "Bağlantın kopsa bile kaldığın yerden devam edebilirsin.",
     },
-    { icon: Scale, t: "Puanlama", d: cezaMetni(oran) },
+    { icon: Scale, t: "Puanlama", d: cezaMetni(oran, pkg.examScope) },
     {
       icon: Bookmark,
       t: "Emin değilsen “Sonra bak”",
