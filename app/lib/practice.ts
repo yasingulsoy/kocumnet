@@ -37,6 +37,10 @@ import { odevBolumu, odevIlerlemesi, ogrenciGorur, tamamlandiMi } from "@/lib/od
 import { raporDurumlari } from "@/lib/hata-bildirimi";
 import { kocaSoruDurumlari } from "@/lib/koca-soru";
 import type { KocaSoruDurumu, RaporDurumu } from "@/lib/bildirim-kurallari";
+import { baslatmaKilidi } from "@/lib/kullanici-kilidi";
+
+/** Prisma istemcisi ya da işlem: aynı sorgu kilitten önce ve sonra çalışabilsin. */
+type Db = Prisma.TransactionClient;
 
 /**
  * Alıştırma — ölçümün yanındaki öğrenme döngüsü.
@@ -249,29 +253,45 @@ async function azOnceGosterilenler(userId: string, now: Date): Promise<string[]>
   return satirlar.map((s) => s.questionId);
 }
 
-/** Son 24 saatte kaç alıştırma sorusu açıldı (benzer + konu). */
-async function kullanilanHak(userId: string, now: Date): Promise<number> {
-  return prisma.sessionItem.count({
+/**
+ * Bugün (Türkiye günü, lib/review.ts gunBasi) kaç alıştırma sorusu AÇILDI
+ * (benzer + konu; koçun konu ödevi de konu alıştırması). Sayılan açılan
+ * oturumların soruları, cevaplanıp cevaplanmadıkları değil. Eskiden kayan 24
+ * saatti; mesaj "yarın" derken akşam dolan hak ertesi akşama kadar açılmıyordu.
+ */
+async function kullanilanHak(userId: string, now: Date, db: Db = prisma): Promise<number> {
+  return db.sessionItem.count({
     where: {
       session: {
         userId,
         kind: "PRACTICE",
         practiceMode: { in: ["SIMILAR", "TOPIC"] },
-        startedAt: { gt: new Date(now.getTime() - 24 * SAAT) },
+        startedAt: { gte: gunBasi(now) },
       },
     },
   });
 }
 
 /** Bugün açılabilecek alıştırma sorusu (GUNLUK_ALISTIRMA_SORU'dan kalan). */
-export async function alistirmaHakki(userId: string, now = new Date()): Promise<number> {
-  return Math.max(0, GUNLUK_ALISTIRMA_SORU - (await kullanilanHak(userId, now)));
+export async function alistirmaHakki(userId: string, now = new Date(), db: Db = prisma): Promise<number> {
+  return Math.max(0, GUNLUK_ALISTIRMA_SORU - (await kullanilanHak(userId, now, db)));
 }
 
 const HAK_DOLDU =
   "Bugünlük alıştırma hakkın doldu. Yarın devam edelim; bu arada yanlışlarının çözümlerine bak.";
 
-/** Alıştırma oturumunu açar: sorular sabitlenir, tekrar engeli kaydı düşülür. */
+/**
+ * Alıştırma oturumunu açar: sorular sabitlenir, tekrar engeli kaydı düşülür.
+ *
+ * Çağıranlar "açık alıştırma var mı?" ve "hak var mı?" diye önce kendisi
+ * bakar (boşuna soru seçmesin diye); ikisi burada, kullanıcı kilidinden
+ * SONRA işlemin içinde yeniden denetlenir (lib/kullanici-kilidi.ts). İki
+ * sekme aynı anda açınca ikisi de "yok" görüp iki alıştırma açıyordu ve
+ * günlük hak bir oturum fazla aşılabiliyordu.
+ *  - `acikOturum`: aynı işin açık oturumu varsa kimliği; o döner.
+ *  - `sinir.kalan`: şimdi kaç soru daha açılabilir. Sorular buna kırpılır;
+ *    sıfırsa `sinir.mesaj`.
+ */
 async function alistirmaAc(args: {
   userId: string;
   examScope: Sinav;
@@ -283,12 +303,23 @@ async function alistirmaAc(args: {
   now: Date;
   /** Varsayılan ALISTIRMA_OMRU_SAAT sonra. */
   expiresAt?: Date;
+  acikOturum: (db: Db) => Promise<string | null>;
+  sinir: { kalan: (db: Db) => Promise<number>; mesaj: string };
 }): Promise<string> {
-  const { userId, examScope, mode, focusTopicId, sourceSessionId, sorular, relaxedExposureCount, now } = args;
+  const { userId, examScope, mode, focusTopicId, sourceSessionId, now } = args;
   const expiresAt = args.expiresAt ?? new Date(now.getTime() + ALISTIRMA_OMRU_SAAT * SAAT);
   const packageId = await alistirmaPaketi(examScope);
 
   return prisma.$transaction(async (tx) => {
+    await baslatmaKilidi(tx, userId);
+    const acik = await args.acikOturum(tx);
+    if (acik) return acik;
+    const izin = await args.sinir.kalan(tx);
+    if (izin < 1) throw new CheckupError(args.sinir.mesaj);
+    // Öbür sekme bu arada hakkın bir kısmını kullandıysa kalan kadar soru.
+    const sorular = args.sorular.slice(0, izin);
+    const relaxedExposureCount = Math.min(args.relaxedExposureCount, sorular.length);
+
     const session = await tx.checkupSession.create({
       data: {
         userId,
@@ -419,18 +450,8 @@ export async function benzeriniCozBaslat(
   }
 
   // Geri tuşu ya da çift dokunuş: açık alıştırmaya dön.
-  const acik = await prisma.checkupSession.findFirst({
-    where: {
-      userId,
-      kind: "PRACTICE",
-      practiceMode: "SIMILAR",
-      status: "IN_PROGRESS",
-      expiresAt: { gt: now },
-      items: { some: { sourceQuestionId: questionId, answer: { is: null } } },
-    },
-    select: { id: true },
-  });
-  if (acik) return acik.id;
+  const acik = await acikBenzerAlistirmasi(userId, questionId, now);
+  if (acik) return acik;
 
   if ((await alistirmaHakki(userId, now)) < 1) throw new CheckupError(HAK_DOLDU);
 
@@ -455,7 +476,25 @@ export async function benzeriniCozBaslat(
     sorular: [{ id: secilen.questionId, version: version.version, sourceQuestionId: questionId }],
     relaxedExposureCount: secilen.sonGosterim ? 1 : 0,
     now,
+    acikOturum: (db) => acikBenzerAlistirmasi(userId, questionId, now, db),
+    sinir: { kalan: (db) => alistirmaHakki(userId, now, db), mesaj: HAK_DOLDU },
   });
+}
+
+/** Aynı sorunun cevaplanmamış benzer alıştırması (geri tuşu, çift dokunuş, iki sekme). */
+async function acikBenzerAlistirmasi(userId: string, questionId: string, now: Date, db: Db = prisma) {
+  const acik = await db.checkupSession.findFirst({
+    where: {
+      userId,
+      kind: "PRACTICE",
+      practiceMode: "SIMILAR",
+      status: "IN_PROGRESS",
+      expiresAt: { gt: now },
+      items: { some: { sourceQuestionId: questionId, answer: { is: null } } },
+    },
+    select: { id: true },
+  });
+  return acik?.id ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -505,12 +544,13 @@ export async function konuCalismasiBaslat(
     // Sonuç ekranında çözümüyle görülen sorular aday değil.
     haricEk: s.items.map((i) => i.questionId),
     now,
+    kalan: (db) => alistirmaHakki(userId, now, db),
   });
 }
 
 /** Aynı konuda yarım kalan (cevaplanmamış sorusu olan) konu alıştırması. */
-async function acikKonuAlistirmasi(userId: string, topicId: string, now: Date): Promise<string | null> {
-  const acik = await prisma.checkupSession.findFirst({
+async function acikKonuAlistirmasi(userId: string, topicId: string, now: Date, db: Db = prisma): Promise<string | null> {
+  const acik = await db.checkupSession.findFirst({
     where: {
       userId,
       kind: "PRACTICE",
@@ -528,6 +568,7 @@ async function acikKonuAlistirmasi(userId: string, topicId: string, now: Date): 
 /**
  * Konu alıştırmasının ortak gövdesi ("Bu konuda çalış" ve koçun konu
  * ödevi): korunan sorular dışlanır, seçim kontrol testinin merdiveni.
+ * `kalan`: kilitten sonra kaç soru açılabilir (alistirmaAc sinir.kalan).
  */
 async function konuAlistirmasiAc(args: {
   userId: string;
@@ -537,6 +578,7 @@ async function konuAlistirmasiAc(args: {
   sourceSessionId: string | null;
   haricEk: string[];
   now: Date;
+  kalan: (db: Db) => Promise<number>;
 }): Promise<string> {
   const { userId, konu, sinav, adet, sourceSessionId, haricEk, now } = args;
   const topicId = konu.id;
@@ -568,6 +610,8 @@ async function konuAlistirmasiAc(args: {
     sorular: secim.questions.map((q) => ({ id: q.id, version: q.version, sourceQuestionId: null })),
     relaxedExposureCount: secim.relaxedExposureCount,
     now,
+    acikOturum: (db) => acikKonuAlistirmasi(userId, topicId, now, db),
+    sinir: { kalan: args.kalan, mesaj: HAK_DOLDU },
   });
 }
 
@@ -644,8 +688,19 @@ export async function odevKonuCalismasiBaslat(userId: string, assignmentId: stri
   const acik = await acikKonuAlistirmasi(userId, konu.id, now);
   if (acik) return acik;
 
-  const adet = odevAlistirmaAdedi(ilerleme.hedef - ilerleme.cozulen, await alistirmaHakki(userId, now));
-  return konuAlistirmasiAc({ userId, konu, sinav, adet, sourceSessionId: null, haricEk: [], now }).catch((e) => {
+  const odevKalan = ilerleme.hedef - ilerleme.cozulen;
+  const adet = odevAlistirmaAdedi(odevKalan, await alistirmaHakki(userId, now));
+  return konuAlistirmasiAc({
+    userId,
+    konu,
+    sinav,
+    adet,
+    sourceSessionId: null,
+    haricEk: [],
+    now,
+    // Kilitten sonra da aynı istisna: ödev günlük hakka sayılır ama hak bitince engellenmez.
+    kalan: async (db) => odevAlistirmaAdedi(odevKalan, await alistirmaHakki(userId, now, db)),
+  }).catch((e) => {
     // Seçimin kendi iletisi ("soru kalmadı") ödevde koça yönlendirsin.
     if (e instanceof CheckupError) throw new CheckupError(`${e.message} Koçuna haber ver.`);
     throw e;
@@ -691,8 +746,8 @@ async function tekrarPlani(userId: string, now: Date) {
 }
 
 /** Bugün (Türkiye saatiyle) tekrarda açılan soru sayısı. */
-async function bugunTekrarlanan(userId: string, now: Date): Promise<number> {
-  return prisma.sessionItem.count({
+async function bugunTekrarlanan(userId: string, now: Date, db: Db = prisma): Promise<number> {
+  return db.sessionItem.count({
     where: {
       session: { userId, kind: "PRACTICE", practiceMode: "REVIEW", startedAt: { gte: gunBasi(now) } },
     },
@@ -700,8 +755,8 @@ async function bugunTekrarlanan(userId: string, now: Date): Promise<number> {
 }
 
 /** Yarım kalan tekrar oturumu (varsa) ve cevaplanmamış soru sayısı. */
-async function acikTekrar(userId: string, now: Date) {
-  const s = await prisma.checkupSession.findFirst({
+async function acikTekrar(userId: string, now: Date, db: Db = prisma) {
+  const s = await db.checkupSession.findFirst({
     where: { userId, kind: "PRACTICE", practiceMode: "REVIEW", status: "IN_PROGRESS", expiresAt: { gt: now } },
     orderBy: { startedAt: "desc" },
     select: { id: true, items: { select: { answer: { select: { id: true } } } } },
@@ -756,6 +811,8 @@ export async function bugunkuTekrarDurumu(userId: string, now = new Date()): Pro
   };
 }
 
+const TEKRAR_BITTI = "Bugünkü tekrarını bitirdin. Sıradaki maddeler yarın.";
+
 /**
  * "Bugünkü tekrar"ı açar: vadesi gelen her madde için bir BENZER soru,
  * en fazla GUNLUK_TEKRAR_SORU (gün başına). Yarım kalan tekrar varsa ona döner.
@@ -769,7 +826,7 @@ export async function tekrarBaslat(
   if (acik) return acik.id;
 
   const kalan = GUNLUK_TEKRAR_SORU - (await bugunTekrarlanan(userId, now));
-  if (kalan <= 0) throw new CheckupError("Bugünkü tekrarını bitirdin. Sıradaki maddeler yarın.");
+  if (kalan <= 0) throw new CheckupError(TEKRAR_BITTI);
 
   const plan = await tekrarPlani(userId, now);
   const secilen = plan.kaynaklar.filter((k) => plan.atama.has(k.questionId)).slice(0, kalan);
@@ -806,6 +863,8 @@ export async function tekrarBaslat(
     // "Bugünkü" tekrar: gün bitince kapanır; yarın vadesi gelenlerle yenisi kurulur.
     // Gece yarısına az kala açılana yine de birkaç saat tanınır.
     expiresAt: new Date(Math.max(vade(now, 1).getTime(), now.getTime() + 3 * SAAT)),
+    acikOturum: async (db) => (await acikTekrar(userId, now, db))?.id ?? null,
+    sinir: { kalan: async (db) => GUNLUK_TEKRAR_SORU - (await bugunTekrarlanan(userId, now, db)), mesaj: TEKRAR_BITTI },
   });
 }
 

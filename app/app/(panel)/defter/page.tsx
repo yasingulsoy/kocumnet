@@ -10,6 +10,7 @@ import { parseQuestionContent, safeParseQuestionContent, type QuestionContent } 
 import { MathContent } from "@/components/MathContent";
 import { DefterKarti } from "@/components/DefterKarti";
 import { KazanimKarti } from "@/components/KazanimKarti";
+import { YazdirirkenAc } from "@/components/YazdirirkenAc";
 import { cx } from "@/components/tailadmin/cx";
 import { ButtonLink } from "@/components/tailadmin/ui/Button";
 import { Card, ComponentCard } from "@/components/tailadmin/ui/Card";
@@ -83,6 +84,8 @@ export default async function DefterPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl animate-rise">
+      {/* Yazdırırken kapalı kazanım kartları da basılsın (Chrome kapalı details'i basmıyor). */}
+      <YazdirirkenAc />
       <PageBreadcrumb
         pageTitle="Yanlış defteri"
         description={`Testlerde yanlış yaptığın ya da boş bıraktığın sorular. Her biri ${TEKRAR_ARALIKLARI_GUN.join(", ")} gün arayla benzer bir soruyla geri gelir; ${TEKRAR_ARALIKLARI_GUN.length} tekrarı da doğru yapınca defterden çıkar.`}

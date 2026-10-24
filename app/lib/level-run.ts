@@ -3,6 +3,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import { CheckupError } from "@/lib/checkup";
 import { checkPackageAccess } from "@/lib/entitlements";
 import { maruziyetiYaz } from "@/lib/maruziyet";
+import { baslatmaKilidi } from "@/lib/kullanici-kilidi";
 import {
   kazanimBasinaBirSoru,
   seviyeliHazirlik,
@@ -59,9 +60,15 @@ async function seviyeliPaket(examScope: ExamScopeValue) {
  * yönlendiriliyor, TYT'yi hiç başlatamıyordu. Verilmezse en son başlatılan
  * (pano: hangi sınavdan olursa olsun yarım kalan iş). Bırakılan koşu
  * (ABANDONED) süren sayılmaz; "Bugün" kartına da girmez.
+ *
+ * `db`: başlatma, kullanıcı kilidinden sonra işlemin içinden yeniden sorar.
  */
-export async function aktifKosu(userId: string, examScope?: ExamScopeValue) {
-  return prisma.levelRun.findFirst({
+export async function aktifKosu(
+  userId: string,
+  examScope?: ExamScopeValue,
+  db: Prisma.TransactionClient = prisma
+) {
+  return db.levelRun.findFirst({
     where: { userId, status: "IN_PROGRESS", ...(examScope ? { examScope: examScope as never } : {}) },
     orderBy: { startedAt: "desc" },
     select: {
@@ -102,6 +109,11 @@ export async function aktifKosu(userId: string, examScope?: ExamScopeValue) {
  * Koşu ve ilk aşama TEK işlemde yazılır. Eskiden koşu önce yazılıyor, aşama
  * sonra açılıyordu; havuz yetmeyince aşamasız bir koşu kalıyor ve "Bugün"
  * kartı her gün "Seviye 1 seni bekliyor" diyordu.
+ *
+ * İki sekme aynı anda başlatınca ikisi de süren koşu görmüyor ve aynı
+ * sınavdan iki koşu açılıyordu. İşlem kullanıcı kilidini alır ve süren koşuya
+ * kilitten sonra yeniden bakar (lib/kullanici-kilidi.ts): ikinci sekme
+ * birincinin koşusuna döner.
  */
 export async function seviyeliSinavBaslat(
   userId: string,
@@ -128,6 +140,13 @@ export async function seviyeliSinavBaslat(
   const plan = await asamaSec({ userId, scope: examScope, level: 1, kind: "MAIN", gosterilmis: [] });
 
   return prisma.$transaction(async (tx) => {
+    await baslatmaKilidi(tx, userId);
+    const simdiAcik = await aktifKosu(userId, examScope, tx);
+    if (simdiAcik) {
+      // Öbür sekme az önce açtı: seçtiğimiz sorular yazılmaz, onunki döner.
+      const devam = simdiAcik.stages.find((s) => s.status === "IN_PROGRESS");
+      return { runId: simdiAcik.id, sessionId: devam?.id ?? null };
+    }
     await kosulariBirak(tx, { userId, examScope: { not: examScope as never } });
     const run = await tx.levelRun.create({
       data: { userId, examScope: examScope as never },
@@ -316,6 +335,9 @@ export async function asamaAc(
   }
 
   const sessionId = await prisma.$transaction(async (tx) => {
+    // Kullanıcı kilidi önce (kosuyuBirak ve yeni koşu başlatma da onu alıyor):
+    // bırakılmakta olan koşuda aşama açılıp sahipsiz kalmasın.
+    await baslatmaKilidi(tx, run.userId);
     await kosuyuKilitle(tx, run.id);
     return asamaYaz(tx, { runId: run.id, userId: run.userId, paketId: paket.id, plan });
   });
@@ -419,6 +441,7 @@ export async function telafiyiAc(runId: string, userId: string): Promise<string 
   // Tur ve bekleyen listenin temizlenmesi birlikte: biri yazılıp öteki
   // yazılamazsa ya tur iki kez açılır ya da bekleyen liste askıda kalır.
   return prisma.$transaction(async (tx) => {
+    await baslatmaKilidi(tx, userId);
     const kilitli = await kosuyuKilitle(tx, runId);
     if (kilitli.pendingRemedialIds.length === 0) throw new CheckupError("Bekleyen telafi turu yok.");
     const sessionId = await asamaYaz(tx, { runId, userId, paketId: paket.id, plan });
@@ -468,7 +491,15 @@ export async function kosuyuBirak(runId: string, userId: string): Promise<void> 
   });
   if (!run || run.userId !== userId) throw new CheckupError("Deneme bulunamadı.");
   if (run.status !== "IN_PROGRESS") throw new CheckupError("Bu deneme zaten kapandı.");
-  await prisma.$transaction((tx) => kosulariBirak(tx, { id: runId, userId }));
+  /*
+   * Kullanıcı kilidiyle: öbür sekmede aynı anda "Devam" (asamaAc) denirse ya
+   * aşama önce açılır ve burada o da bırakılır, ya da bırakma önce olur ve
+   * aşama açılmaz. Kilitsiz, bırakılan koşuda açık bir aşama kalabiliyordu.
+   */
+  await prisma.$transaction(async (tx) => {
+    await baslatmaKilidi(tx, userId);
+    await kosulariBirak(tx, { id: runId, userId });
+  });
 }
 
 /** Aşamasız koşu bu kadar eskiyse sahipsiz sayılır (yazılırken yakalanmasın). */

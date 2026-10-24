@@ -14,6 +14,11 @@ import "./_koruma.mjs";
  *     defter, rescoreNote; açık testte düzeltme bitişte yakalanıyor.
  *  4. Bakım ucunun iskeleti: işler birbirini düşürmüyor (allSettled), kilit
  *     üst üste binmeyi engelliyor.
+ *  5. Eşzamanlılık: iki sekme aynı anda başlatınca tek oturum (test, kontrol
+ *     testi, seviyeli koşu, alıştırma, tekrar); bitirme yoldaki cevabı
+ *     bekleyip sayıyor, bitirmeden sonra gelen cevap yazılmıyor.
+ *  6. Günlük sınırlar Türkiye günü: dün 23:59'da açılan kontrol testi ve
+ *     alıştırma bugünün hakkını yemiyor.
  *
  * Neden ayrı test: bu kuralların her biri tek başına küçük, ama bozulunca
  * sessiz. Kapı değerlendirilmeyince koşu "sürüyor" kalıyor; işaretsiz test
@@ -26,9 +31,11 @@ import "./_koruma.mjs";
  */
 import "dotenv/config";
 import { prisma } from "../lib/db";
+import type { Prisma } from "../lib/generated/prisma/client";
 import { hashPassword } from "../lib/password";
 import { grantEntitlement } from "../lib/entitlements";
 import {
+  CheckupError,
   KAYIT_TOLERANSI_MS,
   expireStaleSessions,
   saveAnswer,
@@ -38,6 +45,9 @@ import {
   yenidenPuanla,
   yenidenPuanlamaBilgisi,
 } from "../lib/checkup";
+import type { CheckupScore } from "../lib/scoring";
+import { alistirmaHakki, konuCalismasiBaslat, tekrarBaslat } from "../lib/practice";
+import { GUNLUK_ALISTIRMA_SORU, GUNLUK_TEKRAR_SINIRI, gunBasi } from "../lib/review";
 import { asamaDegerlendir, seviyeliKapilariOnar, seviyeliSinavBaslat } from "../lib/level-run";
 import { egilimeGirer, isaretsiz, konuHaritasinaGirer } from "../lib/insights";
 import { odevIlerlemesi, type OdevKurali, type OdevOturumu } from "../lib/odev";
@@ -57,6 +67,8 @@ const EPOSTA = {
   bos: `${ON}-bos@kocum.local`,
   isaretsiz: `${ON}-isaretsiz@kocum.local`,
   puan: `${ON}-puan@kocum.local`,
+  eszaman: `${ON}-eszaman@kocum.local`,
+  gun: `${ON}-gun@kocum.local`,
 };
 const PAKET = "tyt-ilk-15";
 const SINAV = "TYT" as const;
@@ -94,6 +106,8 @@ async function temizle() {
   await prisma.notebookItem.deleteMany({ where: { userId: { in: ids } } });
   await prisma.entitlement.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  // Testin kendi soruları (kendiSorusunuKoy). Oturumlar yukarıda silindi; soru serbest.
+  await prisma.question.deleteMany({ where: { fingerprint: { startsWith: `${ON}-` } } });
 }
 
 /** Oturumun soruları, doğru ve bir yanlış şıkla. */
@@ -394,12 +408,75 @@ async function anahtariDegistir(questionId: string, yeniDogru: string, eskiDogru
   ]);
 }
 
+/**
+ * Oturumdaki bir sorunun yerine, yalnızca bu testin kullandığı yeni bir soru
+ * koyar (aynı konu, aynı gövde ve şıklar; taslakta).
+ *
+ * Neden: yeniden puanlama, anahtarı değişen sorunun BÜTÜN bitmiş cevaplarını
+ * düzeltir. CI aynı veritabanında önce öteki testleri koşturuyor; tohumdaki
+ * soruyu onların öğrencileri de cevaplamış olabiliyor. Anahtar değişince
+ * onların doğrusu yanlışa döner (−1), bizimki doğruya (+1) ve "sayaç +1"
+ * denetimi 3 → 3 görüp düşüyordu (kod doğruydu, beklenti yanlış kurulmuştu).
+ * Kimsenin görmediği soru bu belirsizliği kaldırır. Taslakta kalır: hiçbir
+ * seçim (paket, alıştırma, deneme) onu başka bir teste vermez.
+ */
+async function kendiSorusunuKoy(sessionId: string, questionId: string): Promise<string> {
+  const q = await prisma.question.findUniqueOrThrow({
+    where: { id: questionId },
+    select: {
+      topicId: true,
+      stem: true,
+      stemText: true,
+      difficulty: true,
+      targetTimeSeconds: true,
+      examScopes: true,
+      choices: {
+        orderBy: { sortOrder: "asc" },
+        select: { label: true, content: true, isCorrect: true, errorType: true, sortOrder: true },
+      },
+    },
+  });
+  const yeni = await prisma.question.create({
+    data: {
+      topicId: q.topicId,
+      stem: q.stem as Prisma.InputJsonValue,
+      stemText: `${ON}: ${q.stemText}`,
+      fingerprint: `${ON}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      difficulty: q.difficulty,
+      targetTimeSeconds: q.targetTimeSeconds,
+      examScopes: q.examScopes,
+      status: "DRAFT",
+      createdByStaff: DAMGA,
+      choices: {
+        create: q.choices.map((c) => ({
+          label: c.label,
+          content: c.content as Prisma.InputJsonValue,
+          isCorrect: c.isCorrect,
+          errorType: c.errorType,
+          sortOrder: c.sortOrder,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  await prisma.sessionItem.updateMany({
+    where: { sessionId, questionId },
+    data: { questionId: yeni.id, questionVersion: 1 },
+  });
+  return yeni.id;
+}
+
 async function yenidenPuanlamaTesti() {
   console.log("\nYeniden puanlama:");
   const userId = await kullanici(EPOSTA.puan);
   const s = await startCheckup(userId, PAKET);
+  // Anahtarı değişecek soru yalnızca bu testin: sayaç ve yeniden puanlanan oturum sayısı belirlenimci.
+  const ilkSoru = (await anahtar(s))[0].questionId;
+  const kendiSorusu = await kendiSorusunuKoy(s, ilkSoru);
   const a = await anahtar(s);
-  const [hedef, ...digerleri] = a;
+  const hedef = a.find((x) => x.questionId === kendiSorusu)!;
+  const digerleri = a.filter((x) => x.questionId !== kendiSorusu);
+  check("hedef soru testin kendi sorusu (kimse cevaplamadı)", Boolean(hedef) && digerleri.length === a.length - 1);
   const eskiHata = await prisma.choice.findUniqueOrThrow({ where: { id: hedef.yanlis }, select: { errorType: true } });
 
   // Hedef soruda "yanlış" şıkkı işaretle; ötekiler doğru.
@@ -554,6 +631,217 @@ async function bakimIskeleti() {
   check("iş fırlatsa da kilit kalkıyor", hatali === "iş düştü" && sonrasi.alindi, String(hatali));
 }
 
+// ─────────────────────────────────────────────────────────────
+// 5. Eşzamanlılık: başlatma kilidi, bitirme ile cevap kaydı
+// ─────────────────────────────────────────────────────────────
+
+type Sonuc<T> = { ok: true; deger: T } | { ok: false; hata: string };
+
+/** Sözün sonucu ya da hata kodu/iletisi: Promise.all'da biri düşünce öteki kaybolmasın. */
+async function sonucu<T>(p: Promise<T>): Promise<Sonuc<T>> {
+  try {
+    return { ok: true, deger: await p };
+  } catch (e) {
+    return { ok: false, hata: e instanceof CheckupError ? `${e.code}: ${e.message}` : String(e) };
+  }
+}
+
+/** Konulardan yayında en çok sorusu olanı. */
+async function enGenisKonu(topicIds: string[]): Promise<string> {
+  const gruplar = await prisma.question.groupBy({
+    by: ["topicId"],
+    where: { topicId: { in: [...new Set(topicIds)] }, status: "PUBLISHED" },
+    _count: { _all: true },
+  });
+  return [...gruplar].sort((a, b) => b._count._all - a._count._all)[0]?.topicId ?? topicIds[0];
+}
+
+async function eszamanlilik() {
+  console.log("\nEşzamanlı başlatma (iki sekme):");
+  const userId = await kullanici(EPOSTA.eszaman);
+
+  const [a1, a2] = await Promise.all([startCheckup(userId, PAKET), startCheckup(userId, PAKET)]);
+  const acikPaket = await prisma.checkupSession.count({ where: { userId, kind: "PACKAGE", status: "IN_PROGRESS" } });
+  check("aynı test iki kez başlatıldı: tek oturum, ikisine de o", a1 === a2 && acikPaket === 1, `${acikPaket} açık`);
+
+  console.log("\nBitirme ile cevap kaydı:");
+  const k = await anahtar(a1);
+  // İlki hariç hepsi yanlış; ilk sorunun cevabı bitirme beklerken yazılacak.
+  for (const x of k.slice(1)) {
+    await saveAnswer({ sessionId: a1, userId, questionId: x.questionId, choiceId: x.yanlis, timeSpentMs: 2000 });
+  }
+  let bitti = false;
+  let bitis: Promise<CheckupScore> | null = null;
+  await prisma.$transaction(async (tx) => {
+    // Yoldaki cevap kaydını taklit et: oturum satırı paylaşımlı kilitli, cevap henüz yazılmadı.
+    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${a1} FOR SHARE`;
+    bitis = submitCheckup(a1, userId).finally(() => {
+      bitti = true;
+    });
+    await bekle(400);
+    check("bitirme yoldaki cevap kaydını bekliyor", !bitti);
+    const item = await tx.sessionItem.findFirstOrThrow({
+      where: { sessionId: a1, questionId: k[0].questionId },
+      select: { id: true },
+    });
+    await tx.answer.create({ data: { sessionItemId: item.id, choiceId: k[0].dogru, isCorrect: true, timeSpentMs: 1000 } });
+  });
+  const puan: CheckupScore = await bitis!;
+  check(
+    "bitiş, kilitten önce yazılan cevabı saydı",
+    puan.correctCount === 1 && puan.wrongCount === k.length - 1,
+    `${puan.correctCount}D ${puan.wrongCount}Y`
+  );
+
+  console.log("\nEşzamanlı başlatma (öbür yollar):");
+  // Havuzu en geniş konu: açık oturumların ve az önce görülen soruların dışında yine soru kalsın.
+  const konu = await enGenisKonu(k.map((x) => x.topicId));
+  const [p1, p2] = await Promise.all([sonucu(konuCalismasiBaslat(userId, konu, a1)), sonucu(konuCalismasiBaslat(userId, konu, a1))]);
+  const acikKonu = await prisma.checkupSession.count({
+    where: { userId, kind: "PRACTICE", practiceMode: "TOPIC", status: "IN_PROGRESS" },
+  });
+  check(
+    "konu alıştırması: tek oturum",
+    p1.ok && p2.ok && p1.deger === p2.deger && acikKonu === 1,
+    JSON.stringify([p1.ok || p1.hata, p2.ok || p2.hata, acikKonu])
+  );
+
+  const [r1, r2] = await Promise.all([sonucu(startTopicRetest(userId, konu, SINAV)), sonucu(startTopicRetest(userId, konu, SINAV))]);
+  const acikKontrol = await prisma.checkupSession.count({ where: { userId, kind: "TOPIC_RETEST", status: "IN_PROGRESS" } });
+  check(
+    "kontrol testi: tek oturum",
+    r1.ok && r2.ok && r1.deger === r2.deger && acikKontrol === 1,
+    JSON.stringify([r1.ok || r1.hata, r2.ok || r2.hata, acikKontrol])
+  );
+
+  // a1'in yanlışları deftere girdi (vade yarın); vadeyi öne çekip bugünkü tekrarı iki sekmeden aç.
+  await prisma.notebookItem.updateMany({ where: { userId }, data: { dueAt: new Date(Date.now() - 60_000) } });
+  const [t1, t2] = await Promise.all([sonucu(tekrarBaslat(userId, SINAV)), sonucu(tekrarBaslat(userId, SINAV))]);
+  const acikTekrar = await prisma.checkupSession.count({
+    where: { userId, kind: "PRACTICE", practiceMode: "REVIEW", status: "IN_PROGRESS" },
+  });
+  check(
+    "bugünkü tekrar: tek oturum",
+    t1.ok && t2.ok && t1.deger === t2.deger && acikTekrar === 1,
+    JSON.stringify([t1.ok || t1.hata, t2.ok || t2.hata, acikTekrar])
+  );
+
+
+  console.log("\nBitirme ile cevap kaydı (devam):");
+  const b = await startCheckup(userId, PAKET);
+  const kb = await anahtar(b);
+  let kayitBitti = false;
+  let kayit: Promise<Sonuc<void>> | null = null;
+  await prisma.$transaction(async (tx) => {
+    // Süren bitirmeyi taklit et: oturum satırı kilitli, durum henüz yazılmadı.
+    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${b} FOR UPDATE`;
+    kayit = sonucu(
+      saveAnswer({ sessionId: b, userId, questionId: kb[0].questionId, choiceId: kb[0].dogru, timeSpentMs: 1000 })
+    ).finally(() => {
+      kayitBitti = true;
+    });
+    await bekle(400);
+    check("cevap kaydı süren bitirmeyi bekliyor", !kayitBitti);
+    await tx.checkupSession.update({ where: { id: b }, data: { status: "SUBMITTED", submittedAt: new Date() } });
+  });
+  const kayitSonucu: Sonuc<void> = await kayit!;
+  const yazilan = await prisma.answer.count({ where: { sessionItem: { sessionId: b } } });
+  check(
+    "bitirmeden sonra gelen cevap yazılmadı (KAPANDI)",
+    !kayitSonucu.ok && kayitSonucu.hata.startsWith("KAPANDI") && yazilan === 0,
+    `${JSON.stringify(kayitSonucu)}, ${yazilan} cevap`
+  );
+
+  const c = await startCheckup(userId, PAKET);
+  const kc = await anahtar(c);
+  await saveAnswer({ sessionId: c, userId, questionId: kc[0].questionId, choiceId: kc[0].dogru, timeSpentMs: 2000 });
+  const [c1, c2] = await Promise.all([sonucu(submitCheckup(c, userId)), sonucu(submitCheckup(c, userId))]);
+  const sonucSayisi = await prisma.checkupResult.count({ where: { sessionId: c } });
+  check(
+    "çift bitirme: ikisi de aynı sonucu aldı, tek sonuç satırı",
+    c1.ok && c2.ok && c1.deger.correctCount === 1 && c2.deger.correctCount === 1 && c1.deger.netScore === c2.deger.netScore && sonucSayisi === 1,
+    JSON.stringify([c1.ok ? c1.deger.correctCount : c1.hata, c2.ok ? c2.deger.correctCount : c2.hata, sonucSayisi])
+  );
+
+  console.log("\nEşzamanlı başlatma (seviyeli):");
+  const seviyeli = await prisma.package.findFirstOrThrow({ where: { kind: "LEVEL", examScope: SINAV }, select: { id: true } });
+  await grantEntitlement({ userId, packageId: seviyeli.id, expiresAt: new Date(Date.now() + GUN), source: ON });
+  const [l1, l2] = await Promise.all([sonucu(seviyeliSinavBaslat(userId, SINAV)), sonucu(seviyeliSinavBaslat(userId, SINAV))]);
+  const kosular = await prisma.levelRun.count({ where: { userId, status: "IN_PROGRESS" } });
+  const asamalar = await prisma.checkupSession.count({ where: { userId, kind: "LEVEL_STAGE", status: "IN_PROGRESS" } });
+  check(
+    "seviyeli check-up: tek koşu, tek aşama, ikisine de o",
+    l1.ok && l2.ok && l1.deger.runId === l2.deger.runId && l1.deger.sessionId === l2.deger.sessionId && kosular === 1 && asamalar === 1,
+    JSON.stringify([l1.ok || l1.hata, l2.ok || l2.hata, kosular, asamalar])
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 6. Günlük sınırlar: Türkiye günü
+// ─────────────────────────────────────────────────────────────
+
+async function gunlukSinirlar() {
+  console.log("\nGünlük sınırlar (Türkiye günü):");
+  const userId = await kullanici(EPOSTA.gun);
+  const p = await startCheckup(userId, PAKET);
+  const k = await anahtar(p);
+  for (const x of k) {
+    await saveAnswer({ sessionId: p, userId, questionId: x.questionId, choiceId: x.yanlis, timeSpentMs: 2000 });
+  }
+  await submitCheckup(p, userId);
+  const konu = await enGenisKonu(k.map((x) => x.topicId));
+
+  /*
+   * Dün 23:59 (Türkiye): son 24 saatin içinde ama bugünden önce. Eski kural
+   * (kayan 24 saat) bunları bugüne sayıyordu. Gün sonuna bir dakika kala
+   * koşulursa bu an 24 saatin dışına düşer; denetim yine geçer, yalnızca eski
+   * kuralı ayırt etmez.
+   */
+  const simdi = new Date();
+  const dun = new Date(gunBasi(simdi).getTime() - 60_000);
+  const retestPaketi = await prisma.package.findFirstOrThrow({ where: { kind: "RETEST", examScope: SINAV }, select: { id: true } });
+  const kontrolTestleri = (n: number, an: Date) =>
+    prisma.checkupSession.createMany({
+      data: Array.from({ length: n }, () => ({
+        userId,
+        packageId: retestPaketi.id,
+        kind: "TOPIC_RETEST" as const,
+        status: "SUBMITTED" as const,
+        durationMinutes: 8,
+        penaltyRatio: 0,
+        startedAt: an,
+        expiresAt: an,
+        submittedAt: an,
+      })),
+    });
+
+  await kontrolTestleri(GUNLUK_TEKRAR_SINIRI, dun);
+  const r1 = await sonucu(startTopicRetest(userId, konu, SINAV));
+  check(`dün açılan ${GUNLUK_TEKRAR_SINIRI} kontrol testi bugünün hakkını yemiyor`, r1.ok, r1.ok ? "" : r1.hata);
+  if (r1.ok) {
+    await prisma.checkupSession.update({ where: { id: r1.deger }, data: { status: "SUBMITTED", submittedAt: new Date() } });
+  }
+  await kontrolTestleri(GUNLUK_TEKRAR_SINIRI - 1, simdi);
+  const r2 = await sonucu(startTopicRetest(userId, konu, SINAV));
+  check(
+    `bugün ${GUNLUK_TEKRAR_SINIRI} kontrol testi: sınır doldu`,
+    !r2.ok && r2.hata.includes("hakkın doldu"),
+    r2.ok ? "açıldı" : r2.hata
+  );
+
+  const hak0 = await alistirmaHakki(userId);
+  check("alıştırma hakkı tam", hak0 === GUNLUK_ALISTIRMA_SORU, String(hak0));
+  const pr = await sonucu(konuCalismasiBaslat(userId, konu, p));
+  if (!pr.ok) {
+    check("konu alıştırması açıldı", false, pr.hata);
+    return;
+  }
+  const adet = await prisma.sessionItem.count({ where: { sessionId: pr.deger } });
+  check("açılan alıştırma soruları bugünün hakkından düşüyor", (await alistirmaHakki(userId)) === hak0 - adet, `${adet} soru`);
+  await prisma.checkupSession.update({ where: { id: pr.deger }, data: { startedAt: dun } });
+  check("dün açılan alıştırma bugünün hakkına sayılmıyor", (await alistirmaHakki(userId)) === hak0);
+}
+
 async function main() {
   console.log("\nÖlçüm akışı tutarlılığı\n");
   await temizle();
@@ -563,6 +851,8 @@ async function main() {
     await isaretsizTest();
     await yenidenPuanlamaTesti();
     await bakimIskeleti();
+    await eszamanlilik();
+    await gunlukSinirlar();
   } finally {
     await temizle();
   }

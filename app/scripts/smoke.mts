@@ -924,6 +924,25 @@ console.log("Pano — Bugün kartı:");
     "hiçbiri yoksa YOK",
     bugunkuIs({ acikTest: null, seviyeli: null, tekrar: bos, planIsleri: [], oneri: null }).tur === "YOK"
   );
+
+  // Ekran testi, kâğıt oturumu ve ödev: kâğıt 48 saat açık kalıyor, süresi
+  // işleyen testin önüne geçmemeli; ödevle arasında son anı yakın olan önce.
+  const SAAT = 3_600_000;
+  const t0 = Date.parse("2026-10-24T09:00:00Z");
+  const kagit = (saat: number) => ({ test: { id: "k" }, sonAn: new Date(t0 + saat * SAAT) });
+  const odevli = { ...tam, odev: { id: "o" }, odevSonAn: new Date(t0 + 72 * SAAT) };
+  const e1 = bugunkuIs({ ...odevli, kagit: kagit(2) });
+  check("süresi işleyen ekran testi kâğıdın ve ödevin önünde", e1.tur === "TEST" && e1.test.id === "t", JSON.stringify(e1));
+  const e2 = bugunkuIs({ ...odevli, acikTest: null, kagit: kagit(2) });
+  check("iki saati kalmış kâğıt, üç gün sonraki ödevden önce", e2.tur === "TEST" && e2.test.id === "k", JSON.stringify(e2));
+  const e3 = bugunkuIs({ ...odevli, acikTest: null, kagit: kagit(47), odevSonAn: new Date(t0 + 20 * SAAT) });
+  check("yarın biten ödev, iki gün sonra kapanacak kâğıttan önce", e3.tur === "ODEV", JSON.stringify(e3));
+  const e4 = bugunkuIs({ ...tam, acikTest: null, kagit: kagit(30) });
+  check("ödev yoksa kâğıt, seviyeli check-up'ın önünde", e4.tur === "TEST" && e4.test.id === "k", JSON.stringify(e4));
+  const e5 = bugunkuIs({ ...odevli, acikTest: null, kagit: kagit(30), odevSonAn: null });
+  check("ödevin son anı bilinmiyorsa kâğıt önce", e5.tur === "TEST" && e5.test.id === "k", JSON.stringify(e5));
+  const e6 = bugunkuIs({ ...odevli, acikTest: null, kagit: null });
+  check("kâğıt yoksa ödev", e6.tur === "ODEV", JSON.stringify(e6));
 }
 
 // ── grafik ekseni ─────────────────────────────────────────

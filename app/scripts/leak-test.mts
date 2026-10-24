@@ -21,9 +21,9 @@ import {
   getSessionState,
   getKitapcik,
   CheckupError,
-  GUNLUK_TEKRAR_SINIRI,
   KAYIT_TOLERANSI_MS,
 } from "../lib/checkup";
+import { GUNLUK_TEKRAR_SINIRI } from "../lib/review";
 import { calculateNet } from "../lib/scoring";
 import { grantEntitlement } from "../lib/entitlements";
 import { selectQuestionsForTopic } from "../lib/question-selection";

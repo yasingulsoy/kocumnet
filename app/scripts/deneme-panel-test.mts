@@ -8,7 +8,9 @@ import "./_koruma.mjs";
  * Modül panelde duruyor (öğrenci uygulaması kullanmıyor) ama testler burada
  * toplanıyor. Statik import YOK, bilerek: app ayrı derleniyor (Dokploy yalnızca
  * app/ klasörünü görür) ve `next build` tip denetimi scripts/'i de kapsıyor;
- * admin'e statik import derlemeyi kırardı. Dosya yoksa test atlanır.
+ * admin'e statik import derlemeyi kırardı. Dosya yoksa test atlanır; CI'da
+ * (CI tanımlıysa) bu bir HATADIR: orada depo bütün, dosyanın yokluğu bir yer
+ * ya da ad değişikliği demek ve test sessizce "geçmemeli".
  */
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -49,6 +51,11 @@ interface Kurallar {
 
 const YOL = resolve(dirname(fileURLToPath(import.meta.url)), "../../admin/src/lib/checkup/mock-rules.ts");
 if (!existsSync(YOL)) {
+  if (process.env.CI) {
+    console.error("✗ admin/src/lib/checkup/mock-rules.ts bulunamadı: CI'da deneme kuralları testi atlanamaz.");
+    console.error("  Dosya taşındıysa ya da adı değiştiyse bu betikteki YOL'u güncelle.");
+    process.exit(1);
+  }
   console.log("admin/ yok (ayrı derleme ortamı): deneme kuralları testi atlandı.");
   process.exit(0);
 }

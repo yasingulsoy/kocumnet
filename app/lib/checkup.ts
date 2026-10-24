@@ -29,6 +29,8 @@ import {
 } from "@/lib/deneme";
 import { sureAnalizi, type SureAnaliziSonucu } from "@/lib/sure-analizi";
 import { maruziyetiYaz } from "@/lib/maruziyet";
+import { GUNLUK_TEKRAR_SINIRI, gunBasi } from "@/lib/review";
+import { baslatmaKilidi } from "@/lib/kullanici-kilidi";
 
 /**
  * Check-up akışı: başlat → cevapla → bitir.
@@ -187,8 +189,9 @@ export async function startCheckup(
      * hesaplamıyordu.
      */
     await submitCheckup(existing.id, userId).catch(async () => {
-      await prisma.checkupSession.update({
-        where: { id: existing.id },
+      // Koşul IN_PROGRESS: arada başka bir çağrı (cron, öbür sekme) bitirdiyse SUBMITTED'ı ezmesin.
+      await prisma.checkupSession.updateMany({
+        where: { id: existing.id, status: "IN_PROGRESS" },
         data: { status: "EXPIRED" },
       });
     });
@@ -227,6 +230,19 @@ export async function startCheckup(
   );
 
   return prisma.$transaction(async (tx) => {
+    /*
+     * İki sekme aynı anda "Başla"ya basınca ikisi de yukarıda açık oturum
+     * görmüyor ve iki test açılıyordu. Kullanıcı kilidinden sonra yeniden
+     * bakılır: öbür sekme az önce açtıysa onunki döner (lib/kullanici-kilidi.ts).
+     */
+    await baslatmaKilidi(tx, userId);
+    const acik = await tx.checkupSession.findFirst({
+      where: { userId, packageId: pkg.id, status: "IN_PROGRESS", expiresAt: { gt: now } },
+      orderBy: { startedAt: "desc" },
+      select: { id: true },
+    });
+    if (acik) return acik.id;
+
     const session = await tx.checkupSession.create({
       data: {
         userId,
@@ -260,15 +276,48 @@ export async function startCheckup(
   });
 }
 
+/** Aynı konuda süren kontrol testi (varsa). */
+async function acikKontrolTesti(
+  db: Prisma.TransactionClient,
+  userId: string,
+  topicId: string,
+  now: Date
+): Promise<string | null> {
+  const acik = await db.checkupSession.findFirst({
+    where: {
+      userId,
+      kind: "TOPIC_RETEST",
+      focusTopicId: topicId,
+      status: "IN_PROGRESS",
+      expiresAt: { gt: now },
+    },
+    select: { id: true },
+  });
+  return acik?.id ?? null;
+}
+
+/**
+ * Günlük sınır doldu mu: bugün (Türkiye günü, lib/review.ts gunBasi)
+ * başlatılan kontrol testleri. Eskiden kayan 24 saatti; mesaj "yarın"
+ * derken akşam dolan hak ertesi akşama kadar açılmıyordu.
+ */
+async function kontrolTestiSiniriDolu(db: Prisma.TransactionClient, userId: string, now: Date): Promise<boolean> {
+  const bugun = await db.checkupSession.count({
+    where: { userId, kind: "TOPIC_RETEST", startedAt: { gte: gunBasi(now) } },
+  });
+  return bugun >= GUNLUK_TEKRAR_SINIRI;
+}
+
+const KONTROL_SINIRI_DOLDU =
+  "Bugünlük kontrol testi hakkın doldu. Aradaki zamanı konuyu çalışmaya ayır, yarın ölçeriz.";
+
 /**
  * Konu tekrar testi başlatır — plandaki "kanıt" adımı.
  *
  * 5 soru, 8 dakika, tek konu. Öğrenci 40 soru çözdüğünü söyleyebilir ama
  * kontrol testini geçemez; planın dürüst kalmasını sağlayan şey bu.
+ * Günlük sınır lib/review.ts GUNLUK_TEKRAR_SINIRI.
  */
-/** 24 saatte en fazla kaç konu tekrar testi. */
-export const GUNLUK_TEKRAR_SINIRI = 8;
-
 export async function startTopicRetest(
   userId: string,
   topicId: string,
@@ -305,17 +354,8 @@ export async function startTopicRetest(
    * ÖNCE: sınırı dolduran öğrenci, açık bıraktığı teste geri dönemiyordu
    * ("hakkın doldu" diyordu, oysa yeni test açmıyordu).
    */
-  const acik = await prisma.checkupSession.findFirst({
-    where: {
-      userId,
-      kind: "TOPIC_RETEST",
-      focusTopicId: topicId,
-      status: "IN_PROGRESS",
-      expiresAt: { gt: now },
-    },
-    select: { id: true },
-  });
-  if (acik) return acik.id;
+  const acik = await acikKontrolTesti(prisma, userId, topicId, now);
+  if (acik) return acik;
 
   /*
    * Kontrol testi yalnızca ÖLÇÜLMÜŞ konuda açılır.
@@ -341,22 +381,8 @@ export async function startTopicRetest(
     );
   }
 
-  /*
-   * Günlük sınır: hem havuzu korur hem de öğrenciyi korur. Günde on kontrol
-   * testi çözmek "çalışmak" değil, çalışmaktan kaçmanın rahat yolu.
-   */
-  const bugun = await prisma.checkupSession.count({
-    where: {
-      userId,
-      kind: "TOPIC_RETEST",
-      startedAt: { gt: new Date(now.getTime() - 24 * 3600_000) },
-    },
-  });
-  if (bugun >= GUNLUK_TEKRAR_SINIRI) {
-    throw new CheckupError(
-      "Bugünlük kontrol testi hakkın doldu. Aradaki zamanı konuyu çalışmaya ayır, yarın ölçeriz."
-    );
-  }
+  // Günlük sınır (gerekçesi lib/review.ts). Soru seçiminden önce: dolduysa boşuna seçmeyelim.
+  if (await kontrolTestiSiniriDolu(prisma, userId, now)) throw new CheckupError(KONTROL_SINIRI_DOLDU);
 
   const secim = await selectQuestionsForTopic(topicId, paket.questionCount, userId, examScope);
   if (secim.questions.length < paket.questionCount) {
@@ -368,6 +394,16 @@ export async function startTopicRetest(
   const expiresAt = new Date(now.getTime() + paket.durationMinutes * 60_000);
 
   return prisma.$transaction(async (tx) => {
+    /*
+     * Kilitten sonra iki denetim yeniden (lib/kullanici-kilidi.ts): iki sekme
+     * aynı konuda iki kontrol testi açmasın, aynı anda başlatılan testler
+     * günlük sınırı aşmasın.
+     */
+    await baslatmaKilidi(tx, userId);
+    const simdiAcik = await acikKontrolTesti(tx, userId, topicId, now);
+    if (simdiAcik) return simdiAcik;
+    if (await kontrolTestiSiniriDolu(tx, userId, now)) throw new CheckupError(KONTROL_SINIRI_DOLDU);
+
     const session = await tx.checkupSession.create({
       data: {
         userId,
@@ -625,6 +661,40 @@ export async function getSessionState(sessionId: string, userId: string): Promis
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Oturum satırını işlem sonuna kadar kilitler ve güncel durumunu okur.
+ *
+ * Bitirme (submitCheckup) ve yeniden puanlama "UPDATE" alır; cevap kaydı
+ * (saveAnswer) ve süre birleştirme "SHARE". Paylaşımlı kilitler birbirini
+ * beklemez (iki hızlı cevap aynı anda yazılır) ama bitirmeyle sıraya girer:
+ *  - bitirme kilidi aldığında o ana kadarki bütün cevaplar yazılmıştır;
+ *    sonuç hepsini sayar;
+ *  - bitirmeden sonra gelen cevap kilidi aldığında oturumu kapalı görür ve
+ *    YAZILMAZ ("Bu test kapandı").
+ * Eskiden ikisi de yalnızca baştaki okumaya bakıyordu. Bitirme sonucu
+ * hesapladıktan sonra, durumu yazmadan önce gelen cevap kaydediliyordu:
+ * inceleme ekranı "doğru", sonuç "boş" diyordu. Bitmiş teste cevap da
+ * yazılabiliyordu.
+ *
+ * Kilit ayrı sorguda (FOR UPDATE / FOR SHARE), okuma Prisma ile: kilitten
+ * sonraki okuma o ana kadar onaylanmış her şeyi görür.
+ */
+async function oturumuKilitle(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  kip: "UPDATE" | "SHARE"
+): Promise<{ status: StudentSession["status"]; expiresAt: Date } | null> {
+  if (kip === "UPDATE") {
+    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${sessionId} FOR UPDATE`;
+  } else {
+    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${sessionId} FOR SHARE`;
+  }
+  return tx.checkupSession.findUnique({
+    where: { id: sessionId },
+    select: { status: true, expiresAt: true },
+  });
+}
+
+/**
  * Bir cevabın doğruluğu: seçilen şıkkın GÜNCEL anahtarı; boşta null.
  *
  * Tek tanım; cevap kaydı (saveAnswer), bitiş ve yeniden puanlama
@@ -692,36 +762,49 @@ export async function saveAnswer(args: {
   const simdi = new Date();
   const ilkIsaret = !kagit && choiceId !== null ? simdi : null;
 
-  /*
-   * Tek upsert: eskiden "cevap var mı" diye okuyup ona göre create/update
-   * yapılıyordu. Hızlı iki dokunuşta iki istek de "yok" görüp create deniyor
-   * ve ikincisi benzersizlik hatasıyla düşüyordu — öğrencinin işareti
-   * sessizce kayboluyordu.
-   */
-  await prisma.answer.upsert({
-    where: { sessionItemId: item.id },
-    create: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs: sure, firstAnsweredAt: ilkIsaret, answeredAt: simdi },
-    update: {
-      choiceId,
-      isCorrect,
-      timeSpentMs: sure,
-      changedCount: { increment: 1 },
-      answeredAt: simdi,
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    /*
+     * Yukarıdaki durum denetimi hızlı ret için; asıl denetim burada, oturum
+     * satırı kilitliyken (oturumuKilitle). Bitirme ile aynı anda gelen cevap
+     * ya sonuçtan önce yazılır ya da hiç yazılmaz.
+     */
+    const kilitli = await oturumuKilitle(tx, sessionId, "SHARE");
+    if (!kilitli || kilitli.status !== "IN_PROGRESS") throw new CheckupError("Bu test kapandı.", "KAPANDI");
+    if (kilitli.expiresAt.getTime() + KAYIT_TOLERANSI_MS < simdi.getTime()) {
+      throw new CheckupError("Süre doldu.", "SURE_DOLDU");
+    }
 
-  /*
-   * İlk işaret anı yalnızca BİR KEZ yazılır: sonraki değişiklikler onu
-   * oynatmaz (çözüm sırası analizi "ilk ne zaman işaretledi"ye bakıyor,
-   * answeredAt her değişiklikte ilerliyor). Satır işaretsiz açılmışsa ilk
-   * işarette doldurulur; koşul veritabanında, eşzamanlı iki istek de ilkini ezmez.
-   */
-  if (ilkIsaret && item.answer && !item.answer.firstAnsweredAt) {
-    await prisma.answer.updateMany({
-      where: { sessionItemId: item.id, firstAnsweredAt: null },
-      data: { firstAnsweredAt: ilkIsaret },
+    /*
+     * Tek upsert: eskiden "cevap var mı" diye okuyup ona göre create/update
+     * yapılıyordu. Hızlı iki dokunuşta iki istek de "yok" görüp create deniyor
+     * ve ikincisi benzersizlik hatasıyla düşüyordu — öğrencinin işareti
+     * sessizce kayboluyordu.
+     */
+    await tx.answer.upsert({
+      where: { sessionItemId: item.id },
+      create: { sessionItemId: item.id, choiceId, isCorrect, timeSpentMs: sure, firstAnsweredAt: ilkIsaret, answeredAt: simdi },
+      update: {
+        choiceId,
+        isCorrect,
+        timeSpentMs: sure,
+        changedCount: { increment: 1 },
+        answeredAt: simdi,
+      },
     });
-  }
+
+    /*
+     * İlk işaret anı yalnızca BİR KEZ yazılır: sonraki değişiklikler onu
+     * oynatmaz (çözüm sırası analizi "ilk ne zaman işaretledi"ye bakıyor,
+     * answeredAt her değişiklikte ilerliyor). Satır işaretsiz açılmışsa ilk
+     * işarette doldurulur; koşul veritabanında, eşzamanlı iki istek de ilkini ezmez.
+     */
+    if (ilkIsaret && item.answer && !item.answer.firstAnsweredAt) {
+      await tx.answer.updateMany({
+        where: { sessionItemId: item.id, firstAnsweredAt: null },
+        data: { firstAnsweredAt: ilkIsaret },
+      });
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -739,35 +822,49 @@ export async function saveAnswer(args: {
  *
  * İstemciye güvenmiyoruz: değerler oturum süresiyle sınırlanıyor ve mevcut
  * kayıttan küçükse yazılmıyor.
+ *
+ * Kendi kısa işleminde, oturum satırı paylaşımlı kilitli (oturumuKilitle):
+ * test bu arada kapandıysa (cron, öbür sekme) bitmiş teste satır açılmaz.
+ * Bitirme işlemine katılmıyor: burada çıkan bir hata testin bitmesini
+ * engellemesin (Postgres hatalı işlemin geri kalanını da reddeder).
+ * İki toplu sorgu: eklenecek boş satırlar ve büyüyen süreler.
  */
 async function sureleriBirlestir(
   sessionId: string,
   sinirMs: number,
   times: Record<string, number>
 ): Promise<void> {
-  const items = await prisma.sessionItem.findMany({
-    where: { sessionId, questionId: { in: Object.keys(times) } },
-    select: { id: true, questionId: true, answer: { select: { timeSpentMs: true } } },
+  await prisma.$transaction(async (tx) => {
+    const kilitli = await oturumuKilitle(tx, sessionId, "SHARE");
+    if (!kilitli || kilitli.status !== "IN_PROGRESS") return;
+
+    const items = await tx.sessionItem.findMany({
+      where: { sessionId, questionId: { in: Object.keys(times) } },
+      select: { id: true, questionId: true, answer: { select: { timeSpentMs: true } } },
+    });
+
+    const guncellenecek: { id: string; ms: number }[] = [];
+    const olusturulacak: { sessionItemId: string; timeSpentMs: number }[] = [];
+
+    for (const item of items) {
+      const ms = Math.min(Math.max(0, Math.round(times[item.questionId] ?? 0)), sinirMs);
+      if (ms <= 0) continue;
+      if (!item.answer) olusturulacak.push({ sessionItemId: item.id, timeSpentMs: ms });
+      else if (ms > item.answer.timeSpentMs) guncellenecek.push({ id: item.id, ms });
+    }
+
+    if (olusturulacak.length > 0) {
+      await tx.answer.createMany({ data: olusturulacak, skipDuplicates: true });
+    }
+    if (guncellenecek.length > 0) {
+      // "Küçükse yazma" koşulu sorguda da: arada gelen cevap kaydı daha büyük süre yazmışsa ezilmez.
+      await tx.$executeRaw`
+        UPDATE "Answer" AS a SET "timeSpentMs" = v.ms
+        FROM (VALUES ${Prisma.join(guncellenecek.map((g) => Prisma.sql`(${g.id}, ${g.ms}::int)`))}) AS v(id, ms)
+        WHERE a."sessionItemId" = v.id AND v.ms > a."timeSpentMs"
+      `;
+    }
   });
-
-  const guncellenecek: { id: string; ms: number }[] = [];
-  const olusturulacak: { sessionItemId: string; timeSpentMs: number }[] = [];
-
-  for (const item of items) {
-    const ms = Math.min(Math.max(0, Math.round(times[item.questionId] ?? 0)), sinirMs);
-    if (ms <= 0) continue;
-    if (!item.answer) olusturulacak.push({ sessionItemId: item.id, timeSpentMs: ms });
-    else if (ms > item.answer.timeSpentMs) guncellenecek.push({ id: item.id, ms });
-  }
-
-  await Promise.all([
-    olusturulacak.length > 0
-      ? prisma.answer.createMany({ data: olusturulacak, skipDuplicates: true })
-      : null,
-    ...guncellenecek.map((g) =>
-      prisma.answer.update({ where: { sessionItemId: g.id }, data: { timeSpentMs: g.ms } })
-    ),
-  ]);
 }
 
 /** Puanlamanın bir sorudan gördüğü. */
@@ -943,27 +1040,44 @@ export async function submitCheckup(
    */
   if (session.kind === "PRACTICE") throw new CheckupError("Alıştırma bu yolla bitirilmez.");
 
-  if (session.status !== "IN_PROGRESS") {
+  // Kapanmış testin sonucu: yarışı kaybeden ya da tekrar gelen çağrı.
+  const mevcutSonuc = async (): Promise<CheckupScore> => {
     const existing = await prisma.checkupResult.findUnique({ where: { sessionId } });
     if (existing) return resultToScore(existing);
     throw new CheckupError("Bu test kapandı.", "KAPANDI");
-  }
+  };
 
-  /*
-   * Doğruluk BİTİŞTE güncel anahtardan hesaplanır (sonucuHesapla). Cevap
-   * kaydedildikten sonra panelde anahtar düzeltildiyse kayıttaki eski değer
-   * değil, düzeltilmiş anahtar sayılır; kayıt da aşağıda eşitlenir.
-   */
-  const { score, maddeler } = await sonucuHesapla(sessionId);
+  if (session.status !== "IN_PROGRESS") return mevcutSonuc();
 
   const simdi = new Date();
 
+  let hesap: HesaplananSonuc | null;
   try {
-    await prisma.$transaction(async (tx) => {
-    await tx.checkupSession.update({
-      where: { id: sessionId },
+    hesap = await prisma.$transaction(async (tx) => {
+    /*
+     * Oturum satırı kilitli (oturumuKilitle): yoldaki cevap kayıtları önce
+     * biter, sonrakiler kapalı testi görüp yazılmaz. Durum kilitten sonra
+     * yeniden okunur: cron ile "Bitir" (ya da iki sekme) yarışırsa ikincisi
+     * burada kapalı testi görür ve yazmadan çıkar.
+     */
+    const kilitli = await oturumuKilitle(tx, sessionId, "UPDATE");
+    if (!kilitli || kilitli.status !== "IN_PROGRESS") return null;
+
+    /*
+     * Doğruluk BİTİŞTE güncel anahtardan hesaplanır (sonucuHesapla). Cevap
+     * kaydedildikten sonra panelde anahtar düzeltildiyse kayıttaki eski değer
+     * değil, düzeltilmiş anahtar sayılır; kayıt da aşağıda eşitlenir. Hesap
+     * kilitten SONRA: bütün cevapları görür.
+     */
+    const sonuc = await sonucuHesapla(sessionId, tx);
+    const { score, maddeler } = sonuc;
+
+    // Koşullu: yalnızca süren test kapanır (kilit varken de; koşul kuralın parçası).
+    const kapanan = await tx.checkupSession.updateMany({
+      where: { id: sessionId, status: "IN_PROGRESS" },
       data: { status: "SUBMITTED", submittedAt: simdi },
     });
+    if (kapanan.count === 0) return null;
 
     // İnceleme ekranı ve defter Answer.isCorrect'i okuyor: sonuçla aynı şeyi söylesinler.
     await dogruluguEsitle(tx, maddeler);
@@ -1010,23 +1124,26 @@ export async function submitCheckup(
         data: { chosenCount: { increment: 1 } },
       });
     }
+    return sonuc;
     });
   } catch (e) {
     /*
      * ÇİFT BİTİRME: sayaç sıfıra inince otomatik bitirme ile öğrencinin
-     * "Bitir" düğmesi aynı anda çalışabiliyor. İkisi de durum denetiminden
-     * geçiyor, ikisi de sonucu yazmaya çalışıyor ve ikincisi benzersizlik
-     * hatasıyla patlıyordu — öğrenci skoru yerine hata ekranı görüyordu.
-     * Sonuç zaten yazıldıysa onu döndürmek doğru davranış.
+     * "Bitir" düğmesi aynı anda çalışabiliyor. Eskiden ikisi de durum
+     * denetiminden geçiyor, ikincisi benzersizlik hatasıyla patlıyordu.
+     * Artık oturum satırının kilidi ikisini sıraya sokuyor (ikincisi kapalı
+     * testi görüp null döner); bu yakalama yedek: sonuç zaten yazıldıysa onu
+     * döndürmek doğru davranış.
      */
     const cakisma =
       typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
-    const mevcutSonuc = cakisma
-      ? await prisma.checkupResult.findUnique({ where: { sessionId } })
-      : null;
-    if (mevcutSonuc) return resultToScore(mevcutSonuc);
+    const yazilmis = cakisma ? await prisma.checkupResult.findUnique({ where: { sessionId } }) : null;
+    if (yazilmis) return resultToScore(yazilmis);
     throw e;
   }
+  // Yarışı kaybetti: test başka bir çağrıda kapandı. Sonraki adımlar onun işi.
+  if (!hesap) return mevcutSonuc();
+  const { score } = hesap;
 
   /*
    * Bitişten SONRA, işlemin dışında: oturumun türüne göre üç yol.
@@ -1419,7 +1536,7 @@ export async function yenidenPuanla(
 async function oturumuYenidenPuanla(sessionId: string, now: Date): Promise<number> {
   const islem = await prisma.$transaction(async (tx) => {
     // Aynı oturumu iki çağrı birlikte işlemesin (cron kilidi var; elle çağrı da olabilir).
-    await tx.$queryRaw`SELECT id FROM "CheckupSession" WHERE id = ${sessionId} FOR UPDATE`;
+    await oturumuKilitle(tx, sessionId, "UPDATE");
     const s = await tx.checkupSession.findUnique({
       where: { id: sessionId },
       select: {

@@ -1,9 +1,16 @@
 /**
- * Alıştırma ve yanlış defteri kuralları — saf modül, veritabanı bilmez.
+ * Alıştırma, yanlış defteri ve günlük sınır kuralları — saf modül,
+ * veritabanı bilmez.
  *
  * Hocanın kararı bekleyen bütün sayılar BURADA. Biri değişecekse yalnızca
- * bu dosya değişir; veritabanı tarafı (lib/practice.ts) ve ekranlar bu
- * sabitleri okur. Kuralların testleri `npm run smoke` içinde.
+ * bu dosya değişir; veritabanı tarafı (lib/practice.ts, lib/checkup.ts) ve
+ * ekranlar bu sabitleri okur. Kuralların testleri `npm run smoke` içinde.
+ *
+ * GÜNLÜK SINIRLARIN HEPSİ TÜRKİYE GÜNÜ (00:00 Europe/Istanbul, gunBasi):
+ * kontrol testi, alıştırma, bugünkü tekrar, koça soru ve hata bildirimi.
+ * Eskiden kontrol testi ve alıştırma kayan 24 saat sayıyordu, mesaj ise
+ * "yarın" diyordu: akşam 22:00'de hakkını dolduran öğrenci ertesi gün
+ * 22:00'ye kadar bekliyordu.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -37,7 +44,9 @@ export const BENZER_ZORLUK_FARKI = 1;
 export const ASGARI_ARA_SAAT = 24;
 
 /**
- * 24 saatte en fazla kaç alıştırma sorusu ("Benzerini çöz" + "Bu konuda çalış").
+ * Günde (Türkiye günü) en fazla kaç alıştırma sorusu AÇILIR ("Benzerini
+ * çöz" + "Bu konuda çalış" + koçun konu ödevi). Sayılan, açılan oturumların
+ * soruları; cevaplanıp cevaplanmadıkları değil (lib/practice.ts kullanilanHak).
  *
  * Alıştırma cevabı ve çözümü hemen gösterdiği için sınırsız bırakılırsa
  * havuz, cevap anahtarıyla birlikte birkaç günde boşaltılabilir (kontrol
@@ -63,6 +72,19 @@ export const GUNLUK_ALISTIRMA_SORU = 30;
 export function odevAlistirmaAdedi(odevKalan: number, gunlukKalan: number): number {
   return Math.min(KONU_CALISMA_SORU, Math.max(0, odevKalan, gunlukKalan));
 }
+
+// ─────────────────────────────────────────────────────────────
+// Kontrol testi (konu tekrar testi)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Günde (Türkiye günü) en fazla kaç kontrol testi (TOPIC_RETEST) başlatılır.
+ *
+ * Hem havuzu korur hem öğrenciyi: günde on kontrol testi çözmek "çalışmak"
+ * değil, çalışmaktan kaçmanın rahat yolu. Açık kontrol testine dönmek sınıra
+ * takılmaz (lib/checkup.ts startTopicRetest önce açık testi arar).
+ */
+export const GUNLUK_TEKRAR_SINIRI = 8;
 
 // ─────────────────────────────────────────────────────────────
 // Yanlış defteri (aralıklı tekrar)

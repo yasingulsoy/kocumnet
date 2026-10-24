@@ -87,12 +87,27 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          /*
+           * Site başka sitelerin çerçevesine gömülmez (clickjacking); kendi
+           * içinde çerçeveye izin var. Tam CSP DEĞİL, bilerek yalnızca bu
+           * yönerge: script-src gibi yönergeler Next'in satır içi betikleri
+           * için istek başına nonce ister (Next'in CSP rehberi; ayrı iş).
+           */
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
         ],
       },
       {
-        // Yönetim paneli hiçbir çerçeveye gömülmez (clickjacking).
+        /*
+         * Yönetim paneli hiçbir çerçeveye gömülmez (clickjacking). CSP de
+         * 'none': tarayıcılar frame-ancestors varken X-Frame-Options'a
+         * bakmıyor; yukarıdaki 'self' burada kalsaydı DENY'ı gevşetirdi. Aynı
+         * anahtarda sonraki kural öncekini ezer (Next headers belgesi).
+         */
         source: "/admin/:path*",
-        headers: [{ key: "X-Frame-Options", value: "DENY" }],
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
       },
     ];
   },

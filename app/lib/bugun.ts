@@ -2,10 +2,14 @@
  * Panonun "Bugün" kartı: öğrenciye bugün yapacağı TEK işi söyler.
  *
  * Sıra (ilk tutan kazanır):
- *  1. Yarım kalan test (süre işliyor).
- *  2. Koçun ödevi: son tarihi 3 gün içinde olan bitmemiş ödev (seçimi
- *     lib/odev.ts bugunOdevi). Açık testten sonra gelir: süre işleyen test
- *     yarıda bırakılmaz. Öbür her şeyden önce gelir: son tarihi olan tek iş bu.
+ *  1. Süresi işleyen EKRAN testi (ONLINE): yarıda bırakılmaz.
+ *  2. Koçun ödevi ile açık KÂĞIT oturumu: ikisinden son anı daha yakın olan
+ *     (ödevin son tarihi; kâğıtta cevapları optik forma işleme son anı,
+ *     expiresAt). İki saati kalmış kâğıt üç gün sonraki ödevden önce; yarın
+ *     biten ödev iki gün sonra kapanacak kâğıttan önce. Eskiden pano tek bir
+ *     açık oturum seçiyordu (en yeni başlayan): 48 saat açık kalan kâğıt,
+ *     süresi işleyen ekran testinin ve son günü gelen ödevin önüne geçiyordu.
+ *     Ödev: son tarihi 3 gün içinde olan bitmemiş ödev (lib/odev.ts bugunOdevi).
  *  3. Yarım kalan seviyeli check-up.
  *  4. Yanlış defteri: bugünkü tekrar ya da yarım kalan tekrar. Bugünkü
  *     tekrar bittiyse ya da vadesi gelen maddenin benzeri yoksa atlanır.
@@ -34,10 +38,14 @@ export type BugunIsi<T, S, P, O, D = never> =
   | { tur: "YOK" };
 
 export function bugunkuIs<T, S, P extends { done: boolean; acilabilir?: boolean }, O, D = never>(g: {
-  /** Süresi dolmamış, alıştırma olmayan açık oturum. */
+  /** Süresi işleyen EKRAN (ONLINE) testi: süresi dolmamış, alıştırma olmayan açık oturum. */
   acikTest: T | null;
+  /** Açık kâğıt oturumu ve son anı (cevapları optik forma işleme, expiresAt). */
+  kagit?: { test: T; sonAn: Date } | null;
   /** Son tarihi yakın, bitmemiş ödev (lib/odev.ts bugunOdevi seçer). */
   odev?: D | null;
+  /** Ödevin son anı (dueAt). Verilmezse kâğıt ödevin önünde (açık test ödevin önünde kuralı). */
+  odevSonAn?: Date | null;
   /** Yarım kalan seviyeli check-up (aşaması açık değilse; açıksa acikTest). */
   seviyeli: S | null;
   tekrar: BugunTekrar;
@@ -46,7 +54,15 @@ export function bugunkuIs<T, S, P extends { done: boolean; acilabilir?: boolean 
   oneri: O | null;
 }): BugunIsi<T, S, P, O, D> {
   if (g.acikTest) return { tur: "TEST", test: g.acikTest };
-  if (g.odev) return { tur: "ODEV", odev: g.odev };
+  const kagit = g.kagit ?? null;
+  const odev = g.odev ?? null;
+  if (kagit && odev) {
+    // Eşitlikte kâğıt: optik form birkaç dakikalık iş, ödev değil.
+    const kagitOnce = !g.odevSonAn || kagit.sonAn.getTime() <= g.odevSonAn.getTime();
+    return kagitOnce ? { tur: "TEST", test: kagit.test } : { tur: "ODEV", odev };
+  }
+  if (kagit) return { tur: "TEST", test: kagit.test };
+  if (odev) return { tur: "ODEV", odev };
   if (g.seviyeli) return { tur: "SEVIYELI", kosu: g.seviyeli };
   if (g.tekrar.acik) return { tur: "TEKRAR_DEVAM", oturum: g.tekrar.acik };
   if (g.tekrar.hazir > 0) return { tur: "TEKRAR", soru: g.tekrar.hazir };

@@ -37,6 +37,7 @@ import {
   tekrarBaslat,
 } from "../lib/practice";
 import {
+  BENZER_ZORLUK_FARKI,
   GUNLUK_ALISTIRMA_SORU,
   IPUCLU_DOGRU_ARA_GUN,
   KONU_CALISMA_SORU,
@@ -165,6 +166,49 @@ async function dogruSik(questionId: string) {
 async function yanlisSik(questionId: string) {
   return (await prisma.choice.findFirstOrThrow({ where: { questionId, isCorrect: false }, select: { id: true } })).id;
 }
+
+/**
+ * Kaynak testte havuzda benzeri olan sorular; her birine AYRI bir benzer
+ * düşer (lib/review.ts benzerAta gibi aynı aday iki soruya verilmez).
+ *
+ * Seçim kodundan BAĞIMSIZ yazılı (level-test'teki gibi: yardımcıdaki hata
+ * denetime taşınmasın). Kural lib/review.ts benzerMi: aynı kazanım
+ * (kazanımsızsa aynı konu), aynı seviye, zorluk farkı en fazla
+ * BENZER_ZORLUK_FARKI. Aday yayında, TYT'de sorulabilir ve bu testte değil.
+ */
+async function ayriBenzeriOlanlar(sorular: string[]): Promise<Set<string>> {
+  const alanlar = { id: true, topicId: true, objectiveId: true, level: true, difficulty: true } as const;
+  const [kaynaklar, havuz] = await Promise.all([
+    prisma.question.findMany({ where: { id: { in: sorular } }, select: alanlar }),
+    prisma.question.findMany({
+      where: { status: "PUBLISHED", id: { notIn: sorular }, AND: [soruSinavdaKosulu("TYT")] },
+      select: alanlar,
+    }),
+  ]);
+  const kullanilan = new Set<string>();
+  const sonuc = new Set<string>();
+  for (const k of kaynaklar) {
+    const aday = havuz.find(
+      (a) =>
+        !kullanilan.has(a.id) &&
+        (k.objectiveId ? a.objectiveId === k.objectiveId : a.topicId === k.topicId) &&
+        (a.level ?? null) === (k.level ?? null) &&
+        Math.abs(a.difficulty - k.difficulty) <= BENZER_ZORLUK_FARKI
+    );
+    if (!aday) continue;
+    kullanilan.add(aday.id);
+    sonuc.add(k.id);
+  }
+  return sonuc;
+}
+
+/**
+ * Kaynak testin yanlışları arasında benzeri olan en az bu kadar soru:
+ * biri ipucu alıştırmasının kaynağı ("Benzerini çöz"), ikisi bugünkü
+ * tekrarın ipuçlu ve ipucusuz sorusu. Bir fazlası pay: "Benzerini çöz"ün
+ * seçtiği soru açık alıştırmada kaldığı için tekrara aday olmayabilir.
+ */
+const GEREKEN_BENZERLI_YANLIS = 4;
 
 // ─────────────────────────────────────────────────────────────
 // 1. Seri — saf hesap ve gün sınırları
@@ -453,23 +497,62 @@ async function main() {
   await temizle([user.id, other.id]);
 
   // ── Kaynak test: 5 doğru, gerisi yanlış ───────────────────
+  //
+  // Sonraki bölümler yanlışlar arasında havuzda benzeri olan sorular bekliyor
+  // (GEREKEN_BENZERLI_YANLIS). Paketin soruları rastgele geliyor; rastgele
+  // çıkan yanlışlara güvenmek kırılgandı (practice-test §11 CI'da bu yüzden
+  // düşmüştü). Ön koşul burada kuruluyor: benzeri olan sorular yanlışlara
+  // konuyor; testte o kadar yoksa öğrencinin izleri silinip test yeniden
+  // açılıyor (hiç soru görmemiş öğrenciyle aynı durum).
   console.log("\nKaynak test:");
-  const examId = await startCheckup(user.id, PAKET);
-  const exam = await getStudentSession(examId, user.id);
-  for (const [i, q] of exam.questions.entries()) {
-    const choiceId = i < 5 ? await dogruSik(q.id) : await yanlisSik(q.id);
-    await saveAnswer({ sessionId: examId, userId: user.id, questionId: q.id, choiceId, timeSpentMs: 20_000 });
+  let kaynakTest: { id: string; sorular: string[]; benzerli: Set<string> } | null = null;
+  let enCokBenzerli = 0;
+  for (let deneme = 0; !kaynakTest && deneme < 3; deneme++) {
+    if (deneme > 0) await temizle([user.id]);
+    const id = await startCheckup(user.id, PAKET);
+    const sorular = (await getStudentSession(id, user.id)).questions.map((q) => q.id);
+    const benzerli = await ayriBenzeriOlanlar(sorular);
+    enCokBenzerli = Math.max(enCokBenzerli, benzerli.size);
+    if (benzerli.size < GEREKEN_BENZERLI_YANLIS) continue;
+    // Benzeri olmayanlar başa (doğru), benzeri olanlar sona (yanlış).
+    kaynakTest = {
+      id,
+      sorular: [...sorular.filter((q) => !benzerli.has(q)), ...sorular.filter((q) => benzerli.has(q))],
+      benzerli,
+    };
+  }
+  if (!kaynakTest) {
+    throw new Error(
+      `Üç denemede de en az ${GEREKEN_BENZERLI_YANLIS} sorusunun havuzda benzeri olan kaynak test gelmedi ` +
+        `(en çok ${enCokBenzerli}); demo havuzu kontrol et (db:seed:demo).`
+    );
+  }
+  const { id: examId, sorular: examIds, benzerli } = kaynakTest;
+  for (const [i, q] of examIds.entries()) {
+    const choiceId = i < 5 ? await dogruSik(q) : await yanlisSik(q);
+    await saveAnswer({ sessionId: examId, userId: user.id, questionId: q, choiceId, timeSpentMs: 20_000 });
   }
   await submitCheckup(examId, user.id);
-  const examIds = exam.questions.map((q) => q.id);
   const yanlislar = examIds.slice(5);
+  const benzerliYanlis = yanlislar.filter((id) => benzerli.has(id)).length;
   check("kaynak test bitti", (await prisma.checkupSession.findUniqueOrThrow({ where: { id: examId } })).status === "SUBMITTED");
+  check(
+    `yanlışlardan en az ${GEREKEN_BENZERLI_YANLIS} tanesinin havuzda benzeri var (ön koşul)`,
+    benzerliYanlis >= GEREKEN_BENZERLI_YANLIS,
+    `${benzerliYanlis}`
+  );
 
   // ── 3. İpucu: sıra, yetki, sızıntı ────────────────────────
   console.log("\nKademeli ipucu:");
   const benzerler = await benzerDurumlari(user.id, examId);
   const kaynak = yanlislar.find((id) => benzerler.get(id));
-  if (!kaynak) throw new Error("Demo havuzda benzeri olan yanlış yok; tohumu kontrol et.");
+  // Ön koşul yukarıda kuruldu: burada yoksa sonuç ekranının kuralı ayrışmıştır.
+  if (!kaynak) {
+    throw new Error(
+      `${benzerliYanlis} yanlışın havuzda benzeri var ama sonuç ekranı hiçbirine "Benzerini çöz" vermiyor ` +
+        "(lib/practice.ts benzerDurumlari ile lib/review.ts benzerMi ayrışmış)."
+    );
+  }
   const p1 = await benzeriniCozBaslat(user.id, examId, kaynak);
   const p1Soru = (await prisma.sessionItem.findFirstOrThrow({ where: { sessionId: p1 }, select: { questionId: true } })).questionId;
   const konu = (await prisma.question.findUniqueOrThrow({ where: { id: p1Soru }, select: { topicId: true } })).topicId;
@@ -567,6 +650,15 @@ async function main() {
     select: { questionId: true, sourceQuestionId: true },
   });
   check("tekrarda en az iki soru var", tekrarItems.length >= 2, `${tekrarItems.length} soru`);
+  // Aşağısı iki soru (ipuçlu + ipucusuz) üzerine kurulu: eksik veriyle sürüp
+  // anlaşılmaz bir TypeError'la çökmesin. Kaynak test bunu garanti ediyor.
+  if (tekrarItems.length < 2) {
+    const vadesiGelen = await prisma.notebookItem.count({ where: { userId: user.id, resolvedAt: null, dueAt: { lte: new Date() } } });
+    throw new Error(
+      `Bugünkü tekrar ${tekrarItems.length} soruyla açıldı; ipucu kuralı denetimi iki soru istiyor ` +
+        `(vadesi gelen madde ${vadesiGelen}, kaynak testte benzeri olan yanlış ${benzerliYanlis}; lib/practice.ts tekrarPlani).`
+    );
+  }
   const [ipuclu, ipucsuz] = tekrarItems;
   await izEkle(ipuclu.questionId);
   const maddeOnce = await prisma.notebookItem.findUniqueOrThrow({

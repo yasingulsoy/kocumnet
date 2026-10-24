@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { requirePageUser } from "@/lib/auth";
 import { loadCatalog, siradakiPaketler } from "@/lib/catalog";
 import {
@@ -64,6 +65,24 @@ function bant(oran: number): BadgeColor {
   return oran >= 0.75 ? "success" : oran >= 0.45 ? "warning" : "error";
 }
 
+/**
+ * "Bugün" kartının açık test satırı (components/BugunKarti.tsx BugunAcikTest).
+ * Ekran ve kâğıt oturumu aynı alanlarla, iki ayrı sorguda okunur.
+ */
+const ACIK_TEST_SECIMI = {
+  id: true,
+  expiresAt: true,
+  kind: true,
+  // Kâğıt oturumu (PAPER): "Bugün" kartı süre yerine optik form son gününü yazar.
+  mode: true,
+  stageLevel: true,
+  stageKind: true,
+  package: { select: { name: true, questionCount: true } },
+  focusTopic: { select: { name: true } },
+  _count: { select: { items: true } },
+  items: { where: { answer: { choiceId: { not: null } } }, select: { id: true } },
+} satisfies Prisma.CheckupSessionSelect;
+
 /** Kartın başındaki ikon kutusu (vurgulu: marka, sakin: gri). */
 function IkonKutusu({ children, sakin = false }: { children: ReactNode; sakin?: boolean }) {
   return (
@@ -87,24 +106,23 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const hata = typeof sp.hata === "string" ? sp.hata : null;
   const yeniTanisma = sp.tanisma === "1";
 
-  const [acik, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu, defter, odev] = await Promise.all([
-    // Alıştırma "yarım kalan test" değil: süresi yok, kendi kartı var.
+  const [acik, kagit, sonuclarHam, katalog, plan, buHaftakiTest, seviyeliKosu, defter, odev] = await Promise.all([
+    /*
+     * Açık testler İKİ sorguda: süresi işleyen ekran testi ve kâğıt oturumu.
+     * Eskiden tek sorgu en yeni başlayanı alıyordu; 48 saat açık kalan kâğıt
+     * süresi işleyen ekran testinin önüne geçebiliyordu (sıra lib/bugun.ts).
+     * Alıştırma "yarım kalan test" değil: süresi yok, kendi kartı var.
+     */
     prisma.checkupSession.findFirst({
-      where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now }, kind: { not: "PRACTICE" } },
+      where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now }, kind: { not: "PRACTICE" }, mode: "ONLINE" },
       orderBy: { startedAt: "desc" },
-      select: {
-        id: true,
-        expiresAt: true,
-        kind: true,
-        // Kâğıt oturumu (PAPER): "Bugün" kartı süre yerine optik form son gününü yazar.
-        mode: true,
-        stageLevel: true,
-        stageKind: true,
-        package: { select: { name: true, questionCount: true } },
-        focusTopic: { select: { name: true } },
-        _count: { select: { items: true } },
-        items: { where: { answer: { choiceId: { not: null } } }, select: { id: true } },
-      },
+      select: ACIK_TEST_SECIMI,
+    }),
+    // Birden çok kâğıt açıksa son anı en yakın olan (önce o kapanır).
+    prisma.checkupSession.findFirst({
+      where: { userId: user.id, status: "IN_PROGRESS", expiresAt: { gt: now }, kind: { not: "PRACTICE" }, mode: "PAPER" },
+      orderBy: { expiresAt: "asc" },
+      select: ACIK_TEST_SECIMI,
     }),
     /*
      * Sonuçlar ÖĞRENCİNİN SINAVINA göre. LGS, TYT ve KPSS sonuçlarını tek bir
@@ -204,14 +222,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/panel"
   const yeni = sonuclar.length === 0;
 
   /*
-   * "Bugün": yarım test → koçun ödevi → seviyeli devam → bugünkü tekrar →
-   * planın sıradaki işi → önerilen test (lib/bugun.ts). Veri yukarıda zaten yüklendi; kartın
-   * gösterdiği iş aşağıda ikinci kez yazılmaz.
+   * "Bugün": süresi işleyen ekran testi → koçun ödevi ile kâğıt oturumundan
+   * son anı yakın olan → seviyeli devam → bugünkü tekrar → planın sıradaki
+   * işi → önerilen test (lib/bugun.ts). Veri yukarıda zaten yüklendi; kartın
+   * gösterdiği iş aşağıda ikinci kez yazılmaz. Seviyeli aşama yalnızca
+   * ekranda çözülür (lib/deneme.ts kagittaCozulebilir).
    */
   const seviyeliBekliyor = seviyeliKosu && acik?.kind !== "LEVEL_STAGE" ? seviyeliKosu : null;
   const bugun = bugunkuIs({
     acikTest: acik,
+    kagit: kagit ? { test: kagit, sonAn: kagit.expiresAt } : null,
     odev,
+    odevSonAn: odev?.dueAt ?? null,
     seviyeli: seviyeliBekliyor,
     tekrar: defter,
     planIsleri: plan?.items ?? null,

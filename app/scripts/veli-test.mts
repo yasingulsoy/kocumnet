@@ -19,6 +19,7 @@ import { prisma } from "../lib/db";
 import { hashPassword } from "../lib/password";
 import { getStudentSession, saveAnswer, startCheckup, startTopicRetest, submitCheckup } from "../lib/checkup";
 import { answerPractice, getPracticeSession, konuCalismasiBaslat } from "../lib/practice";
+import { soruSinavdaKosulu } from "../lib/exam-scope";
 import {
   EN_FAZLA_VELI_BAGLANTISI,
   RAPOR_TEST_SAYISI,
@@ -119,6 +120,47 @@ async function testCoz(userId: string, dogru: number, yanlis: number): Promise<s
   return id;
 }
 
+/**
+ * Ölçülen konularda sırayla `ac`ı dener ve ilk açılanı döndürür. Havuzu ya da
+ * sınırı yetmeyen konu (CheckupError) atlanır; beklenmeyen hata yukarı çıkar.
+ * Hiçbir konuda açılmazsa nedenleriyle başarısız olur: denetim sessizce
+ * atlanmasın.
+ */
+async function ilkAcilan(ne: string, konular: string[], ac: (topicId: string) => Promise<string>) {
+  const nedenler: string[] = [];
+  for (const topicId of konular) {
+    try {
+      return { id: await ac(topicId), topicId };
+    } catch (e) {
+      // tsx'te ../lib ile @/lib ayrı modül: instanceof yerine ada bakılır.
+      if (!(e instanceof Error) || e.name !== "CheckupError") throw e;
+      nedenler.push(e.message);
+    }
+  }
+  throw new Error(`${ne} ölçülen ${konular.length} konunun hiçbirinde açılamadı: ${[...new Set(nedenler)].join(" | ")}`);
+}
+
+/** Oturumdaki soruların konuları, havuzu (yayındaki TYT sorusu) geniş olan önce. */
+async function olculenKonular(sessionId: string): Promise<string[]> {
+  const konular = [
+    ...new Set(
+      (await prisma.sessionItem.findMany({ where: { sessionId }, select: { question: { select: { topicId: true } } } })).map(
+        (i) => i.question.topicId
+      )
+    ),
+  ];
+  const havuz = new Map(
+    (
+      await prisma.question.groupBy({
+        by: ["topicId"],
+        where: { status: "PUBLISHED", topicId: { in: konular }, AND: [soruSinavdaKosulu("TYT")] },
+        _count: { _all: true },
+      })
+    ).map((g) => [g.topicId, g._count._all])
+  );
+  return konular.sort((a, b) => (havuz.get(b) ?? 0) - (havuz.get(a) ?? 0));
+}
+
 async function main() {
   const user = await kullanici(EMAIL, AD_SOYAD);
   const other = await kullanici(OTHER_EMAIL, "Başka Öğrenci");
@@ -153,27 +195,25 @@ async function main() {
   check("iki ölçüm bitti", Boolean(ilk && ikinci));
 
   // Kontrol testi: konu haritasına girer, eğilime ve test listesine girmez.
-  const olculen = await prisma.sessionItem.findFirst({
-    where: { sessionId: ilk },
-    select: { question: { select: { topicId: true } } },
-  });
-  let kontrolYapildi = false;
-  try {
-    const k = await startTopicRetest(user.id, olculen!.question.topicId, "TYT");
-    await submitCheckup(k, user.id);
-    kontrolYapildi = true;
-  } catch (e) {
-    console.log(`  · kontrol testi atlandı: ${(e as Error).message}`);
+  // Eskiden ilk sorunun konusunda deneniyor, açılmazsa denetim sessizce
+  // atlanıyordu. Şimdi havuzu yeten ölçülmüş bir konuda MUTLAKA açılıyor ve
+  // cevaplanıyor (işaretsiz test konu haritasına da girmez; denetim boşa
+  // dönmesin).
+  const konular = await olculenKonular(ilk);
+  const kontrol = await ilkAcilan("Kontrol testi", konular, (konu) => startTopicRetest(user.id, konu, "TYT"));
+  const kontrolSorulari = await getStudentSession(kontrol.id, user.id);
+  for (const q of kontrolSorulari.questions) {
+    await saveAnswer({ sessionId: kontrol.id, userId: user.id, questionId: q.id, choiceId: q.choices[0].id, timeSpentMs: 20_000 });
   }
+  await submitCheckup(kontrol.id, user.id);
+  const kontrolPaketi = await prisma.checkupSession.findUniqueOrThrow({
+    where: { id: kontrol.id },
+    select: { status: true, package: { select: { name: true } } },
+  });
+  check("kontrol testi açıldı ve bitti", kontrolPaketi.status === "SUBMITTED" && kontrolSorulari.questions.length > 0);
 
   // Alıştırma: ölçüm değil, raporun hiçbir yerine girmez. Havuzu yeten ilk konu.
-  const konular = [...new Set((await prisma.sessionItem.findMany({ where: { sessionId: ilk }, select: { question: { select: { topicId: true } } } })).map((i) => i.question.topicId))];
-  let alistirmaId: string | null = null;
-  for (const konu of konular) {
-    alistirmaId = await konuCalismasiBaslat(user.id, konu, ilk).catch(() => null);
-    if (alistirmaId) break;
-  }
-  if (!alistirmaId) throw new Error("Hiçbir konuda alıştırma açılamadı (havuz?).");
+  const alistirmaId = (await ilkAcilan("Alıştırma", konular, (konu) => konuCalismasiBaslat(user.id, konu, ilk))).id;
   const alistirma = await getPracticeSession(alistirmaId, user.id);
   const ilkSoru = alistirma.questions[0];
   await answerPractice({ sessionId: alistirmaId, userId: user.id, questionId: ilkSoru.id, choiceId: ilkSoru.choices[0].id, timeSpentMs: 5_000 });
@@ -192,9 +232,12 @@ async function main() {
   check("hedef sınav TYT", rapor.sinav?.kisa === "TYT");
   check("iki ölçüm sayıldı (kontrol testi ve alıştırma hariç)", rapor.olcumSayisi === 2, String(rapor.olcumSayisi));
   check("eğilimde iki nokta", rapor.egilim.length === 2);
+  // Paket adlarıyla: kontrol testinin adı ("Konu Tekrar Testi") "kontrol"
+  // kelimesini içermiyor, kelime aramak denetimi boşa düşürüyordu.
+  const olcumPaketi = await prisma.package.findUniqueOrThrow({ where: { slug: PAKET }, select: { name: true } });
   check(
     `son testler en fazla ${RAPOR_TEST_SAYISI}, yalnızca ölçümler`,
-    rapor.sonTestler.length === 2 && rapor.sonTestler.every((t) => !t.paket.includes("kontrol")),
+    rapor.sonTestler.length === 2 && rapor.sonTestler.every((t) => t.paket === olcumPaketi.name),
     rapor.sonTestler.map((t) => t.paket).join(", ")
   );
   const sonuclar = await prisma.checkupResult.findMany({
@@ -208,7 +251,11 @@ async function main() {
   check("son ölçüm ikinci test", rapor.sonOlcum?.oran === beklenenOran, `%${rapor.sonOlcum?.oran} / %${beklenenOran}`);
   check("son ölçümün değişimi bir öncekine göre", typeof rapor.sonOlcum?.degisim === "number" && rapor.sonOlcum.degisim > 0);
   check("alıştırma paketi raporda yok", !json.includes(alistirmaPaketi.package.name), alistirmaPaketi.package.name);
-  if (kontrolYapildi) check("kontrol testi eğilimde ve listede yok", !rapor.egilim.some((n) => n.ayrinti.includes("kontrol")));
+  check(
+    "kontrol testi eğilimde, son ölçümde ve listede yok",
+    !json.includes(kontrolPaketi.package.name),
+    kontrolPaketi.package.name
+  );
   const acikDefter = await prisma.notebookItem.count({ where: { userId: user.id, resolvedAt: null } });
   check("açık defter sayısı doğru", rapor.acikDefter === acikDefter && acikDefter > 0, String(rapor.acikDefter));
   check("bu haftanın planı var", rapor.plan !== null && rapor.plan.toplam > 0, JSON.stringify(rapor.plan));

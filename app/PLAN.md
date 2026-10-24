@@ -426,7 +426,7 @@ beşer soru çekebilirdi. İki kapı kondu:
 1. Konu **daha önce ölçülmüş** olmalı (o konudan soru içeren bitmiş bir oturum).
    Bu aynı zamanda ürün olarak doğru: "kontrol", ölçülmüş bir şeyi yeniden
    ölçmektir.
-2. 24 saatte en fazla `GUNLUK_TEKRAR_SINIRI` (8) tekrar. Günde on kontrol testi
+2. Günde (Türkiye takvim günü) en fazla `GUNLUK_TEKRAR_SINIRI` (8) tekrar. Günde on kontrol testi
    çözmek çalışmak değil, çalışmaktan kaçmanın rahat yoludur.
 
 `npm run test:leak` ikisini de denetliyor.
@@ -491,7 +491,7 @@ soru; vadeler Türkiye saatiyle gün başına yuvarlı.
 ### 12.4 Hocaya sorulacaklar (sabitler `lib/review.ts`'te)
 
 1. Aralıklar 1/3/7 gün ve "3 tekrar doğruysa çıkar" kuralı uygun mu?
-2. Günlük tekrar sınırı 10 soru, alıştırma sınırı 24 saatte 30 soru uygun mu?
+2. Günlük tekrar sınırı 10 soru, alıştırma sınırı günde 30 soru uygun mu? (Sınırlar Türkiye takvim gününe göre.)
 3. Kazanımında başka soru olmayan yanlış için aynı konudan (kazanımsız) benzer
    getirelim mi, yoksa "benzeri yok" demeye devam mı?
 4. Benzeri havuzda olmayan madde için aynı sorunun kendisi (çözümü görülmüş

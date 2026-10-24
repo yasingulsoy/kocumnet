@@ -44,6 +44,7 @@ import { alistirmaHakki, benzerDurumlari } from "@/lib/practice";
 import { KONU_CALISMA_SORU } from "@/lib/review";
 import { trNumber } from "@/components/ui";
 import { PrintButton } from "@/components/PrintButton";
+import { YazdirirkenAc } from "@/components/YazdirirkenAc";
 import { DenemeKarsilastirmaKarti } from "@/components/DenemeKarsilastirma";
 import { SureAnaliziKarti } from "@/components/SureAnalizi";
 import { YenidenPuanlamaBandi } from "@/components/YenidenPuanlamaBandi";
@@ -388,6 +389,8 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
             <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> Seviye karnesi
           </Link>
           <PrintButton />
+          {/* Kapalı kazanım ve soru kartları kâğıda basılsın (Chrome kapalı details'i basmıyor). */}
+          <YazdirirkenAc />
         </div>
         <PageBreadcrumb
           pageTitle={`${asamaAdi} · cevapların`}
@@ -437,6 +440,8 @@ export default async function ResultPage({ params }: PageProps<"/sonuc/[sessionI
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden /> Gelişim
         </Link>
         <PrintButton />
+        {/* Kapalı kazanım ve soru kartları kâğıda basılsın (Chrome kapalı details'i basmıyor). */}
+        <YazdirirkenAc />
       </div>
       <PageBreadcrumb
         pageTitle={baslik}

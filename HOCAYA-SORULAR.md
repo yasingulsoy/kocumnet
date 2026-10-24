@@ -308,8 +308,8 @@ defterden çıkar" kuralı sizce doğru mu?
 
 > Cevap:
 
-**Soru 10.5** — Günlük sınırlar: öğrenciye günde en fazla 10 tekrar sorusu ve 24 saatte en
-fazla 30 alıştırma sorusu veriliyor. Bu sayılar uygun mu?
+**Soru 10.5** — Günlük sınırlar: öğrenciye günde (Türkiye saatiyle gece yarısından gece
+yarısına) en fazla 10 tekrar sorusu ve 30 alıştırma sorusu veriliyor; günde en fazla 8 kontrol testi açılabiliyor. Bu sayılar uygun mu?
 
 > Cevap:
 
