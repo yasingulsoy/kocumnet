@@ -1,10 +1,9 @@
 name: CI
 
-# Her push ve PR'da dört proje: tip denetimi, lint, üretim derlemesi.
-# Derlemeler veritabanı istemez: `next build` yalnızca `prisma generate` çalıştırır,
-# site derlemesi backend'e ulaşamayınca boş liste ile devam eder.
-# Check-up'ın uçtan uca testleri (checkup-e2e) ve backend duman testi (backend-smoke)
-# ise geçici bir Postgres'e karşı koşar.
+# Her push ve PR'da: site (frontend + backend) ve Check-up programı (checkup/backend,
+# checkup/frontend, checkup/admin). Next derlemeleri veritabanı ve backend istemez.
+# Check-up backend testleri ve site backend'inin duman testi geçici bir Postgres'e
+# karşı koşar.
 on:
   push:
     branches: [main]
@@ -32,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [frontend, app, admin]
+        project: [frontend, checkup/frontend, checkup/admin]
     defaults:
       run:
         working-directory: ${{ matrix.project }}
@@ -41,9 +40,9 @@ jobs:
       # Derleme için yer tutucu; gerçek değerler Dokploy'da.
       NEXT_PUBLIC_SITE_URL: https://kocum.net
       NEXT_PUBLIC_BACKEND_URL: https://api.kocum.net
-      NEXT_PUBLIC_APP_URL: https://checkup.kocum.net
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-      CHECKUP_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      NEXT_PUBLIC_CHECKUP_URL: https://checkup.kocum.net
+      BACKEND_URL: http://127.0.0.1:4000
+      SERVIS_ANAHTARI: ci-yalnizca-derleme-icin-servis-anahtari-123456
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,9 +51,6 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
       - run: npm ci
-      - name: Şema kopyası güncel mi (yalnızca admin)
-        if: matrix.project == 'admin'
-        run: npm run checkup:check
       # PageProps, LayoutProps, RouteContext gibi rota tipleri next build sırasında
       # .next/types altına üretiliyor. tsc derlemeden ÖNCE koştuğu için önce üret;
       # yoksa yerelde (eski .next varken) geçen denetim CI'da "Cannot find name" verir.
@@ -68,14 +64,11 @@ jobs:
         if: matrix.project == 'frontend'
         run: npm run i18n:check && npm run test:ip
 
-  checkup-e2e:
-    # Öğrenciye giden veride cevap anahtarı var mı (test:leak), telafide soru
-    # tekrar ediyor mu (test:levels) ve alıştırma cevabı yalnızca cevaplanan
-    # soruda mı açıyor, ölçümü kirletiyor mu (test:practice). Girişsiz veli
-    # raporunda soru metni, cevap anahtarı, e-posta var mı; jeton saklanıyor mu
-    # (test:veli). Hepsi sessiz kusur: arayüz çalışmaya devam eder, ölçüm
-    # anlamsızlaşır ya da veri sızar. Gerçek bir Postgres'e karşı koşar.
-    name: Check-up uçtan uca
+  checkup-backend:
+    # Check-up API'si: tip denetimi, şema ile migration'lar eşit mi, uçtan uca testler
+    # (öğrenciye giden test verisinde cevap anahtarı olmaması dahil) ve derleme.
+    # Testler TEST_DATABASE_BASE_URL sunucusunda kendi geçici veritabanını açıp siler.
+    name: Check-up backend
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -83,73 +76,37 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: checkup
+          POSTGRES_DB: checkup_ci_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U ci -d checkup"
+          --health-cmd "pg_isready -U ci -d checkup_ci_test"
           --health-interval 5s --health-timeout 5s --health-retries 12
     defaults:
       run:
-        working-directory: app
+        working-directory: checkup/backend
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/checkup?schema=public
-      NEXT_PUBLIC_APP_URL: https://checkup.kocum.net
-      NEXT_PUBLIC_SITE_URL: https://kocum.net
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/checkup_ci_test?schema=public
+      TEST_DATABASE_BASE_URL: postgresql://ci:ci@localhost:5432
+      SERVIS_ANAHTARI: ci-yalnizca-test-icin-servis-anahtari-1234567890
+      FRONTEND_URL: http://localhost:3200
+      SMTP_URL: log://console
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: checkup/backend/package-lock.json
       - run: npm ci
       - name: Şema
         run: npx prisma migrate deploy
-      # Şema dosyası ile migration'lar ayrışmış mı: schema.prisma değişip migration
-      # yazılmadıysa (ya da tersi) üretimde migrate deploy eksik tablo/sütun bırakır.
-      # Fark varsa çıkış kodu 2.
+      # schema.prisma değişip migration yazılmadıysa (ya da tersi) üretimde
+      # migrate deploy eksik tablo/sütun bırakır.
       - name: Şema ve migration eşit mi
-        run: npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code
-      - name: Tohum (konu ağacı, paketler, demo sorular, seviyeler)
-        run: npm run db:seed && npm run db:seed:demo && npm run db:seed:levels
-      - run: npm run smoke
-      - run: npm run test:markup
-      # İstemci IP kuralı (Cloudflare + Traefik): veritabanı istemez.
-      - run: npm run test:ip
-      # Soru içe aktarma (komut satırı ve panel ortak): veritabanı istemez.
-      - run: npm run test:import
-      # Deneme oluşturucunun saf kuralları (panel modülü): veritabanı istemez.
-      - run: npm run test:deneme-panel
-      # Hocaya sorular: cevap kuralları (panel modülü) ve içerik denetimi; veritabanı istemez
-      - run: npm run test:hoca-cevap
-      - run: npm run test:hoca-icerik
-      - name: HOCAYA-SORULAR.md içerikle eşit mi
-        run: npm run hoca:belge -- --check
-      # Koç ve pilot ekranlarının saf kuralları (panel modülü): risk, davet kodu,
-      # sıfırlama jetonu, "<5" gizleme, öğrenme kazancı; veritabanı istemez.
-      - run: npm run test:koc-panel
-      - run: npm run test:pilot-panel
-      # İçerik: yayına hazır mı listesi, ondalık virgül, esnek içe aktarma biçimi
-      - run: npm run test:icerik-panel
-      - run: npm run test:leak
-      - run: npm run test:levels
-      - run: npm run test:practice
-      - run: npm run test:veli
-      # Deneme (sabit liste, yüzdelik), kâğıt + optik form, süre analizi
-      - run: npm run test:deneme
-      # İpucu, adım adım çözüm, hata bildirimi, koça soru, seri
-      - run: npm run test:ogrenme
-      # Grup ve ödev: tamamlanma kuralı, öğrencinin ödev listesi
-      - run: npm run test:odev
-      # Haftalık plan: kontrol testi sınavı, kısalan plan, posta, ürün süzgeci
-      - run: npm run test:plan
-      # Ölçüm akışı: cron kapısı, işaretsiz test, yeniden puanlama
-      - run: npm run test:tutarlilik
-      # Hesap ve ölçüm: yarım test, kayan oturum, girişten sonra dönüş, davet bağlantısı, kayıt kaynağı
-      - run: npm run test:hesap
-      # Öğrenci ekranları: plan işinin ilerlemesi, hatırlatıcı, hata kodları, veli raporunda ödev
-      - run: npm run test:ekran
-
+        run: npm run db:denetle
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
   backend:
     name: backend
     runs-on: ubuntu-latest

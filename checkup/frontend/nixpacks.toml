@@ -1,0 +1,20 @@
+# Dokploy (Nixpacks) yayını. Next 16 en az Node 20.9 istiyor; check-up'ın üç
+# parçası aynı Node 22.20'ye sabit (nixpkgsArchive). Kilit dosyası npm 10 ile
+# üretilir: Nixpacks'in npm'i 10, npm 11 kilidi `npm ci`'da reddediliyor.
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"

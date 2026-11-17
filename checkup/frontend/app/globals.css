@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/*
+ * Ortak belirteçler (renk, yazı tipi, ölçek, köşe, gölge, taban kuralları).
+ * Kaynak design/tokens.css — bu kopyayı ELLE DÜZENLEME, `node design/sync.mjs`.
+ */
+@import "./tokens.css";
+
+/*
+ * TailAdmin kiti (MIT): kırılma noktaları, gri/anlam/marka ölçekleri,
+ * gölgeler. Kaynak design/tailadmin/theme.css — ELLE DÜZENLEME.
+ * dark: varyantı .dark sınıfına bağlı; koyu tema yok.
+ */
+@import "./tailadmin.css";
+
+/* ── Yoğunluk: uygulama başlıkları tanıtım sitesinden bir kademe küçük ── */
+/* tokens.css'teki ölçek `inline` olmayan @theme'de; burada değer değişir, sınıf adı aynı kalır. */
+:root {
+  --text-h1: 1.75rem;
+  --text-h1--line-height: 1.2;
+  --text-h2: 1.375rem;
+  --text-h2--line-height: 1.3;
+  --text-h3: 1.125rem;
+  --text-h3--line-height: 1.35;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+/* ── Soru, şık ve çözüm içeriği (backend'in HTML'i, components/HtmlIcerik) ── */
+
+.soru-icerik {
+  /*
+   * Backend düz metni kaçışlar; satır sonunu <br>, boş satırı <p> yapar
+   * (API.md "Yazım biçimi"). Ham \n'e güvenilmez: pre-line KULLANILMAZ,
+   * yoksa satır sonu iki kez görünür.
+   */
+  overflow-wrap: anywhere;
+}
+
+.soru-icerik p {
+  margin: 0 0 0.6em;
+}
+
+.soru-icerik p:last-child {
+  margin-bottom: 0;
+}
+
+/* Formül satır içinde metnin bir tık üstünde dursun, satır taşırmasın. */
+.soru-icerik .katex {
+  font-size: 1.08em;
+  white-space: nowrap;
+}
+
+/* $$…$$ ayrı satırda, ortada; uzun formül kendi içinde kayar, sayfayı taşırmaz. */
+.soru-icerik .katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+
+/* ── Yazdırma ──────────────────────────────────────────────── */
+
+@media print {
+  @page {
+    margin: 14mm 12mm;
+  }
+
+  body {
+    background: var(--bg);
+  }
+
+  /* Kartlar ve tablolar sayfa ortasında bölünmesin. */
+  .yazdir-bolunmesin {
+    break-inside: avoid;
+  }
+
+  /* Başarı çubukları baskıda da renkli çıksın. */
+  .basari-cubugu,
+  .basari-cubugu * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,26 @@
+# Check-up backend: Dokploy'da Nixpacks ile derlenir. Alan adı VERİLMEZ;
+# frontend ve admin iç ağdan (BACKEND_URL) bağlanır.
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+# vips: sharp'ın görsel işleme bağımlılığı (görsel yükleme onsuz çalışmaz).
+nixPkgs = ["nodejs_22", "vips"]
+# Prisma 7 en az Node 22.12 istiyor; Nixpacks'in kendi nixpkgs'i 22.11'de kalıyor.
+# Bu commit nixos-25.05'in sonuncusu (nodejs_22 = 22.20).
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
+
+[phases.install]
+# postinstall `prisma generate` çalıştırır (veritabanı gerekmez).
+cmds = ["npm ci"]
+
+[phases.build]
+# build `prisma generate && tsc` — üretilen client gitignore'da, bu adım atlanamaz.
+cmds = ["npm run build"]
+
+[start]
+# Migration'lar uygulama açılmadan ÖNCE: yeni sürüm, şemada olmayan bir alanı
+# sorgularsa ilk istekte 500 döner.
+cmd = "npx prisma migrate deploy && npm run start"

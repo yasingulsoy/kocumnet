@@ -1,0 +1,18 @@
+# bağımlılıklar
+/node_modules
+
+# Next
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# ortam
+.env
+.env.*
+!.env.example
+
+# günlük
+npm-debug.log*
+.DS_Store

@@ -1,0 +1,13 @@
+/node_modules
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+*.pem
+npm-debug.log*
+
+# Ortam dosyaları; örnek depoda kalır.
+.env*
+!.env.example

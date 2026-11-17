@@ -1,0 +1,389 @@
+// Check-up programının veritabanı. Sahibi checkup/backend; frontend ve admin
+// veritabanına hiç bağlanmaz, yalnızca backend API'sini kullanır.
+// Kararların gerekçeleri: checkup/MIMARI.md
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  // tsc (module: nodenext) ile derlenebilsin diye: ESM ve göreli importlarda
+  // ".js" uzantısı. Böylece üretimde tsx gerekmez, `node dist/server.js` çalışır.
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum YoneticiRolu {
+  YONETICI // her şey
+  EDITOR // konu ağacı, sorular, içe aktarma, reçete
+}
+
+enum SecimBicimi {
+  KARMA // sorular reçeteye göre havuzdan seçilir
+  SABIT // admin soruları tek tek seçip sabitler
+}
+
+enum CheckupDurumu {
+  DEVAM
+  BITTI
+}
+
+// ─── Hesaplar ────────────────────────────────────────────────
+
+model Yonetici {
+  id            Int          @id @default(autoincrement())
+  adSoyad       String
+  eposta        String       @unique // küçük harfe çevrilmiş
+  parolaHash    String
+  rol           YoneticiRolu @default(EDITOR)
+  aktif         Boolean      @default(true)
+  olusturuldu   DateTime     @default(now())
+  oturumlar     Oturum[]
+  iceAktarmalar IceAktarma[]
+
+  @@map("yoneticiler")
+}
+
+model Ogrenci {
+  id           Int               @id @default(autoincrement())
+  adSoyad      String
+  eposta       String            @unique // küçük harfe çevrilmiş
+  parolaHash   String
+  kvkkOnay     DateTime
+  kaynak       String? // kocum.net'teki bağlantı etiketi (?k=)
+  olusturuldu  DateTime          @default(now())
+  oturumlar    Oturum[]
+  checkuplar   Checkup[]
+  sifirlamalar ParolaSifirlama[]
+
+  @@map("ogrenciler")
+}
+
+/// Giriş oturumu. Jetonun kendisi saklanmaz, SHA-256 özeti saklanır.
+/// Satırda ya ogrenciId ya yoneticiId dolu olur.
+model Oturum {
+  id          Int        @id @default(autoincrement())
+  jetonHash   String     @unique
+  ogrenciId   Int?
+  yoneticiId  Int?
+  bitis       DateTime
+  olusturuldu DateTime   @default(now())
+  ogrenci     Ogrenci?   @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  yonetici    Yonetici?  @relation(fields: [yoneticiId], references: [id], onDelete: Cascade)
+
+  @@index([ogrenciId])
+  @@index([yoneticiId])
+  @@map("oturumlar")
+}
+
+model ParolaSifirlama {
+  id          Int       @id @default(autoincrement())
+  ogrenciId   Int
+  jetonHash   String    @unique
+  bitis       DateTime
+  kullanildi  DateTime?
+  olusturuldu DateTime  @default(now())
+  ogrenci     Ogrenci   @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+
+  @@index([ogrenciId])
+  @@map("parola_sifirlamalari")
+}
+
+// ─── Sınav ve konu ağacı ─────────────────────────────────────
+// Ağaç sınava bağlı: Sınav → Ders → Konu → Kazanım → Alt kazanım.
+// (id, üstId) çiftleri benzersiz; soru bu çiftlere bileşik yabancı anahtarla
+// bağlanır. Böylece "alt kazanım o kazanıma, kazanım o konuya ait" kuralı
+// veritabanı düzeyinde zorunlu olur.
+
+model Sinav {
+  id            Int            @id @default(autoincrement())
+  ad            String         @unique // "ALES", "DGS"
+  aciklama      String?
+  ucretKurus    Int            @default(0) // 29900 = 299,00 TL; 0 = ücretsiz
+  yanlisGoturme Int            @default(4) // kaç yanlış bir doğruyu götürür; 0 = götürmez
+  aktif         Boolean        @default(false) // öğrenci yalnızca aktifleri görür
+  sira          Int            @default(0)
+  olusturuldu   DateTime       @default(now())
+  guncellendi   DateTime       @updatedAt
+  dersler       Ders[]
+  sorular       Soru[]
+  ayarlar       CheckupAyari[]
+  checkuplar    Checkup[]
+  iceAktarmalar IceAktarma[]
+
+  @@map("sinavlar")
+}
+
+model Ders {
+  id              Int              @id @default(autoincrement())
+  sinavId         Int
+  ad              String
+  sira            Int              @default(0)
+  sinav           Sinav            @relation(fields: [sinavId], references: [id], onDelete: Restrict)
+  konular         Konu[]
+  sorular         Soru[]
+  checkupSorulari CheckupSorusu[]
+
+  @@unique([sinavId, ad])
+  @@unique([id, sinavId])
+  @@map("dersler")
+}
+
+model Konu {
+  id              Int             @id @default(autoincrement())
+  dersId          Int
+  ad              String
+  sira            Int             @default(0)
+  ders            Ders            @relation(fields: [dersId], references: [id], onDelete: Restrict)
+  kazanimlar      Kazanim[]
+  sorular         Soru[]
+  receteSatirlari ReceteSatiri[]
+  checkupSorulari CheckupSorusu[]
+
+  @@unique([dersId, ad])
+  @@unique([id, dersId])
+  @@map("konular")
+}
+
+model Kazanim {
+  id              Int             @id @default(autoincrement())
+  konuId          Int
+  kod             String? // "MAT.1.2" gibi; isteğe bağlı
+  ad              String
+  sira            Int             @default(0)
+  konu            Konu            @relation(fields: [konuId], references: [id], onDelete: Restrict)
+  altKazanimlar   AltKazanim[]
+  sorular         Soru[]
+  receteSatirlari ReceteSatiri[]
+  checkupSorulari CheckupSorusu[]
+
+  @@unique([konuId, ad])
+  @@unique([id, konuId])
+  @@map("kazanimlar")
+}
+
+model AltKazanim {
+  id              Int             @id @default(autoincrement())
+  kazanimId       Int
+  kod             String?
+  ad              String
+  sira            Int             @default(0)
+  kazanim         Kazanim         @relation(fields: [kazanimId], references: [id], onDelete: Restrict)
+  sorular         Soru[]
+  checkupSorulari CheckupSorusu[]
+
+  @@unique([kazanimId, ad])
+  @@unique([id, kazanimId])
+  @@map("alt_kazanimlar")
+}
+
+// ─── Sorular ─────────────────────────────────────────────────
+
+/// Sınav, ders, konu, kazanım ve alt kazanım zorunlu (kullanıcı kararı).
+/// Metin yazımı: düz metin + $...$ içinde LaTeX. *Html alanlarını backend
+/// kayıtta üretir; frontend'ler yalnızca bunları gösterir.
+model Soru {
+  id              Int             @id @default(autoincrement())
+  sinavId         Int
+  dersId          Int
+  konuId          Int
+  kazanimId       Int
+  altKazanimId    Int
+  metin           String
+  metinHtml       String
+  gorselId        String?
+  cozum           String
+  cozumHtml       String
+  zorluk          Int? // 1-5
+  aktif           Boolean         @default(true) // pasif soru havuza girmez
+  iceAktarmaId    Int?
+  olusturuldu     DateTime        @default(now())
+  guncellendi     DateTime        @updatedAt
+  sinav           Sinav           @relation(fields: [sinavId], references: [id], onDelete: Restrict)
+  ders            Ders            @relation(fields: [dersId, sinavId], references: [id, sinavId], onDelete: Restrict)
+  konu            Konu            @relation(fields: [konuId, dersId], references: [id, dersId], onDelete: Restrict)
+  kazanim         Kazanim         @relation(fields: [kazanimId, konuId], references: [id, konuId], onDelete: Restrict)
+  altKazanim      AltKazanim      @relation(fields: [altKazanimId, kazanimId], references: [id, kazanimId], onDelete: Restrict)
+  gorsel          Gorsel?         @relation(fields: [gorselId], references: [id], onDelete: Restrict)
+  iceAktarma      IceAktarma?     @relation(fields: [iceAktarmaId], references: [id], onDelete: SetNull)
+  siklar          Sik[]
+  sabitListeler   SabitSoru[]
+  checkupSorulari CheckupSorusu[]
+
+  @@index([sinavId, aktif])
+  @@index([dersId])
+  @@index([konuId])
+  @@index([kazanimId])
+  @@index([altKazanimId])
+  @@map("sorular")
+}
+
+/// Şıklar A–E (sira 0–4). Düzenlemede silinip yeniden kurulmaz, sırasına göre
+/// yerinde güncellenir: öğrenci cevapları şık kimliğine bağlı.
+model Sik {
+  id              Int             @id @default(autoincrement())
+  soruId          Int
+  sira            Int
+  metin           String
+  metinHtml       String
+  dogru           Boolean         @default(false)
+  aciklama        String? // yanlış şıkkın sebebi (isteğe bağlı)
+  soru            Soru            @relation(fields: [soruId], references: [id], onDelete: Cascade)
+  checkupSorulari CheckupSorusu[]
+
+  @@unique([soruId, sira])
+  @@map("siklar")
+}
+
+/// Görsel baytları veritabanında: konteyner diski geçici, ayrı volume
+/// unutulursa şekiller sessizce kaybolur. Yüklemede WebP'ye çevrilir.
+model Gorsel {
+  id          String   @id @default(uuid())
+  veri        Bytes
+  mime        String
+  genislik    Int
+  yukseklik   Int
+  boyut       Int
+  olusturuldu DateTime @default(now())
+  sorular     Soru[]
+
+  @@map("gorseller")
+}
+
+model IceAktarma {
+  id          Int       @id @default(autoincrement())
+  sinavId     Int
+  dosyaAdi    String
+  soruSayisi  Int
+  yoneticiId  Int?
+  olusturuldu DateTime  @default(now())
+  sinav       Sinav     @relation(fields: [sinavId], references: [id], onDelete: Restrict)
+  yonetici    Yonetici? @relation(fields: [yoneticiId], references: [id], onDelete: SetNull)
+  sorular     Soru[]
+
+  @@map("ice_aktarmalar")
+}
+
+// ─── Check-up türleri ve reçete ──────────────────────────────
+
+/// Hızlı Check-up (50 soru), Kapsamlı Check-up (150 soru)… Admin'den yönetilir.
+model CheckupTuru {
+  id          Int            @id @default(autoincrement())
+  ad          String         @unique
+  aciklama    String?
+  soruSayisi  Int
+  sureDakika  Int
+  aktif       Boolean        @default(true)
+  sira        Int            @default(0)
+  ayarlar     CheckupAyari[]
+  checkuplar  Checkup[]
+
+  @@map("checkup_turleri")
+}
+
+/// Bir sınav + bir tür için soru seçimi. KARMA ise reçete, SABIT ise sabit
+/// liste kullanılır; ikisi de saklanır (biçim değişince öteki kaybolmaz).
+model CheckupAyari {
+  id           Int            @id @default(autoincrement())
+  sinavId      Int
+  turId        Int
+  secim        SecimBicimi    @default(KARMA)
+  guncellendi  DateTime       @updatedAt
+  sinav        Sinav          @relation(fields: [sinavId], references: [id], onDelete: Cascade)
+  tur          CheckupTuru    @relation(fields: [turId], references: [id], onDelete: Cascade)
+  recete       ReceteSatiri[]
+  sabitSorular SabitSoru[]
+
+  @@unique([sinavId, turId])
+  @@map("checkup_ayarlari")
+}
+
+/// Reçete satırı: bir konudan YA DA bir kazanımdan kaç soru çıkacağı.
+/// İkisinden tam biri dolu olur (backend denetler).
+model ReceteSatiri {
+  id         Int          @id @default(autoincrement())
+  ayarId     Int
+  konuId     Int?
+  kazanimId  Int?
+  soruSayisi Int
+  sira       Int          @default(0)
+  ayar       CheckupAyari @relation(fields: [ayarId], references: [id], onDelete: Cascade)
+  konu       Konu?        @relation(fields: [konuId], references: [id], onDelete: Cascade)
+  kazanim    Kazanim?     @relation(fields: [kazanimId], references: [id], onDelete: Cascade)
+
+  @@index([ayarId])
+  @@map("recete_satirlari")
+}
+
+model SabitSoru {
+  ayarId Int
+  soruId Int
+  sira   Int
+  ayar   CheckupAyari @relation(fields: [ayarId], references: [id], onDelete: Cascade)
+  soru   Soru         @relation(fields: [soruId], references: [id], onDelete: Restrict)
+
+  @@id([ayarId, soruId])
+  @@map("sabit_sorular")
+}
+
+// ─── Öğrencinin check-up'ı ───────────────────────────────────
+
+/// Başlangıçta tür ve sınav ayarları kopyalanır: admin sonradan süreyi ya da
+/// yanlış götürme oranını değiştirse de çözülmüş check-up değişmez.
+model Checkup {
+  id            Int             @id @default(autoincrement())
+  ogrenciId     Int
+  sinavId       Int
+  turId         Int
+  durum         CheckupDurumu   @default(DEVAM)
+  soruSayisi    Int
+  sureDakika    Int
+  yanlisGoturme Int
+  secim         SecimBicimi
+  baslangic     DateTime        @default(now())
+  bitisSiniri   DateTime
+  bitis         DateTime?
+  dogru         Int?
+  yanlis        Int?
+  bos           Int?
+  net           Float?
+  rapor         Json? // bitişte üretilir (inceleme hariç)
+  ogrenci       Ogrenci         @relation(fields: [ogrenciId], references: [id], onDelete: Cascade)
+  sinav         Sinav           @relation(fields: [sinavId], references: [id], onDelete: Restrict)
+  tur           CheckupTuru     @relation(fields: [turId], references: [id], onDelete: Restrict)
+  sorular       CheckupSorusu[]
+
+  @@index([ogrenciId, durum])
+  @@index([sinavId])
+  @@map("checkuplar")
+}
+
+/// Check-up'taki bir soru. Konu ağacındaki yeri başlangıçta kopyalanır:
+/// soru sonradan başka konuya taşınsa da rapor değişmez. Bu kopyalar da
+/// yabancı anahtar: öğrenci sonucu olan konu silinemez.
+model CheckupSorusu {
+  checkupId    Int
+  sira         Int // 1'den başlar
+  soruId       Int
+  dersId       Int
+  konuId       Int
+  kazanimId    Int
+  altKazanimId Int
+  secilenSikId Int?
+  cevapZamani  DateTime?
+  dogruMu      Boolean? // bitişte yazılır; boş için null
+  checkup      Checkup    @relation(fields: [checkupId], references: [id], onDelete: Cascade)
+  soru         Soru       @relation(fields: [soruId], references: [id], onDelete: Restrict)
+  ders         Ders       @relation(fields: [dersId], references: [id], onDelete: Restrict)
+  konu         Konu       @relation(fields: [konuId], references: [id], onDelete: Restrict)
+  kazanim      Kazanim    @relation(fields: [kazanimId], references: [id], onDelete: Restrict)
+  altKazanim   AltKazanim @relation(fields: [altKazanimId], references: [id], onDelete: Restrict)
+  secilenSik   Sik?       @relation(fields: [secilenSikId], references: [id], onDelete: Restrict)
+
+  @@id([checkupId, sira])
+  @@unique([checkupId, soruId])
+  @@index([soruId])
+  @@map("checkup_sorulari")
+}

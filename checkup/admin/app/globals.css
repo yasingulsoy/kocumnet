@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+ * Ortak belirteçler: renk, yazı tipi, ölçek, köşe, gölge, taban kuralları.
+ * Kaynak design/tokens.css — bu kopyayı ELLE DÜZENLEME, `node design/sync.mjs`.
+ */
+@import "./tokens.css";
+
+/*
+ * TailAdmin kiti (MIT). Kaynak design/tailadmin/theme.css — ELLE DÜZENLEME.
+ * Koyu tema YOK: KaTeX çıktısı ve soru görselleri açık zemine göre; kitin
+ * dark: varyantı .dark sınıfına bağlı ve o sınıf hiç eklenmiyor.
+ */
+@import "./tailadmin.css";
+
+/* ── Panel yoğunluğu ───────────────────────────────────────── */
+/* Araç arayüzü: başlıklar sıkı. Aynı belirteç adları (tokens.css @theme). */
+:root {
+  --text-h1: 1.5rem;
+  --text-h1--line-height: 1.2;
+  --text-h2: 1.125rem;
+  --text-h2--line-height: 1.3;
+  --text-h3: 1rem;
+  --text-h3--line-height: 1.35;
+}
+
+body {
+  background: var(--canvas);
+}
+
+/* ── Soru içeriği (backend'in ürettiği HTML: metin + KaTeX) ── */
+
+.soru-html {
+  color: var(--ink);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.soru-html p {
+  margin: 0 0 0.5em;
+}
+
+.soru-html p:last-child {
+  margin-bottom: 0;
+}
+
+.soru-html .katex {
+  font-size: 1.05em;
+}
+
+.soru-html .katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}

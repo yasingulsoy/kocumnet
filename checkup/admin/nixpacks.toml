@@ -1,0 +1,19 @@
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+# Nixpacks'in kendi nixpkgs'inde Node 22.11 var; Next 16 ve kardeş backend
+# (Prisma 7) en az 22.12 istiyor. Üç parçada aynı commit (nixos-25.05 sonu, Node 22.20).
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"

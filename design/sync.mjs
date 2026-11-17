@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Ortak tasarım dosyalarını üç projeye dağıtır; --check ile eşitliği doğrular.
+ * Ortak tasarım dosyalarını site ve Check-up uygulamalarına dağıtır; --check ile eşitliği doğrular.
  *
  *   node design/sync.mjs          kopyala
  *   node design/sync.mjs --check  farklıysa 1 ile çık (CI ve build öncesi)
@@ -13,9 +13,8 @@
  *     core     extras/ dışındaki her şey; bağımlılıksız, kit hedefi olan her projeye
  *     extras/  kütüphane isteyen bileşenler; proje başına KIT_HEDEFLERI'nde açılır
  *
- * Neden kopya: üç proje ayrı ayrı deploy ediliyor (Dokploy her klasörü kendi
- * başına derliyor), kök dizinde workspace yok. Aynı desen Prisma şeması için
- * admin/scripts/checkup-sync.mjs'te var.
+ * Neden kopya: projeler ayrı ayrı deploy ediliyor (Dokploy her klasörü kendi
+ * başına derliyor), kök dizinde workspace yok.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
@@ -25,10 +24,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const B = (...p) => join(here, "brand", ...p);
 
+// Site (frontend/) ve Check-up programının iki Next uygulaması (checkup/frontend,
+// checkup/admin). Program backend'i Next değil, buraya girmez.
+const yuzey = (...p) => ({ app: join(root, ...p, "app"), lib: join(root, ...p, "lib"), pub: join(root, ...p, "public") });
 const PROJE = {
-  frontend: { app: join(root, "frontend", "app"), lib: join(root, "frontend", "lib"), pub: join(root, "frontend", "public") },
-  app: { app: join(root, "app", "app"), lib: join(root, "app", "lib"), pub: join(root, "app", "public") },
-  admin: { app: join(root, "admin", "src", "app"), lib: join(root, "admin", "src", "lib"), pub: join(root, "admin", "public") },
+  frontend: yuzey("frontend"),
+  checkupFrontend: yuzey("checkup", "frontend"),
+  checkupAdmin: yuzey("checkup", "admin"),
 };
 const hepsi = Object.values(PROJE);
 
@@ -43,10 +45,10 @@ const ISLER = [
   [B("png", "ikon-192.png"), hepsi.map((p) => join(p.pub, "icons", "icon-192.png"))],
   [B("png", "ikon-512.png"), hepsi.map((p) => join(p.pub, "icons", "icon-512.png"))],
   [B("png", "ikon-maskable-512.png"), hepsi.map((p) => join(p.pub, "icons", "icon-maskable-512.png"))],
-  // E-posta başlığı (backend → kocum.net, check-up → kendi alan adı)
-  [B("png", "eposta-logo.png"), [join(PROJE.frontend.pub, "brand", "eposta-logo.png"), join(PROJE.app.pub, "brand", "eposta-logo.png")]],
+  // E-posta başlığı (site backend'i → kocum.net, program backend'i → öğrenci uygulamasının alan adı)
+  [B("png", "eposta-logo.png"), [join(PROJE.frontend.pub, "brand", "eposta-logo.png"), join(PROJE.checkupFrontend.pub, "brand", "eposta-logo.png")]],
   // Check-up paylaşım görseli (Next dosya kuralı: app/opengraph-image.png)
-  [B("sosyal", "og-checkup-1200x630.png"), [join(PROJE.app.app, "opengraph-image.png")]],
+  [B("sosyal", "og-checkup-1200x630.png"), [join(PROJE.checkupFrontend.app, "opengraph-image.png")]],
   // Basın/indirme için herkese açık logo dosyaları
   [B("svg", "logo-acik.svg"), [join(PROJE.frontend.pub, "brand", "logo-acik.svg")]],
   [B("svg", "logo-koyu.svg"), [join(PROJE.frontend.pub, "brand", "logo-koyu.svg")]],
@@ -70,9 +72,9 @@ const EKLENTILER = {
 
 /**
  * Kit hedefleri: css (theme.css'in yeri), dizin (bileşenlerin yeri), paket
- * ve açılacak eklentiler. Panelde dosya yükleme var (soru görseli, toplu içe
- * aktarma); tarih alanı olan proje yok, o yüzden datepicker kimsede açık değil.
- * Grafikler (ApexCharts) üç projede de açık; yalnızca grafik kullanan sayfalar yükler.
+ * ve açılacak eklentiler. Site: dosya yükleme (blog görseli) ve grafikler
+ * (ApexCharts; yalnızca grafik kullanan sayfalar yükler). Check-up uygulamaları
+ * yalnızca bağımlılıksız çekirdek kiti kullanır (yükleme düz <input type=file>).
  */
 const KIT_HEDEFLERI = {
   frontend: {
@@ -81,17 +83,17 @@ const KIT_HEDEFLERI = {
     paket: join(root, "frontend", "package.json"),
     eklentiler: ["dropzone", "charts"],
   },
-  app: {
-    css: join(PROJE.app.app, "tailadmin.css"),
-    dizin: join(root, "app", "components", "tailadmin"),
-    paket: join(root, "app", "package.json"),
-    eklentiler: ["charts"],
+  checkupFrontend: {
+    css: join(PROJE.checkupFrontend.app, "tailadmin.css"),
+    dizin: join(root, "checkup", "frontend", "components", "tailadmin"),
+    paket: join(root, "checkup", "frontend", "package.json"),
+    eklentiler: [],
   },
-  admin: {
-    css: join(PROJE.admin.app, "tailadmin.css"),
-    dizin: join(root, "admin", "src", "components", "tailadmin"),
-    paket: join(root, "admin", "package.json"),
-    eklentiler: ["dropzone", "charts"],
+  checkupAdmin: {
+    css: join(PROJE.checkupAdmin.app, "tailadmin.css"),
+    dizin: join(root, "checkup", "admin", "components", "tailadmin"),
+    paket: join(root, "checkup", "admin", "package.json"),
+    eklentiler: [],
   },
 };
 

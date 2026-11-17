@@ -1,0 +1,12 @@
+node_modules/
+dist/
+# Prisma'nın ürettiği client: `prisma generate` (postinstall ve build) yeniden üretir.
+src/generated/
+
+# Ortam dosyaları git'e girmez; örnek dosya girer.
+.env
+.env.*
+!.env.example
+
+*.tsbuildinfo
+npm-debug.log*

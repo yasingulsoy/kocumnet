@@ -2,102 +2,72 @@
 
 ![Koçum.Net](design/brand/svg/logo-otomatik.svg)
 
-Sınav koçluğu sitesi, matematik check-up uygulaması ve iki yönetim paneli. Dört proje
-aynı depoda durur ama **her biri kendi başına derlenir ve yayına alınır** (Dokploy her
-klasörü ayrı derler; kökte workspace yok).
+İki ayrı ürün aynı depoda: **kocum.net tanıtım sitesi** ve **Check-up programı**. Her klasör kendi başına derlenir ve yayına alınır (Dokploy her klasörü ayrı derler; kökte workspace yok).
 
-| Klasör | Ne | Üretim adresi | Yerel port |
-| --- | --- | --- | --- |
-| [`frontend/`](frontend) | Tanıtım sitesi (TR kökte, `/en`, `/ar` RTL) + site yönetimi `/admin` | kocum.net | 3000 |
-| [`backend/`](backend) | API: blog, iletişim mesajları, personel hesapları, posta | api.kocum.net | 5000 |
-| [`app/`](app) | Matematik Check-up: öğrenci uygulaması | checkup.kocum.net | 3100 |
-| [`admin/`](admin) | Check-up yönetim paneli: sorular, kazanımlar, öğrenciler | admin.kocum.net | 3001 |
-| [`design/`](design) | Ortak tasarım belirteçleri ve marka kiti "Fosfor" | | |
+| Klasör | Ne | Yerel port |
+| --- | --- | --- |
+| [`frontend/`](frontend) | Site: tanıtım sayfaları (TR kökte, `/en`, `/ar` RTL) + site yönetimi `/admin` | 3000 |
+| [`backend/`](backend) | Site API'si: blog, iletişim mesajları, personel hesapları, posta | 5000 |
+| [`checkup/backend`](checkup/backend) | Check-up API'si: tek veritabanı, bütün iş mantığı | 4000 |
+| [`checkup/frontend`](checkup/frontend) | Check-up öğrenci uygulaması: kayıt, sınav seçimi, test, rapor | 3200 |
+| [`checkup/admin`](checkup/admin) | Check-up paneli: sınavlar, türler, konu ağacı, sorular, reçete, öğrenciler | 3300 |
+| [`design/`](design) | Ortak tasarım belirteçleri, marka kiti "Fosfor", TailAdmin kiti | |
+
+Check-up'ın yapısı ve kararları [`checkup/MIMARI.md`](checkup/MIMARI.md), backend ile iki uygulama arasındaki sözleşme [`checkup/API.md`](checkup/API.md).
 
 ## Veritabanları
 
-Aynı PostgreSQL sunucusunda iki ayrı veritabanı:
+Aynı PostgreSQL sunucusunda ayrı veritabanları:
 
-- **`kocumnet`**: backend'in. Blog, iletişim mesajları, personel hesapları.
-- **`kocumnet_checkup`**: check-up'ın. Öğrenciler, sorular, oturumlar, sonuçlar.
-  Şemanın ve migration'ların sahibi `app/`. `admin/` aynı veritabanına bağlanır ama
-  şemanın yalnızca kopyasını kullanır (`npm run checkup:sync`).
+- **`kocumnet`**: site backend'inin. Blog, iletişim mesajları, personel hesapları.
+- **Check-up veritabanı**: yalnızca `checkup/backend` bağlanır. Şema ve migration'lar `checkup/backend/prisma` altında. Frontend ve admin veritabanına hiç bağlanmaz, backend API'sini kullanır.
 
-Personel tek yerde, backend'de durur. Site yönetimi ve check-up paneli aynı
-`admin_access_token` çerezini kullanır; üretimde backend VE frontend'de `AUTH_COOKIE_DOMAIN=.kocum.net` şart
-(ikisi de giriş çerezini yazıyor).
+Site ile Check-up hesapları ayrıdır. Site personeli `backend/`'de, Check-up yöneticileri ve öğrencileri Check-up veritabanında durur.
 
 ## Yerelde çalıştırma
 
-Her projede `.env.example`'ı kopyalayıp doldurun. Değişkenlerin açıklamaları o dosyalarda. Her adım ayrı bir terminalde, depo kökünden başlar.
+Her projede `.env.example`'ı kopyalayıp doldurun; değişkenlerin açıklamaları o dosyalarda. Her adım ayrı bir terminalde, depo kökünden başlar.
 
 ```bash
-# 1. API (önce veritabanı ve ilk yönetici)
-cd backend && npm install
-npm run db:ensure && npm run seed:admin
-npm run dev                      # :5000
+# Site
+cd backend && npm install && npm run db:ensure && npm run seed:admin && npm run dev   # :5000
+cd frontend && npm install && npm run dev                                              # :3000
 
-# 2. Site + site yönetimi
-cd frontend && npm install && npm run dev            # :3000
-
-# 3. Check-up
-cd app && npm install
-npm run db:migrate && npm run db:seed && npm run db:seed:demo && npm run db:seed:levels
-npm run dev -- --port 3100
-
-# 4. Check-up paneli
-cd admin && npm install && npm run dev               # :3001
+# Check-up
+cd checkup/backend && npm install && npm run db:deploy && npm run db:tohum:ornek && npm run dev   # :4000
+cd checkup/frontend && npm install && npm run dev                                                  # :3200
+cd checkup/admin && npm install && npm run dev                                                     # :3300
 ```
 
-Geliştirmede posta göndermeden davet ve sıfırlama akışlarını denemek için
-backend ve app'te `SMTP_URL=log://console`: postalar sunucu günlüğüne yazılır.
+Geliştirmede posta göndermeden sıfırlama ve davet akışlarını denemek için `SMTP_URL=log://console`: postalar sunucu günlüğüne yazılır.
 
 ### Paket eklerken: kilit dosyası npm 10 ile
 
-CI (Node 22) ve Dokploy (Nixpacks, Node 20 ve 22) **npm 10** kullanıyor. npm 11, isteğe
-bağlı paketlerin bazı bağımlılıklarını kilit dosyasına yazmıyor (`@floating-ui/dom`,
-`@emnapi/*` gibi). Yerelde her şey çalışır ama yayında `npm ci` şu hatayla düşer:
-`Missing: <paket> from lock file`. Paket eklerken ya da çıkarırken npm 10 kullanın:
+CI (Node 22) ve Dokploy (Nixpacks) **npm 10** kullanıyor. npm 11, isteğe bağlı paketlerin bazı bağımlılıklarını kilit dosyasına yazmıyor (`@floating-ui/dom`, `@emnapi/*` gibi). Yerelde her şey çalışır ama yayında `npm ci` şu hatayla düşer: `Missing: <paket> from lock file`. Paket eklerken ya da çıkarırken npm 10 kullanın:
 
 ```bash
 npx npm@10.9.4 install <paket>
 ```
 
-Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-only` ile
-çalıştırmak düzeltir. npm 10'un yazdığı kilidi npm 11 de sorunsuz okur.
+Kilit npm 11 ile değiştiyse aynı komutu paket adı vermeden `--package-lock-only` ile çalıştırmak düzeltir.
 
 ## Doğrulama
 
-GitHub Actions her push'ta ve PR'da aşağıdakilerin hepsini çalıştırır
-([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); yerelde de aynı komutlar:
+GitHub Actions her push'ta ve PR'da aşağıdakileri çalıştırır ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)); yerelde de aynı komutlar.
 
 | Proje | Komutlar |
 | --- | --- |
-| frontend | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` · `npm run i18n:check` (üç sözlük aynı anahtarlar) · `npm run test:ip` |
-| admin | `npm run checkup:check` (şema kopyası eşit mi) · `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
-| app, veritabanıyla | `npx prisma migrate deploy` · `npx prisma migrate diff --config prisma7.config.ts --from-config-datasource --to-schema prisma/schema.prisma --exit-code` (şema ile migration'lar eşit mi) · tohumlar (`db:seed`, `db:seed:demo`, `db:seed:levels`) · `npm run smoke` · `test:markup` · `test:ip` · `test:import` · `test:deneme-panel` · `test:leak` · `test:levels` · `test:practice` · `test:veli` · `test:deneme` · `test:ogrenme` · `test:odev` · `test:plan` · `test:tutarlilik` · `test:hesap` · `test:ekran` · `test:hoca-cevap` · `test:hoca-icerik` · `hoca:belge -- --check` · panelin saf kuralları (veritabanı istemez): `test:koc-panel` · `test:pilot-panel` · `test:icerik-panel` |
-| backend | Sözdizimi (`node --check`, her dosya) · posta şablonu · `npm run test:ip`. TypeScript ve derleme adımı yok. |
-| backend, veritabanı ve çalışan sunucuyla | `npm run db:ensure` · `npm run seed:admin` · sunucu arka planda · `npm run smoke` · `npm run test:contact` |
 | kök | `node design/sync.mjs --check` (tasarım ve marka kopyaları eşit mi) |
+| frontend | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` · `npm run i18n:check` · `npm run test:ip` |
+| backend | sözdizimi, posta şablonu, `test:ip`; geçici veritabanıyla `smoke` ve `test:contact` |
+| checkup/backend | `npx prisma migrate deploy` · `npm run db:denetle` (şema ile migration'lar eşit mi) · `npm run typecheck` · `npm test` · `npm run build` |
+| checkup/frontend, checkup/admin | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
 
-Veritabanı isteyen testleri **geçici bir veritabanında** koşun. Check-up testleri
-`DATABASE_URL` yerel bir sunucuyu göstermiyorsa ya da `NODE_ENV=production` ise durur
-(`app/scripts/_koruma.mts`; bilerek: `-- --zorla`). Backend'in `test:contact`'ı adında
-`test` geçmeyen veritabanında çalışmaz; `smoke` görsel temizliğini sınadığı için
-`backend/uploads/media` altındaki, o veritabanında geçmeyen görselleri siler.
-
-`test:leak` öğrenciye giden veride cevap anahtarı olmadığını denetler; bozulursa
-yayına çıkmayın. `test:veli` girişsiz veli raporunda soru metni, cevap anahtarı ve
-e-posta olmadığını denetler; o da bozulursa yayına çıkmayın. Bu kuralı şimdilik hiçbir
-şey zorlamıyor: Dokploy'da dağıtım elle yapılıyor, dağıtmadan önce main'deki son CI
-koşusunun yeşil olduğuna bakın (main'de koşular birbirini iptal etmez).
+Check-up backend testleri `TEST_DATABASE_BASE_URL` sunucusunda geçici bir veritabanı açar ve iş bitince siler. Testlerden biri öğrenciye giden test verisinde cevap anahtarı olmadığını denetler: bozulursa yayına çıkmayın. Dokploy'da dağıtım elle yapılıyor; dağıtmadan önce main'deki son CI koşusunun yeşil olduğuna bakın.
 
 ## Tasarım ve marka
 
-Renk, yazı tipi, ölçek ve köşe değerleri tek kaynaktan gelir: [`design/tokens.css`](design/tokens.css).
-Logo, ikonlar ve paylaşım görselleri [`design/brand`](design/brand) altında; rehber
-`design/brand/index.html`. Kopyalar elle düzenlenmez:
+Renk, yazı tipi, ölçek ve köşe değerleri tek kaynaktan gelir: [`design/tokens.css`](design/tokens.css). Logo, ikonlar ve paylaşım görselleri [`design/brand`](design/brand) altında; rehber `design/brand/index.html`. Kopyalar elle düzenlenmez:
 
 ```bash
 node design/sync.mjs
@@ -105,11 +75,7 @@ node design/sync.mjs
 
 ## Belgeler
 
-- [`app/README.md`](app/README.md), [`app/PLAN.md`](app/PLAN.md): check-up'ın koçluk modeli ve kararları
-- [`app/SORU-SABLONU.md`](app/SORU-SABLONU.md): soru dosyası biçimi (`npm run import:questions`)
-- [`admin/CHECKUP.md`](admin/CHECKUP.md): panelin kimlik doğrulaması ve yetkiler
-- `*/DEPLOY.md`: her projenin yayına alma notları
-- **Hocaya sorular:** içerik ve kural kararları Özgür Hoca'ya. Hoca cevapları check-up panelinde
-  (`/checkup/hoca`) verir. Sorular `admin/src/lib/checkup/hoca/sorular.ts`'te; [`HOCAYA-SORULAR.md`](HOCAYA-SORULAR.md)
-  ondan üretilir (`cd app && npm run hoca:belge`), elle düzenlenmez.
+- [`checkup/MIMARI.md`](checkup/MIMARI.md): Check-up'ın parçaları, kullanıcı kararları, teknik düzen
+- [`checkup/API.md`](checkup/API.md): Check-up API sözleşmesi
+- `*/DEPLOY.md`, `*/README.md`: projelerin yayına alma ve çalıştırma notları
 - [`docs/arsiv/`](docs/arsiv): eski günlük raporlar (tarihsel; yazıldıkları günü anlatır, güncel değil)
