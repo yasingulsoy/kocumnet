@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [frontend, checkup/frontend, checkup/admin]
+        project: [frontend, checkup/frontend, checkup/admin, veriatik]
     defaults:
       run:
         working-directory: ${{ matrix.project }}

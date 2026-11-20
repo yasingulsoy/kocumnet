@@ -1,69 +1,156 @@
-import Image from "next/image";
+import { Amblem } from "@/components/Amblem";
+
+const SINAVLAR = ["YKS", "LGS", "MSÜ", "ALES", "DGS", "KPSS"];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <>
+      {/* Üst bilgilendirme şeridi */}
+      <div className="top-bar">
+        <div className="top-bar-inner">
+          <div className="status-indicator">
+            <span className="status-dot" aria-hidden="true" />
+            <span>Web Sitemiz Hazırlanıyor</span>
+          </div>
+          <span className="top-bar-note">Kurumsal Dijital Altyapı ve İçerik Platformu</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+
+      {/* Kurumsal logo ve başlık */}
+      <header className="site-header">
+        <div className="container brand-wrapper">
+          <div className="brand">
+            <Amblem className="brand-logo" />
+            <div className="brand-text">
+              <span className="brand-name">VERİATİK</span>
+              <span className="brand-sub">EĞİTİM HİZMETLERİ VE YAYINCILIK A.Ş.</span>
+            </div>
+          </div>
+          <div className="header-tag">Ölçme-Değerlendirme &amp; İçerik AR-GE</div>
+        </div>
+      </header>
+
+      {/* Karşılama */}
+      <section className="hero">
+        <div className="container">
+          <div className="hero-content">
+            <span className="eyebrow">Web Sitemiz Hazırlanıyor</span>
+            <h1>Eğitim Yayıncılığında, Ölçme ve Değerlendirmede Yeni Bir AR-GE Merkezi</h1>
+            <p>
+              <strong>VERİATİK Eğitim Hizmetleri ve Yayıncılık A.Ş.</strong> olarak kurumsal yapılanmamızı tamamladık.
+              Çeyrek asırlık sınav deneyimi, yazarlık birikimi ve mühendislik yaklaşımını aynı çatı altında
+              buluşturuyoruz. Yeni nesil içerik üretim merkezimiz ve dijital altyapımız çok yakında bu adreste yayında
+              olacak.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <main>
+        <div className="container">
+          {/* Biz kimiz */}
+          <section className="section-block" aria-labelledby="biz-kimiz-baslik">
+            <h2 className="section-title" id="biz-kimiz-baslik">
+              Biz Kimiz?
+            </h2>
+            <div className="manifesto-card">
+              <p>
+                Biz yalnızca soru veya kitap üreten klasik bir yayınevi değiliz. Ölçme ve değerlendirmeyi analize, veriye
+                ve sağlam bir editöryal mutfağa dayandıran bir <strong>Eğitim AR-GE Merkeziyiz</strong>. Ülkemizdeki
+                sınav sistemlerinin değişen yapısını yakından izliyoruz. Yayıncılar, eğitim kurumları ve öğrenciler için
+                ayağı yere basan ve güvenilir çözümler geliştiriyoruz.
+              </p>
+            </div>
+          </section>
+
+          {/* Neler yapıyoruz */}
+          <section className="section-block" aria-labelledby="neler-yapiyoruz-baslik">
+            <h2 className="section-title" id="neler-yapiyoruz-baslik">
+              Neler Yapıyoruz?
+            </h2>
+            <div className="services-grid">
+              <article className="service-card">
+                <div>
+                  <div className="service-header">
+                    <div>
+                      <span className="service-num">İÇERİK &amp; ÖLÇME AR-GE</span>
+                      <h3>Merkezi Sınavlar İçin Soru ve İçerik Üretimi</h3>
+                    </div>
+                  </div>
+                  <p>
+                    <strong>YKS, LGS, MSÜ, ALES, DGS ve KPSS</strong> başta olmak üzere birçok merkezi sınava yönelik{" "}
+                    <strong>Matematik</strong> ve <strong>Türkçe</strong> branşlarında özgün soru havuzları ve yayın
+                    içerikleri hazırlıyoruz. Her bir soruyu kazanım uyumu, ölçme gücü, çeldirici kurgusu ve zorluk
+                    dengesi açısından titizlikle işledikten sonra yayına hazır hale getiriyoruz.
+                  </p>
+                </div>
+                <div className="exam-tags" aria-label="Kapsanan sınavlar">
+                  {SINAVLAR.map((s) => (
+                    <span key={s} className="exam-tag">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </article>
+
+              <article className="service-card">
+                <div>
+                  <div className="service-header">
+                    <div>
+                      <span className="service-num">DİJİTAL TANI SİSTEMİ</span>
+                      <h3>Matematik Check-Up Uygulaması</h3>
+                    </div>
+                    <span className="badge-soon">Çok Yakında</span>
+                  </div>
+                  <p>
+                    Öğrencinin matematikteki mevcut durumunu yüzeysel testlerle değil, derinlemesine bir analizle ortaya
+                    koyan yeni bir sistem üzerinde çalışıyoruz. Kavram eksiklerini, işlem alışkanlıklarını ve hata
+                    nedenlerini en ince ayrıntısına kadar tespit ederek öğrencinin adeta{" "}
+                    <strong>matematiğinin röntgenini çeken</strong> Check-Up uygulamamızı yakında hizmete açıyoruz.
+                  </p>
+                </div>
+                <div className="exam-tags" aria-label="Odak alanları">
+                  <span className="exam-tag">Hazır Bulunuşluk Analizi</span>
+                  <span className="exam-tag">Bireysel Yol Haritası</span>
+                </div>
+              </article>
+            </div>
+          </section>
         </div>
       </main>
-    </div>
+
+      {/* Alt bilgi ve iletişim */}
+      <footer className="site-footer">
+        <div className="container footer-inner">
+          <div className="footer-contact">
+            <p>
+              Web sitemiz yayına hazırlanırken yayıncılık iş birlikleri, soru havuzu talepleri ve AR-GE projelerimiz
+              hakkında görüşmek için bize ulaşabilirsiniz.
+            </p>
+            <a className="contact-link" href="mailto:info@veriatik.com.tr">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+              <span>info@veriatik.com.tr</span>
+            </a>
+          </div>
+          <div className="footer-legal">
+            <strong>VERİATİK Eğitim Hizmetleri ve Yayıncılık A.Ş.</strong>
+            <span>&copy; 2026 — Tüm Hakları Saklıdır.</span>
+          </div>
+        </div>
+      </footer>
+    </>
   );
 }

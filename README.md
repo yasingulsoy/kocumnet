@@ -12,6 +12,7 @@
 | [`checkup/frontend`](checkup/frontend) | Check-up öğrenci uygulaması: kayıt, sınav seçimi, test, rapor | 3200 |
 | [`checkup/admin`](checkup/admin) | Check-up paneli: sınavlar, türler, konu ağacı, sorular, reçete, öğrenciler | 3300 |
 | [`design/`](design) | Ortak tasarım belirteçleri, marka kiti "Fosfor", TailAdmin kiti | |
+| [`veriatik/`](veriatik) | veriatik.com: VERİATİK A.Ş. sitesi (ayrı marka, `design/` kullanmaz) | 3400 |
 
 Check-up'ın yapısı ve kararları [`checkup/MIMARI.md`](checkup/MIMARI.md), backend ile iki uygulama arasındaki sözleşme [`checkup/API.md`](checkup/API.md).
 
@@ -61,7 +62,7 @@ GitHub Actions her push'ta ve PR'da aşağıdakileri çalıştırır ([`.github/
 | frontend | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` · `npm run i18n:check` · `npm run test:ip` |
 | backend | sözdizimi, posta şablonu, `test:ip`; geçici veritabanıyla `smoke` ve `test:contact` |
 | checkup/backend | `npx prisma migrate deploy` · `npm run db:denetle` (şema ile migration'lar eşit mi) · `npm run typecheck` · `npm test` · `npm run build` |
-| checkup/frontend, checkup/admin | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
+| checkup/frontend, checkup/admin, veriatik | `npx next typegen` · `npx tsc --noEmit` · `npx eslint .` · `npm run build` |
 
 Check-up backend testleri `TEST_DATABASE_BASE_URL` sunucusunda geçici bir veritabanı açar ve iş bitince siler. Testlerden biri öğrenciye giden test verisinde cevap anahtarı olmadığını denetler: bozulursa yayına çıkmayın. Dokploy'da dağıtım elle yapılıyor; dağıtmadan önce main'deki son CI koşusunun yeşil olduğuna bakın.
 

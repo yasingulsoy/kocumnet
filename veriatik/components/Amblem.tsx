@@ -1,0 +1,65 @@
+/**
+ * VERİATİK amblemi: ağ dokulu "V". Lacivert düğümler yapı, yeşil düğümler
+ * veri akışı. Kaynak: kurumun verdiği tanıtım sayfası (index.html).
+ * Favikon (app/icon.svg) aynı çizimin yazısız hâli.
+ */
+export function Amblem({ className, yazili = true }: { className?: string; yazili?: boolean }) {
+  return (
+    <svg className={className} viewBox="0 0 106 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VERİATİK amblemi">
+      <g stroke="#0e223d" strokeWidth="2.6" strokeLinecap="round">
+        <line x1="15" y1="14" x2="34" y2="14" />
+        <line x1="15" y1="14" x2="25" y2="37" />
+        <line x1="15" y1="14" x2="43" y2="36" />
+        <line x1="34" y1="14" x2="43" y2="36" />
+        <line x1="25" y1="37" x2="32" y2="62" />
+        <line x1="43" y1="36" x2="32" y2="62" />
+        <line x1="43" y1="36" x2="50" y2="62" />
+        <line x1="32" y1="62" x2="45" y2="86" />
+        <line x1="32" y1="62" x2="62" y2="86" />
+        <line x1="50" y1="62" x2="45" y2="86" />
+        <line x1="45" y1="86" x2="62" y2="86" />
+        <line x1="45" y1="86" x2="68" y2="70" />
+        <line x1="62" y1="86" x2="68" y2="70" />
+        <line x1="50" y1="62" x2="63" y2="36" />
+        <line x1="63" y1="36" x2="68" y2="70" />
+        <line x1="50" y1="62" x2="81" y2="37" />
+        <line x1="68" y1="70" x2="81" y2="37" />
+        <line x1="63" y1="36" x2="72" y2="14" />
+        <line x1="72" y1="14" x2="81" y2="37" />
+        <line x1="81" y1="37" x2="91" y2="14" />
+        <line x1="72" y1="14" x2="91" y2="14" />
+      </g>
+      <g stroke="#2bb656" strokeWidth="2.8" strokeLinecap="round">
+        <line x1="34" y1="14" x2="25" y2="37" />
+        <line x1="25" y1="37" x2="50" y2="62" />
+        <line x1="50" y1="62" x2="68" y2="70" />
+        <line x1="63" y1="36" x2="91" y2="14" />
+      </g>
+      <g fill="#0e223d">
+        <circle cx="15" cy="14" r="6.2" />
+        <circle cx="43" cy="36" r="6.2" />
+        <circle cx="32" cy="62" r="6.2" />
+        <circle cx="45" cy="86" r="6.2" />
+        <circle cx="63" cy="36" r="6.2" />
+        <circle cx="72" cy="14" r="6.2" />
+      </g>
+      <g fill="#2bb656">
+        <circle cx="34" cy="14" r="6.2" />
+        <circle cx="25" cy="37" r="6.2" />
+        <circle cx="38" cy="50" r="4.5" />
+        <circle cx="50" cy="62" r="6.8" />
+        <circle cx="62" cy="86" r="6.2" />
+        <circle cx="68" cy="70" r="6.2" />
+        <circle cx="81" cy="37" r="6.2" />
+        <circle cx="77" cy="25" r="4.5" />
+        <circle cx="91" cy="14" r="6.8" />
+      </g>
+      {yazili ? (
+        <g fill="#ffffff" fontWeight="700" fontSize="9.5" textAnchor="middle" style={{ fontFamily: "var(--font-jakarta), Arial, sans-serif" }}>
+          <text x="50" y="65.2">e</text>
+          <text x="91" y="17.5">?</text>
+        </g>
+      ) : null}
+    </svg>
+  );
+}

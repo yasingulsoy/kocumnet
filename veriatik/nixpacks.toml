@@ -1,0 +1,20 @@
+# Dokploy (Nixpacks) bu dosya olmadan eski bir Node sürümüne düşüyor; Next 16
+# en az Node 20.9 istiyor. Depodaki diğer Next projeleriyle aynı sabitleme
+# (nixos-25.05 sonu, nodejs_22 = 22.20).
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
