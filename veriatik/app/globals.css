@@ -355,7 +355,7 @@ main {
   letter-spacing: 0.03em;
 }
 
-/* Alt bilgi ve iletişim */
+/* Alt bilgi: yalnızca şirket adı ve telif satırı, ortada */
 .site-footer {
   background-color: var(--navy-950);
   color: #cbd5e1;
@@ -365,45 +365,11 @@ main {
 
 .footer-inner {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-}
-
-.footer-contact {
-  max-width: 600px;
-}
-
-.footer-contact p {
-  font-size: 0.9375rem;
-  color: #e2e8f0;
-  margin-bottom: 0.75rem;
-  line-height: 1.6;
-}
-
-.contact-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  padding: 0.55rem 1rem;
-  border-radius: 6px;
-  text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-}
-
-.contact-link:hover {
-  background-color: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.3);
+  justify-content: center;
 }
 
 .footer-legal {
-  text-align: right;
+  text-align: center;
   font-size: 0.8125rem;
   color: #94a3b8;
   line-height: 1.6;
@@ -432,9 +398,5 @@ main {
 
   .services-grid {
     grid-template-columns: 1fr;
-  }
-
-  .footer-legal {
-    text-align: left;
   }
 }

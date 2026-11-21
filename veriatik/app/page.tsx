@@ -119,32 +119,9 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Alt bilgi ve iletişim */}
+      {/* Alt bilgi */}
       <footer className="site-footer">
         <div className="container footer-inner">
-          <div className="footer-contact">
-            <p>
-              Web sitemiz yayına hazırlanırken yayıncılık iş birlikleri, soru havuzu talepleri ve AR-GE projelerimiz
-              hakkında görüşmek için bize ulaşabilirsiniz.
-            </p>
-            <a className="contact-link" href="mailto:info@veriatik.com.tr">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="2" y="4" width="20" height="16" rx="2" />
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-              </svg>
-              <span>info@veriatik.com.tr</span>
-            </a>
-          </div>
           <div className="footer-legal">
             <strong>VERİATİK Eğitim Hizmetleri ve Yayıncılık A.Ş.</strong>
             <span>&copy; 2026 — Tüm Hakları Saklıdır.</span>
