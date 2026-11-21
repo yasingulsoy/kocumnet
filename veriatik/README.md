@@ -13,5 +13,6 @@ npm run build && npm run start
 - Sayfa: `app/page.tsx`, stiller ve kurumsal renkler: `app/globals.css`.
 - Amblem: `components/Amblem.tsx`, favikon `app/icon.svg` (aynı çizimin yazısız hâli).
 - Yazı tipleri (Inter, Plus Jakarta Sans) `next/font` ile sitenin kendisinden sunulur.
-- Yayın: Dokploy, Nixpacks (`nixpacks.toml`), build path `/veriatik`, port 3000.
+- Yayın: Dokploy (kocum.net projesi, `veriatik` servisi), Nixpacks (`nixpacks.toml`), build path `/veriatik`, port 3000.
+- Otomatik dağıtım: GitHub webhook'u (push). İzleme yolu `veriatik/**`: yalnızca bu klasöre dokunan push'lar dağıtır.
 - Paket eklerken kilit dosyası npm 10 ile: `npx npm@10.9.4 install <paket>`.
